@@ -9,13 +9,3 @@ internal static class PowerShellStrictPipelineOperations
         throw new PowerShellScriptCommandError(message, message + Environment.NewLine, sourceLine, new OverflowException());
     }
 }
-
-internal static class PowerShellStrictPipelineOperations<T>
-{
-    internal static bool AddAndReachedLimit(List<T> output, T value, int limit)
-    {
-        if (limit > 0 && value is null) return false;
-        output.Add(value);
-        return limit > 0 && output.Count >= limit;
-    }
-}

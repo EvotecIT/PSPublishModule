@@ -112,9 +112,6 @@ internal sealed class PowerShellBoundClrInvocationExpression : PowerShellBoundEx
            (declaringType == typeof(Generated.Runtime.PowerShellStrictFileSystemReader) ? PowerShellSemanticEffect.FileSystem | PowerShellSemanticEffect.NonSuccessStream :
             declaringType == typeof(Generated.Runtime.PowerShellStrictCsvReader) ? PowerShellSemanticEffect.FileSystem | PowerShellSemanticEffect.TerminatingError :
             declaringType == typeof(Generated.Runtime.PowerShellStrictPipelineOperations) ? PowerShellSemanticEffect.TerminatingError :
-            declaringType.IsConstructedGenericType &&
-                declaringType.GetGenericTypeDefinition() == typeof(Generated.Runtime.PowerShellStrictPipelineOperations<>)
-                    ? PowerShellSemanticEffect.Mutation :
             declaringType == typeof(Generated.Runtime.PowerShellStrictConsoleProgress) ? PowerShellSemanticEffect.NonSuccessStream : PowerShellSemanticEffect.None) |
            (IsProcessStart(declaringType, memberName) ? PowerShellSemanticEffect.Process : PowerShellSemanticEffect.None) |
            (IsStopwatchStart(declaringType, memberName) ? PowerShellSemanticEffect.Host : PowerShellSemanticEffect.None) |

@@ -160,6 +160,7 @@ internal sealed partial class PowerShellSemanticBinder
                 pipelineParameter,
                 functions[function.Name].PipelineLifecycleReturnsCollection,
                 functions[function.Name].PipelineLifecycleHasOutputLimit,
+                functions[function.Name].PipelineLifecycleStreamsOutput,
                 functionDiagnosticStart,
                 outputTypeContract.Declarations);
         var authoredStatements = function.Body.EndBlock?.Statements.ToArray() ?? Array.Empty<StatementAst>();

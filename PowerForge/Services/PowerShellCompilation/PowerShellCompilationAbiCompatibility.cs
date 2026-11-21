@@ -115,6 +115,7 @@ public static class PowerShellCompilationAbiCompatibility
     private static bool IsValidMethod(PowerShellCompilationAbiMethod? method)
     {
         if (method is null || string.IsNullOrWhiteSpace(method.ClrName) || HasNull(method.OutputValueStates) ||
+            HasNull(method.ClosedSuccessRecordTypes) ||
             HasNull(method.Aliases) || method.Parameters is null || method.CommandProviders is null)
             return false;
         if (method.Parameters.Any(static parameter => parameter is null || HasNull(parameter.Aliases) ||

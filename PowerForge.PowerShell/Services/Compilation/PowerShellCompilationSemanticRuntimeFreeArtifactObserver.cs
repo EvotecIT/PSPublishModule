@@ -286,7 +286,13 @@ public sealed class PowerShellCompilationSemanticRuntimeFreeArtifactObserver
             : method.ReturnType;
         var nullOnly = typeName == typeof(object).FullName &&
             method.OutputValueStates.All(static state => state == "Null");
-        if (!IsFramedScalarType(typeName) && !nullOnly && typeName != typeof(PowerShellStrictProjectionRecord).FullName)
+        var closedTypes = method.ClosedSuccessRecordTypes;
+        var closedCollection = typeName == typeof(object).FullName && cardinality.Equals("Collection", StringComparison.OrdinalIgnoreCase) &&
+            closedTypes.Length > 1 && closedTypes.Distinct(StringComparer.Ordinal).Count() == closedTypes.Length &&
+            closedTypes.All(type => IsFramedScalarType(type) || type == typeof(PowerShellStrictProjectionRecord).FullName);
+        if (closedTypes.Length != 0 && !closedCollection)
+            throw new InvalidOperationException("The Strict executable ABI declares an invalid closed success-record contract.");
+        if (!IsFramedScalarType(typeName) && !nullOnly && !closedCollection && typeName != typeof(PowerShellStrictProjectionRecord).FullName)
             throw new InvalidOperationException($"The framed Strict observation protocol does not support ABI type '{typeName}'.");
     }
 
@@ -397,6 +403,8 @@ public sealed class PowerShellCompilationSemanticRuntimeFreeArtifactObserver
             : method.ReturnType;
         if (successFrames.Length > 0)
             expectedType = GetFramedScalarTypeName(expectedType);
+        var expectedTypes = method.ClosedSuccessRecordTypes.Length == 0
+            ? new[] { expectedType } : method.ClosedSuccessRecordTypes.Select(GetFramedScalarTypeName).ToArray();
         var result = new PowerShellCompilationSemanticValueObservation[successFrames.Length];
         for (var index = 0; index < successFrames.Length; index++)
         {
@@ -404,7 +412,7 @@ public sealed class PowerShellCompilationSemanticRuntimeFreeArtifactObserver
             var frame = item.Frame;
             if (frame.State == "ROW")
             {
-                if (expectedType != typeof(PowerShellStrictProjectionRecord).FullName ||
+                if (!expectedTypes.Contains(typeof(PowerShellStrictProjectionRecord).FullName!, StringComparer.Ordinal) ||
                     frame.TypeName != PowerShellStrictProjectionRecord.ProjectedTypeName)
                     throw new InvalidDataException("The Strict executable emitted a projected record outside its ABI contract.");
                 result[index] = ReadProjectedRecord(item.Sequence, frame.Value);
@@ -423,8 +431,8 @@ public sealed class PowerShellCompilationSemanticRuntimeFreeArtifactObserver
                 };
                 continue;
             }
-            if (frame.State != "VALUE" || !IsFramedScalarType(expectedType) ||
-                !frame.TypeName.Equals(expectedType, StringComparison.Ordinal))
+            if (frame.State != "VALUE" || !IsFramedScalarType(frame.TypeName) ||
+                !expectedTypes.Contains(frame.TypeName, StringComparer.Ordinal))
                 throw new InvalidDataException(
                     $"The Strict executable emitted framed type '{frame.TypeName}' for ABI type '{expectedType}'.");
             result[index] = new PowerShellCompilationSemanticValueObservation

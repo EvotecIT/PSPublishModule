@@ -4,7 +4,13 @@ namespace PowerForge;
 
 internal static class PowerShellStrictCatchObservation
 {
-    internal static bool TryClassify(Ast syntax, out PowerShellRuntimeStateIntrinsicKind kind)
+    private static readonly HashSet<string> SupportedDataCommands = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Write-Output", "Write-Progress", "Get-ChildItem", "Select-Object", "select", "Where-Object", "where",
+        "ForEach-Object", "foreach", "%", "?"
+    };
+
+    internal static bool TryClassify(Ast syntax, IEnumerable<string>? localFunctionNames, out PowerShellRuntimeStateIntrinsicKind kind)
     {
         kind = syntax switch
         {
@@ -39,17 +45,13 @@ internal static class PowerShellStrictCatchObservation
                statement.Parent is StatementBlockAst body &&
                ReferenceEquals(body.Statements.FirstOrDefault(), statement) &&
                body.Parent is CatchClauseAst { CatchTypes.Count: 0, Parent: TryStatementAst attempt } &&
-               attempt.Body.Find(static node => node is CommandAst command &&
-                   (IsConsoleCommand(command) && PowerShellRuntimeStateCommandSemanticBinder.TryGetConsoleErrorRoute(command, out _) ||
-                    PowerShellStrictCsvPolicy.TryGetRead(command, null, out _, out _, out _) ||
-                    PowerShellStrictFileCommandPolicy.TryGetResolvePath(command, null, out _, out _)),
-                   searchNestedScriptBlocks: false) is not null;
+               HasBoundedErrorProducers(attempt.Body, localFunctionNames);
     }
 
-    internal static bool Contains(Ast syntax)
+    internal static bool Contains(Ast syntax, IEnumerable<string>? localFunctionNames)
     {
         for (Ast? current = syntax; current is not null && current is not StatementAst; current = current.Parent)
-            if (TryClassify(current, out _)) return true;
+            if (TryClassify(current, localFunctionNames, out _)) return true;
         return false;
     }
 
@@ -67,10 +69,41 @@ internal static class PowerShellStrictCatchObservation
     internal static int GetAuthoredLine(ParsedSourceDocument document, IScriptExtent extent)
         => document.AuthoredProjection?.Select(document, new[] { extent }).Statements.Single().StartLine ?? extent.StartLineNumber;
 
-    private static bool IsConsoleCommand(CommandAst command)
+    private static bool HasBoundedErrorProducers(StatementBlockAst body, IEnumerable<string>? localFunctionNames)
+    {
+        var names = localFunctionNames as HashSet<string> ?? localFunctionNames?.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var found = false;
+        foreach (var operation in body.FindAll(static node => node is ThrowStatementAst or CommandAst or InvokeMemberExpressionAst,
+                     searchNestedScriptBlocks: false))
+        {
+            if (operation is ThrowStatementAst) return false;
+            if (operation is InvokeMemberExpressionAst invocation)
+            {
+                if (invocation is not { Static: true, Expression: TypeExpressionAst timer, Arguments: null or { Count: 0 },
+                        Member: StringConstantExpressionAst method } ||
+                    timer.TypeName.GetReflectionType() != typeof(System.Diagnostics.Stopwatch) ||
+                    !method.Value.Equals(nameof(System.Diagnostics.Stopwatch.StartNew), StringComparison.OrdinalIgnoreCase))
+                    return false;
+                continue;
+            }
+            var command = (CommandAst)operation;
+            if (IsConsoleCommand(command, names) && PowerShellRuntimeStateCommandSemanticBinder.TryGetConsoleErrorRoute(command, out _) ||
+                PowerShellStrictCsvPolicy.TryGetRead(command, names, out _, out _, out _) ||
+                PowerShellStrictFileCommandPolicy.TryGetResolvePath(command, names, out _, out _))
+            {
+                found = true;
+                continue;
+            }
+            var name = command.GetCommandName();
+            if (name is null || names?.Contains(name) == true || !SupportedDataCommands.Contains(name.Split('\\').Last())) return false;
+        }
+        return found;
+    }
+
+    private static bool IsConsoleCommand(CommandAst command, ISet<string>? localFunctionNames)
     {
         var name = command.GetCommandName();
-        return string.Equals(name, "Read-Host", StringComparison.OrdinalIgnoreCase) ||
+        return string.Equals(name, "Read-Host", StringComparison.OrdinalIgnoreCase) && localFunctionNames?.Contains(name!) != true ||
                string.Equals(name, "Microsoft.PowerShell.Utility\\Read-Host", StringComparison.OrdinalIgnoreCase);
     }
 }

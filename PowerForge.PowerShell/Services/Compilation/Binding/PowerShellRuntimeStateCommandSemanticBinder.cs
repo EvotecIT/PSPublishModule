@@ -10,12 +10,14 @@ internal static class PowerShellRuntimeStateCommandSemanticBinder
     internal static bool IsSupportedShape(
         CommandAst command,
         PowerShellCompilationCommandProviderContract provider,
-        PowerShellCompilationCapability capabilities)
+        PowerShellCompilationCapability capabilities,
+        bool permitsGeneratedScriptRoot = false)
         => capabilities.HasFlag(PowerShellCompilationCapability.RuntimeStateIntrinsics) &&
            command.InvocationOperator == TokenKind.Unknown &&
            command.Redirections.Count == 0 &&
            (IsCurrentLocalDateTimeProvider(provider) && (command.CommandElements.Count == 1 || TryGetLiteralFormat(command, out _)) ||
             IsPlainConsoleInput(provider) && capabilities == PowerShellCompilationCapabilities.TypedExecutable &&
+            (permitsGeneratedScriptRoot || IsInScriptRoot(command)) &&
             TryGetLiteralPrompt(command, out _) && TryGetConsoleErrorRoute(command, out _));
 
     internal static PowerShellBoundExpression? Bind(
@@ -30,7 +32,7 @@ internal static class PowerShellRuntimeStateCommandSemanticBinder
         var span = PowerShellSourceParser.GetSpan(document, command.Extent);
         if (IsPlainConsoleInput(provider))
         {
-            if (!IsSupportedShape(command, provider, capabilities) || !TryGetLiteralPrompt(command, out var prompt))
+            if (!IsSupportedShape(command, provider, capabilities, document.AuthoredProjection is not null) || !TryGetLiteralPrompt(command, out var prompt))
             {
                 diagnostics.Add(new PowerShellSemanticDiagnostic(provider.FeatureId,
                     "Strict Read-Host requires a direct script-root assignment with an optional literal prompt.", span));
@@ -106,6 +108,13 @@ internal static class PowerShellRuntimeStateCommandSemanticBinder
 
     private static bool IsPlainConsoleInput(PowerShellCompilationCommandProviderContract provider)
         => provider.ProviderId.Equals(PlainConsoleInputProviderId, StringComparison.Ordinal);
+
+    private static bool IsInScriptRoot(CommandAst command)
+    {
+        for (Ast? parent = command.Parent; parent is not null; parent = parent.Parent)
+            if (parent is ScriptBlockAst block) return block.Parent is null;
+        return false;
+    }
 
     internal static bool TryGetConsoleErrorRoute(CommandAst command, out bool catchesStatementError)
     {

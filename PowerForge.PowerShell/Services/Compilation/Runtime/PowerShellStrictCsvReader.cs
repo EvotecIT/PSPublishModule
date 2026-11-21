@@ -8,14 +8,18 @@ internal static class PowerShellStrictCsvReader
     {
         try
         {
+            if (string.IsNullOrEmpty(path))
+                throw new ArgumentException($"Cannot bind argument to parameter '{(literal ? "LiteralPath" : "Path")}' because it is an empty string.");
             if (!literal && PowerShellStrictFileSystemReader.HasWildcard(path))
             {
-                var files = PowerShellStrictFileSystemReader.ResolveEntries(Path.GetFullPath(path), literal: false);
+                var files = PowerShellStrictFileSystemReader.ResolveEntries(PowerShellStrictFileSystemReader.GetFullPath(path), literal: false);
                 if (files.Length == 0)
                     throw new FileNotFoundException($"Cannot perform operation because the wildcard path {path} did not resolve to a file.");
-                return files.SelectMany(file => Read(file, header)).ToArray();
+                if (files.Length != 1)
+                    throw new IOException("Cannot perform operation because the path resolved to more than one file. This command cannot operate on multiple files.");
+                return Read(files[0], header).ToArray();
             }
-            return Read(path, header).ToArray();
+            return Read(PowerShellStrictFileSystemReader.GetFullPath(path), header).ToArray();
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException)
         {

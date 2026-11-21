@@ -131,9 +131,10 @@ internal static class PowerShellTypedExecutableEmitter
             runtimeSources.Add("PowerShellPackagedConsoleInput");
             runtimeSources.Add("PowerShellStrictConsoleInput");
         }
-        if (usesConsoleInput || runtimeSources.Contains(nameof(Generated.Runtime.PowerShellStrictCsvReader)) ||
-            runtimeSources.Contains(nameof(Generated.Runtime.PowerShellStrictPipelineOperations)) ||
-            runtimeSources.Contains(nameof(Generated.Runtime.PowerShellStrictFileSystemReader)))
+        if (!runtimeSources.Contains(nameof(Generated.Runtime.PowerShellScriptCommandError)) &&
+            (usesConsoleInput || runtimeSources.Contains(nameof(Generated.Runtime.PowerShellStrictCsvReader)) ||
+             runtimeSources.Contains(nameof(Generated.Runtime.PowerShellStrictPipelineOperations)) ||
+             runtimeSources.Contains(nameof(Generated.Runtime.PowerShellStrictFileSystemReader))))
             runtimeSources.Add(nameof(Generated.Runtime.PowerShellScriptCommandError));
         var usesProjection = runtimeSources.Contains(nameof(Generated.Runtime.PowerShellStrictProjectionRecord));
         var windowsPowerShell = semanticProfileId == PowerShellCompilationSemanticOracleCatalog.WindowsPowerShell51ProfileId
@@ -147,13 +148,13 @@ internal static class PowerShellTypedExecutableEmitter
                         WriteSemanticFrame("ROW", {{projection}}.ProjectedTypeName, record.ToObservationPayload());
                         PowerShellObservationFrameCount++;
                     }
-                    else record.WriteConsole({{windowsPowerShell}});
+                    else record.WriteConsole();
                     return;
                 }
-                if (!PowerShellStreamsUseObservationProtocol) {{projection}}.FlushConsole({{windowsPowerShell}});
+                if (!PowerShellStreamsUseObservationProtocol && {{projection}}.BufferAfterProjection(value)) return;
         """ : string.Empty;
         var finishProjection = usesProjection
-            ? $"        if (!authoredExit && !PowerShellStreamsUseObservationProtocol) {projection}.FlushConsole({windowsPowerShell});"
+            ? $"        if (!authoredExit && !PowerShellStreamsUseObservationProtocol) {projection}.FlushConsole({windowsPowerShell}, value => WriteResult(value, ResultCardinality.Scalar));"
             : string.Empty;
         var programSource = ReadTemplate(ProgramTemplate)
             .Replace("{{PARAMETER_SPECS}}", parameterSpecs)

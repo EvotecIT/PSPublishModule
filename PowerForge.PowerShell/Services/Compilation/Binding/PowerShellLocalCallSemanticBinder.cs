@@ -53,6 +53,7 @@ internal sealed class PowerShellLocalCallSignature
     internal bool IsPipelineLifecycle => PipelineLifecycleParameterIndex >= 0;
     internal bool PipelineLifecycleReturnsCollection { get; private set; }
     internal bool PipelineLifecycleHasOutputLimit { get; set; }
+    internal bool PipelineLifecycleStreamsOutput { get; set; }
     internal PowerShellStrictPipelineReduction? StrictPipelineReduction { get; }
     internal bool PipelineLifecycleRequiresNonNullInput { get; }
     internal bool ReturnsModuleStateDerived { get; private set; }

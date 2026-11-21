@@ -20,7 +20,7 @@ internal static class PowerShellStrictFileSystemReader
             const string message = "Cannot bind argument to parameter 'Path' because it is an empty string.";
             throw new PowerShellScriptCommandError(message, message + Environment.NewLine, line, new ArgumentException(message));
         }
-        var fullPath = Path.GetFullPath(path);
+        var fullPath = GetFullPath(path);
         var matches = ResolveEntries(fullPath, literal);
         if (matches.Length != 0) return string.Join(" ", matches);
         ReportUnresolvedPath(fullPath, source, line, column, length, authoredLine, invokedName, windowsPowerShell);
@@ -29,15 +29,27 @@ internal static class PowerShellStrictFileSystemReader
 
     internal static bool HasWildcard(string path) => path.IndexOfAny(new[] { '*', '?', '[' }) >= 0;
 
+    internal static string GetFullPath(string path)
+    {
+        if (path == "~" || path.Length > 1 && path[0] == '~' && (path[1] == '/' || path[1] == '\\'))
+        {
+            var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            if (!string.IsNullOrEmpty(home))
+                path = path.Length == 1 ? home : Path.Combine(home, path.Substring(2));
+        }
+        return Path.GetFullPath(path);
+    }
+
     internal static string[] ResolveEntries(string fullPath, bool literal)
     {
         if (literal || !HasWildcard(fullPath))
             return File.Exists(fullPath) || Directory.Exists(fullPath) ? new[] { fullPath } : Array.Empty<string>();
         var parent = Path.GetDirectoryName(fullPath);
-        if (string.IsNullOrEmpty(parent) || !Directory.Exists(parent)) return Array.Empty<string>();
+        if (string.IsNullOrEmpty(parent)) return Array.Empty<string>();
         var matcher = CreateLeafMatcher(Path.GetFileName(fullPath));
-        return Visible(new DirectoryInfo(parent!).GetFileSystemInfos()).Where(entry => matcher.IsMatch(entry.Name))
-            .Select(static entry => entry.FullName).ToArray();
+        return ResolveEntries(parent!, literal: false).Where(Directory.Exists)
+            .SelectMany(directory => Visible(new DirectoryInfo(directory).GetFileSystemInfos()))
+            .Where(entry => matcher.IsMatch(entry.Name)).Select(static entry => entry.FullName).ToArray();
     }
 
     private static void ReportUnresolvedPath(string path, string source, int line, int column, int length,
@@ -70,7 +82,7 @@ internal static class PowerShellStrictFileSystemReader
 
     private static IEnumerable<FileSystemInfo> Read(string? path, bool filesOnly)
     {
-        var fullPath = string.IsNullOrEmpty(path) ? Environment.CurrentDirectory : Path.GetFullPath(path!);
+        var fullPath = string.IsNullOrEmpty(path) ? Environment.CurrentDirectory : GetFullPath(path!);
         if (Directory.Exists(fullPath))
         {
             foreach (var record in Descendants(new DirectoryInfo(fullPath), filesOnly))
@@ -78,11 +90,12 @@ internal static class PowerShellStrictFileSystemReader
             yield break;
         }
         var parent = Path.GetDirectoryName(fullPath);
-        if (string.IsNullOrEmpty(parent) || !Directory.Exists(parent)) yield break;
+        if (string.IsNullOrEmpty(parent)) yield break;
         var leaf = Path.GetFileName(fullPath);
         var matcher = CreateLeafMatcher(leaf);
-        foreach (var record in Search(new DirectoryInfo(parent), matcher, filesOnly))
-            yield return record;
+        foreach (var directory in ResolveEntries(parent!, literal: false).Where(Directory.Exists))
+            foreach (var record in Search(new DirectoryInfo(directory), matcher, filesOnly))
+                yield return record;
     }
 
     private static Regex CreateLeafMatcher(string leaf)

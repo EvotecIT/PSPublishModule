@@ -272,7 +272,7 @@ public sealed partial class PowerShellCompilationAnalyzer
             }
 
             if (capabilities == PowerShellCompilationCapabilities.TypedExecutable &&
-                PowerShellStrictCatchObservation.Contains(candidate))
+                PowerShellStrictCatchObservation.Contains(candidate, localFunctionNames))
                 continue;
             switch (candidate)
             {

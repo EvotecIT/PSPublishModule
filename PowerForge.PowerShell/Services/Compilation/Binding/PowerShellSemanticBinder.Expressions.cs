@@ -21,7 +21,7 @@ internal sealed partial class PowerShellSemanticBinder
             TryGetRuntimeFreePipelineLifecycleSelection(lifecycle, functions, capabilities, out _))
             return BindRuntimeFreePipelineLifecycleInvocation(document, lifecycle, symbols, functions, diagnostics, targetFramework, capabilities);
         if (capabilities == PowerShellCompilationCapabilities.TypedExecutable &&
-            PowerShellStrictCatchObservation.TryClassify(syntax, out var errorValue))
+            PowerShellStrictCatchObservation.TryClassify(syntax, functions.Keys, out var errorValue))
             return new PowerShellBoundRuntimeStateExpression(span, errorValue, targetFramework ?? string.Empty,
                 _semanticProfile.ProfileId, Array.Empty<PowerShellBoundExpression>());
         if (_runtimeFreeModule is not null && syntax is VariableExpressionAst ownedVariable &&

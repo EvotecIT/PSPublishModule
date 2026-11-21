@@ -32,6 +32,7 @@ internal sealed partial class PowerShellSemanticBinder
         ParameterAst pipelineParameter,
         bool signatureReturnsCollection,
         bool supportsOutputLimit,
+        bool streamsSuccessOutput,
         int functionDiagnosticStart,
         PowerShellOutputTypeDeclaration[] outputTypeDeclarations)
     {
@@ -104,6 +105,13 @@ internal sealed partial class PowerShellSemanticBinder
                 rawRecord.Span, sourceParameter.Symbol, PowerShellConversionSemanticBinder.BindClosedStringConversion(rawRecord)!);
             process = new PowerShellBoundBlock(process.Span, new PowerShellBoundStatement[] { normalize }.Concat(process.Statements).ToArray());
         }
+        if (supportsOutputLimit && new[] { begin, process, end }.Any(block =>
+                PowerShellSemanticAnalyzer.EnumerateStatements(block, descendIntoCaptures: false).OfType<PowerShellBoundTryStatement>()
+                    .Any(attempt => attempt.FinallyBlock is { } cleanup && GetSuccessOutputs(cleanup).Length != 0)))
+        {
+            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2928", "Strict lifecycle early stopping cannot transfer control from finally output.", begin.Span));
+            return null;
+        }
         var beginOutputs = GetSuccessOutputs(begin);
         var processOutputs = strict ? beginOutputs.Concat(GetSuccessOutputs(process)).ToArray() : GetSuccessOutputs(process);
         if (!strict && beginOutputs.Length != 0 ||
@@ -157,7 +165,30 @@ internal sealed partial class PowerShellSemanticBinder
             checkHostInterrupts: PowerShellLoopInterruptContract.IsAvailable(capabilities));
         PowerShellBoundParameter? limitParameter = null;
         PowerShellBoundBlock body;
-        if (returnsCollection)
+        var needsLiveOutput = supportsOutputLimit || streamsSuccessOutput &&
+            (beginOutputs.Length != 0 || new[] { begin, process, end }.Any(LifecycleHasObservableFailure));
+        if (returnsCollection && needsLiveOutput)
+        {
+            limitParameter = supportsOutputLimit ? CreateLifecycleLimitParameter(document, function, symbols, pipelineParameter, sourceParameter) : null;
+            var limit = limitParameter is null ? null : new PowerShellBoundVariableExpression(
+                limitParameter.Symbol.Declaration, limitParameter.Symbol, limitParameter.Type, PowerShellValueState.Known);
+            var outputName = CreatePipelineOutputName(symbols, pipelineParameter.Extent.StartOffset);
+            var outputSymbol = new PowerShellSymbolId(PowerShellSymbolKind.Local, document.DocumentId,
+                outputName, begin.Span, function.Name + "/pipeline-record");
+            var outputType = StrictPipelineType(outputElementType!);
+            if (limit is not null && !PowerShellClrTypeSemantics.IsNonNullableValueType(outputType.ClrType))
+                locals = locals.Append(new PowerShellBoundLocal(outputSymbol, outputType)).ToArray();
+            var output = new PowerShellBoundVariableExpression(begin.Span, outputSymbol, outputType, PowerShellValueState.Unknown);
+            var liveBegin = RewriteLiveLifecycleOutputs(begin, output, limit);
+            var liveProcess = RewriteLiveLifecycleOutputs(process, output, limit);
+            var liveEnd = RewriteLiveLifecycleOutputs(end, output, limit);
+            var liveLoop = new PowerShellBoundForEachStatement(lifecycleLoop.Span, lifecycleLoop.Variable,
+                lifecycleLoop.ElementType, lifecycleLoop.Collection, lifecycleLoop.EnumerationKind, liveProcess,
+                lifecycleLoop.DeclareVariable, lifecycleLoop.NullCollectionElement, lifecycleLoop.CheckHostInterrupts);
+            body = new PowerShellBoundBlock(PowerShellSourceParser.GetSpan(document, function.Body.Extent),
+                liveBegin.Statements.Append(liveLoop).Concat(liveEnd.Statements).ToArray());
+        }
+        else if (returnsCollection)
         {
             var outputType = outputElementType!;
             var outputListType = typeof(List<>).MakeGenericType(outputType);
@@ -176,10 +207,6 @@ internal sealed partial class PowerShellSemanticBinder
                 .OrderBy(static local => local.Symbol.StableKey, StringComparer.Ordinal)
                 .ToArray();
             var outputVariable = new PowerShellBoundVariableExpression(outputSymbol.Declaration, outputSymbol, outputListFact, PowerShellValueState.Known);
-            var limit = supportsOutputLimit ? CreateLifecycleLimitParameter(document, function, symbols, pipelineParameter, sourceParameter) : null;
-            limitParameter = limit;
-            var limitVariable = limit is null ? null : new PowerShellBoundVariableExpression(
-                limit.Symbol.Declaration, limit.Symbol, limit.Type, PowerShellValueState.Known);
             var createOutput = new PowerShellBoundAssignmentStatement(
                 outputSymbol.Declaration,
                 outputSymbol,
@@ -194,8 +221,8 @@ internal sealed partial class PowerShellSemanticBinder
                     Type.EmptyTypes,
                     outputListFact));
             var returnOutput = new PowerShellBoundReturnStatement(end.Span, LifecycleOutputArray(outputVariable, outputType));
-            var collectedBegin = strict ? RewriteLifecycleOutputs(begin, outputVariable, outputListType, outputType, limitVariable) : begin;
-            var collectedProcess = RewriteLifecycleOutputs(process, outputVariable, outputListType, outputType, limitVariable);
+            var collectedBegin = strict ? RewriteLifecycleOutputs(begin, outputVariable, outputListType, outputType) : begin;
+            var collectedProcess = RewriteLifecycleOutputs(process, outputVariable, outputListType, outputType);
             lifecycleLoop = new PowerShellBoundForEachStatement(
                 lifecycleLoop.Span,
                 lifecycleLoop.Variable,
@@ -206,7 +233,7 @@ internal sealed partial class PowerShellSemanticBinder
                 lifecycleLoop.DeclareVariable,
                 lifecycleLoop.NullCollectionElement,
                 lifecycleLoop.CheckHostInterrupts);
-            var collectedEnd = RewriteLifecycleOutputs(end, outputVariable, outputListType, outputType, limitVariable);
+            var collectedEnd = RewriteLifecycleOutputs(end, outputVariable, outputListType, outputType);
             body = new PowerShellBoundBlock(
                 PowerShellSourceParser.GetSpan(document, function.Body.Extent),
                 new PowerShellBoundStatement[] { createOutput }
@@ -409,11 +436,21 @@ internal sealed partial class PowerShellSemanticBinder
     }
 
     private static PowerShellBoundExpression[] GetSuccessOutputs(PowerShellBoundBlock block)
-        => PowerShellSemanticAnalyzer.EnumerateStatements(block)
+        => PowerShellSemanticAnalyzer.EnumerateStatements(block, descendIntoCaptures: false)
             .Select(PowerShellSemanticAnalyzer.GetSuccessOutputExpression)
             .Where(static expression => expression is not null)
             .Cast<PowerShellBoundExpression>()
             .ToArray();
+
+    private static bool LifecycleHasObservableFailure(PowerShellBoundBlock block)
+        => PowerShellSemanticAnalyzer.EnumerateStatements(block).Any(statement =>
+            statement is PowerShellBoundThrowStatement or PowerShellBoundTryStatement or PowerShellBoundStatementErrorBoundary ||
+            statement is PowerShellBoundAssignmentStatement { Operation: not PowerShellBoundMutationOperator.Assign } ||
+            PowerShellSemanticAnalyzer.EnumerateDirectExpressions(statement)
+                .SelectMany(PowerShellSemanticAnalyzer.EnumerateExpressions)
+                .Any(static expression => expression is PowerShellBoundClrInvocationExpression or PowerShellBoundInvocationExpression or
+                    PowerShellBoundClrMemberExpression or PowerShellBoundConversionExpression or PowerShellBoundMutationExpression or
+                    PowerShellBoundRuntimeStateExpression));
 
     private static bool TryGetLifecycleOutputElementType(
         PowerShellBoundExpression[] processOutputs,
@@ -443,46 +480,26 @@ internal sealed partial class PowerShellSemanticBinder
         PowerShellBoundBlock block,
         PowerShellBoundExpression outputVariable,
         Type outputListType,
-        Type outputElementType,
-        PowerShellBoundExpression? limit)
+        Type outputElementType)
         => new(
             block.Span,
             block.Statements.Select(statement => RewriteLifecycleOutput(
                 statement,
                 outputVariable,
                 outputListType,
-                outputElementType,
-                limit)).ToArray());
+                outputElementType)).ToArray());
 
     private static PowerShellBoundStatement RewriteLifecycleOutput(
         PowerShellBoundStatement statement,
         PowerShellBoundExpression outputVariable,
         Type outputListType,
-        Type outputElementType,
-        PowerShellBoundExpression? limit)
+        Type outputElementType)
     {
-        if (statement is PowerShellBoundIfStatement conditional)
-            return new PowerShellBoundIfStatement(
-                conditional.Span,
-                conditional.Clauses.Select(clause => new PowerShellBoundConditionalClause(
-                    clause.Condition,
-                    RewriteLifecycleOutputs(clause.Body, outputVariable, outputListType, outputElementType, limit))).ToArray(),
-                conditional.ElseBlock is null
-                    ? null
-                    : RewriteLifecycleOutputs(conditional.ElseBlock, outputVariable, outputListType, outputElementType, limit));
+        if (statement is PowerShellBoundOutputCaptureStatement) return statement;
         var expression = PowerShellSemanticAnalyzer.GetSuccessOutputExpression(statement);
-        if (expression is null) return statement;
-        if (limit is not null)
-        {
-            var owner = typeof(Generated.Runtime.PowerShellStrictPipelineOperations<>).MakeGenericType(outputElementType);
-            var addAndCheck = new PowerShellBoundClrInvocationExpression(statement.Span, owner,
-                nameof(Generated.Runtime.PowerShellStrictPipelineOperations<int>.AddAndReachedLimit),
-                PowerShellClrInvocationKind.StaticMethod, null, PowerShellClrReceiverBehavior.None,
-                new[] { outputVariable, expression, limit }, new[] { outputListType, outputElementType, typeof(int) },
-                StrictPipelineType(typeof(bool)));
-            return StrictPipelineIf(statement.Span, addAndCheck,
-                new PowerShellBoundStatement[] { new PowerShellBoundReturnStatement(statement.Span, LifecycleOutputArray(outputVariable, outputElementType)) });
-        }
+        if (expression is null)
+            return PowerShellBoundStatementRewriter.RewriteNestedBlocks(statement,
+                nested => RewriteLifecycleOutputs(nested, outputVariable, outputListType, outputElementType));
         var add = new PowerShellBoundClrInvocationExpression(
             statement.Span,
             outputListType,
@@ -500,6 +517,51 @@ internal sealed partial class PowerShellSemanticBinder
         => new PowerShellBoundClrInvocationExpression(output.Span, output.Type.ClrType, nameof(List<int>.ToArray),
             PowerShellClrInvocationKind.InstanceMethod, output, PowerShellClrReceiverBehavior.None,
             Array.Empty<PowerShellBoundExpression>(), Type.EmptyTypes, StrictPipelineType(element.MakeArrayType()));
+
+    private static PowerShellBoundBlock RewriteLiveLifecycleOutputs(PowerShellBoundBlock block,
+        PowerShellBoundVariableExpression record, PowerShellBoundVariableExpression? limit)
+    {
+        var statements = new List<PowerShellBoundStatement>();
+        foreach (var statement in block.Statements)
+        {
+            if (PowerShellSemanticAnalyzer.GetSuccessOutputExpression(statement) is not { } expression)
+            {
+                statements.Add(statement is PowerShellBoundOutputCaptureStatement ? statement :
+                    PowerShellBoundStatementRewriter.RewriteNestedBlocks(statement,
+                        nested => RewriteLiveLifecycleOutputs(nested, record, limit)));
+                continue;
+            }
+            if (limit is null)
+            {
+                statements.Add(StrictSuccessOutput(expression));
+                continue;
+            }
+            var span = statement.Span;
+            var zero = StrictIntLiteral(span, 0);
+            var boolType = StrictPipelineType(typeof(bool));
+            var hasLimit = new PowerShellBoundBinaryExpression(span, PowerShellBoundBinaryOperator.GreaterThan, limit, zero, boolType);
+            var limitReached = new PowerShellBoundBinaryExpression(span, PowerShellBoundBinaryOperator.Equal, limit, zero, boolType);
+            var countRecord = StrictPipelineIf(span, hasLimit, new PowerShellBoundStatement[]
+            {
+                new PowerShellBoundAssignmentStatement(span, limit.Symbol, new PowerShellBoundBinaryExpression(
+                    span, PowerShellBoundBinaryOperator.Subtract, limit, StrictIntLiteral(span, 1), limit.Type)),
+                StrictPipelineIf(span, limitReached, new PowerShellBoundStatement[] { new PowerShellBoundReturnStatement(span, null) })
+            });
+            if (PowerShellClrTypeSemantics.IsNonNullableValueType(record.Type.ClrType))
+            {
+                statements.Add(StrictSuccessOutput(expression));
+                statements.Add(countRecord);
+            }
+            else
+            {
+                statements.Add(new PowerShellBoundAssignmentStatement(span, record.Symbol, expression));
+                var eligible = new PowerShellBoundBinaryExpression(span, PowerShellBoundBinaryOperator.LogicalOr, limitReached,
+                    StrictPipelineRecordIsNotNull(span, record), boolType);
+                statements.Add(StrictPipelineIf(span, eligible, new PowerShellBoundStatement[] { StrictSuccessOutput(record), countRecord }));
+            }
+        }
+        return new PowerShellBoundBlock(block.Span, statements.ToArray());
+    }
 
     private static PowerShellBoundParameter CreateLifecycleLimitParameter(ParsedSourceDocument document,
         FunctionDefinitionAst function, IReadOnlyDictionary<string, PowerShellSemanticSymbolBinding> symbols,

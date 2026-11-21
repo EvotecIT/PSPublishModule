@@ -185,6 +185,8 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
             param([string] $Path, [int] $ExitAfter = 0)
             Get-ChildItem -Path $Path -Recurse | Select-Object -Property Name,FullName
             if ($ExitAfter -eq 1) { exit 0 }
+            if ($ExitAfter -ge 7) { 'complete' }
+            if ($ExitAfter -eq 7) { exit 7 }
             """);
         var tree = Directory.CreateDirectory(Path.Combine(fixture.RootPath, "items")).FullName;
         Directory.CreateDirectory(Path.Combine(tree, "nested"));
@@ -208,9 +210,14 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
             var artifact = observer.Observe(pin.ProfileId, build, new[] { tree });
             var differences = PowerShellCompilationSemanticOracleComparer.Compare(original, artifact, new[] { "Encoding", "ExitCode" });
             Assert.True(differences.Count == 0, pin.ProfileId + Environment.NewLine + string.Join(Environment.NewLine, differences));
+            var mixed = observer.Observe(pin.ProfileId, build, new[] { tree, "7" });
+            Assert.Equal(7, mixed.ExitCode);
+            Assert.Equal(4, mixed.Success.Length);
+            Assert.Equal(original.Success.Select(static row => row.TypeName), mixed.Success.Take(3).Select(static row => row.TypeName));
+            Assert.Equal("System.String", mixed.Success[3].TypeName);
             var host = StrictStreamingHostPath(pin) ??
                 Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe");
-            foreach (var status in new[] { "0", "1" })
+            foreach (var status in new[] { "0", "1", "7", "8" })
             {
                 var native = await ObserveExitedConsole(host, fixture.RootPath,
                     new[] { "-NoProfile", "-NonInteractive", "-File", fixture.ScriptPath, tree, status }, string.Empty);
@@ -223,7 +230,7 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
     [PinnedSemanticHostFact]
     public async Task StrictCsvRowsMatchBothPinnedHosts()
     {
-        using var fixture = OracleFixture.Create("""
+        const string script = """
             param([string] $Path)
             try {
                 $rows = Import-Csv -LiteralPath $Path -Header Title,Author,Notes
@@ -235,7 +242,9 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
                 "Error: $($Error[0]) (line $($_.InvocationInfo.ScriptLineNumber))"
                 exit 1
             }
-            """);
+            """;
+        using var fixture = OracleFixture.Create(script);
+        using var wildcardFixture = OracleFixture.Create(script.Replace("-LiteralPath", "-Path", StringComparison.Ordinal));
         var rows = Path.Combine(fixture.RootPath, "data[42].csv");
         var empty = Path.Combine(fixture.RootPath, "empty.csv");
         var missing = Path.Combine(fixture.RootPath, "missing.csv");
@@ -261,6 +270,15 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
                 Assert.Equal(native.Code, observation.ExitCode);
                 Assert.Equal(path == rows ? 3 : path == missing ? 1 : 0, observation.Success.Length);
             }
+            var wildcardBuild = BuildStrictStreamingFixture(wildcardFixture, "StrictCsvPattern", pin.ProfileId);
+            Assert.True(wildcardBuild.Succeeded, wildcardBuild.Error + Environment.NewLine + wildcardBuild.BuildOutput);
+            var ambiguous = Path.Combine(fixture.RootPath, "*.csv");
+            var original = await ObserveExitedConsole(host, fixture.RootPath,
+                new[] { "-NoProfile", "-NonInteractive", "-File", wildcardFixture.ScriptPath, ambiguous }, string.Empty);
+            var generated = await ObserveExitedConsole(wildcardBuild.ArtifactPath!, fixture.RootPath, new[] { ambiguous }, string.Empty);
+            Assert.Equal(1, original.Code);
+            Assert.Contains("path resolved to more than one file", original.Output, StringComparison.Ordinal);
+            Assert.Equal(original, generated);
         }
     }
 
@@ -268,9 +286,10 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
     public async Task StrictFileProcessingMatchesBothPinnedHosts()
     {
         using var fixture = OracleFixture.Create("""
-            param([string] $Path = "$PWD", [int] $Initial = 0, [double] $Elapsed = 2.5)
+            param([string] $Path = "$PWD", [int] $Initial = 0, [double] $Elapsed = 2.5, [switch] $ResolveOnly)
             try {
                 $Path = Resolve-Path "$Path"
+                if ($ResolveOnly) { return $Path }
                 Write-Progress "Reading $Path"
                 [int] $count = $Initial
                 Get-ChildItem $Path -Attributes !Directory -Recurse |
@@ -296,6 +315,8 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
             (Array.Empty<string>(), 0),
             (new[] { "." }, 0),
             (new[] { nested, "0", "3.5" }, 0),
+            (new[] { "~", "-ResolveOnly" }, 0),
+            (new[] { Path.Combine(tree, "ch?ld", "*.txt"), "-ResolveOnly" }, 0),
             (new[] { tree, int.MaxValue.ToString(System.Globalization.CultureInfo.InvariantCulture) }, 1),
             (new[] { "" }, 1),
             (new[] { missing }, 0)
@@ -313,7 +334,8 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
                 var hostArguments = new[] { "-NoProfile", "-NonInteractive", "-File", fixture.ScriptPath }
                     .Concat(scenario.Arguments).ToArray();
                 var native = await ObserveExitedConsole(host, tree, hostArguments, string.Empty);
-                var compiled = await ObserveExitedConsole(build.ArtifactPath!, tree, scenario.Arguments, string.Empty);
+                var compiledArguments = scenario.Arguments.Select(static argument => argument == "-ResolveOnly" ? "--ResolveOnly" : argument).ToArray();
+                var compiled = await ObserveExitedConsole(build.ArtifactPath!, tree, compiledArguments, string.Empty);
                 Assert.Equal(scenario.Code, native.Code);
                 Assert.Equal(native.Code, compiled.Code);
                 Assert.Equal(native.Output, compiled.Output);
@@ -338,14 +360,16 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
             function Get-Record {
                 [CmdletBinding()]
                 [OutputType([int])]
-                param([Parameter(ValueFromPipeline)][int] $Record, [switch] $Mark)
+                param([Parameter(ValueFromPipeline)][int] $Record, [switch] $Mark, [switch] $Fail)
                 begin {
                     [IO.File]::AppendAllText('trace.txt', "begin=$Mark;")
-                    -1
+                    [int[]] $initial = -1,-2
+                    foreach ($item in $initial) { $item }
                     [IO.File]::AppendAllText('trace.txt', 'after begin;')
                 }
                 process {
                     [IO.File]::AppendAllText('trace.txt', "before ${Record};")
+                    if ($Fail -and $Record -eq 2) { throw [InvalidOperationException]::new('failure after output') }
                     $Record
                     [IO.File]::AppendAllText('trace.txt', "after ${Record};")
                 }
@@ -356,7 +380,12 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
             """;
         const string invocation = """
             }
-            if ($First) { return 1,2 | Get-Record -Mark | Select-Object -First 2 }
+            if ($First) { return 1,2 | Get-Record -Mark | Select-Object -First 3 }
+            if ($BeginOnly) { return 1,2 | Get-Record -Mark | Select-Object -First 1 }
+            if ($Fail) {
+                try { return 1,2 | Get-Record -Mark -Fail }
+                catch { exit 7 }
+            }
             return 1,2 | Get-Record -Mark
             """;
         const string cleanup = """
@@ -373,31 +402,70 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
             var versions = supportsCleanClause ? new[] { false, true } : new[] { false };
             foreach (var withClean in versions)
             {
-                using var fixture = OracleFixture.Create("param([switch] $First)\n" + function + "\n" +
+                using var fixture = OracleFixture.Create("param([switch] $First, [switch] $BeginOnly, [switch] $Fail)\n" + function + "\n" +
                     (withClean ? cleanup + "\n" : string.Empty) + invocation);
                 var tracePath = Path.Combine(fixture.RootPath, "trace.txt");
                 var build = BuildStrictStreamingFixture(fixture, "StrictLocalLifecycle", pin.ProfileId);
                 Assert.True(build.Succeeded, build.Error + Environment.NewLine + build.BuildOutput);
                 Assert.False(build.Manifest!.RequiresPowerShellRuntime);
                 Assert.True(build.Manifest.DependencyClosureVerified);
-                foreach (var first in new[] { false, true })
+                var cases = new[]
+                {
+                    (Option: "", Code: 0, Records: new[] { "-1", "-2", "1", "2", "99" },
+                        Trace: "begin=True;after begin;before 1;after 1;before 2;after 2;end;"),
+                    (Option: "First", Code: 0, Records: new[] { "-1", "-2", "1" }, Trace: "begin=True;after begin;before 1;"),
+                    (Option: "BeginOnly", Code: 0, Records: new[] { "-1" }, Trace: "begin=True;"),
+                    (Option: "Fail", Code: 7, Records: new[] { "-1", "-2", "1" }, Trace: "begin=True;after begin;before 1;after 1;before 2;")
+                };
+                foreach (var scenario in cases)
                 {
                     var hostArgs = new[] { "-NoProfile", "-NonInteractive", "-File", fixture.ScriptPath };
-                    if (first) hostArgs = hostArgs.Append("-First").ToArray();
+                    if (scenario.Option.Length != 0) hostArgs = hostArgs.Append("-" + scenario.Option).ToArray();
                     var expected = await ObserveExitedConsole(host, fixture.RootPath, hostArgs, string.Empty);
-                    Assert.Equal(0, expected.Code);
-                    var expectedTrace = first ? "begin=True;after begin;before 1;" :
-                        "begin=True;after begin;before 1;after 1;before 2;after 2;end;";
+                    Assert.Equal(scenario.Code, expected.Code);
+                    Assert.Equal(scenario.Records, expected.Output.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries));
+                    var expectedTrace = scenario.Trace;
                     if (withClean) expectedTrace += "clean;";
                     Assert.Equal(expectedTrace, File.ReadAllText(tracePath));
                     File.Delete(tracePath);
-                    var candidateArgs = first ? new[] { "--First" } : Array.Empty<string>();
+                    var candidateArgs = scenario.Option.Length == 0 ? Array.Empty<string>() : new[] { "--" + scenario.Option };
                     var actual = await ObserveExitedConsole(build.ArtifactPath!, fixture.RootPath, candidateArgs, string.Empty);
                     Assert.Equal(expected, actual);
                     Assert.Equal(expectedTrace, File.ReadAllText(tracePath));
                     File.Delete(tracePath);
                 }
             }
+        }
+    }
+
+    [PinnedSemanticHostFact]
+    public void StrictDataCommandErrorObservationRejectsOtherErrorProducers()
+    {
+        var scripts = new[]
+        {
+            """
+            function Read-Host { return 'local' }
+            try { $answer = Read-Host } catch { "line=$($_.InvocationInfo.ScriptLineNumber)" }
+            """,
+            """
+            param([switch] $Fault)
+            try {
+                if ($Fault) { throw [InvalidOperationException]::new('earlier failure') }
+                $answer = Read-Host 'Input'
+            } catch { "line=$($_.InvocationInfo.ScriptLineNumber)" }
+            """,
+            """
+            function Read-Text { $answer = Read-Host 'Input'; return $answer }
+            Read-Text
+            """
+        };
+        foreach (var script in scripts)
+        foreach (var pin in PowerShellCompilationSemanticHostArtifactPinCatalog.Pins)
+        {
+            using var fixture = OracleFixture.Create(script);
+            var build = BuildStrictStreamingFixture(fixture, "StrictCommandScope", pin.ProfileId);
+            Assert.False(build.Succeeded);
+            Assert.Contains("every source-closure unit", build.Error, StringComparison.OrdinalIgnoreCase);
         }
     }
 

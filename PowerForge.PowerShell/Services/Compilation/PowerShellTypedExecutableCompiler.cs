@@ -109,17 +109,6 @@ internal static class PowerShellTypedExecutableCompiler
             ? CreateNativeEntryDocument(entrySource)
             : CreateEntryDocument(entrySource, statements, identityRoot, parametersAlreadyBound);
         var registry = PowerShellCommandSemanticRegistry.Create(commandProviders);
-        if (capabilities == PowerShellCompilationCapabilities.TypedExecutable)
-        {
-            var resolver = new PowerShellCommandSemanticResolver(registry);
-            var localFunctionNames = definitions.Select(static item => item.Function.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
-            var nestedReadHost = definitions.SelectMany(static item => item.Function.Body.FindAll(
-                    static node => node is CommandAst, searchNestedScriptBlocks: true)).OfType<CommandAst>()
-                .FirstOrDefault(command => resolver.Resolve(command, localFunctionNames, capabilities) is
-                    { IsProvider: true, Contract.ProviderId: PowerShellRuntimeStateCommandSemanticBinder.PlainConsoleInputProviderId });
-            if (nestedReadHost is not null)
-                throw new InvalidOperationException("Strict Read-Host statement-error handling requires a script-root assignment.");
-        }
         var semantic = new PowerShellSemanticCompilationPipeline(registry, semanticProfileId).Compile(
             parsed.Values.Where(source => !nativeScriptEntry)
                 .Select(static source => source.Document).Append(entryDocument.Document),
@@ -175,6 +164,16 @@ internal static class PowerShellTypedExecutableCompiler
                 Array.Empty<PowerShellCompilationDiagnostic>());
         }
         var entryDescription = CreateMethodDescription(entryUnit, entry.Function, entry.Emission, entryPoint);
+        if (capabilities == PowerShellCompilationCapabilities.TypedExecutable &&
+            entryDescription.CollectionElementType == typeof(object).FullName)
+        {
+            var analyzedFunctions = semantic.Analyzed.Functions.ToDictionary(static function => function.Symbol.StableKey, StringComparer.Ordinal);
+            var types = PowerShellSuccessOutputTypePolicy.ResolveTypes(analyzedFunctions[entry.Function.Symbol.StableKey], analyzedFunctions);
+            if (types.Length > 1 && types.All(type => PowerShellStableScalarTypePolicy.IsSupported(type) ||
+                    type == typeof(Generated.Runtime.PowerShellStrictProjectionRecord)))
+                entryDescription.ClosedSuccessRecordTypes = types.Select(static type => type.FullName!)
+                    .OrderBy(static name => name, StringComparer.Ordinal).ToArray();
+        }
         entryDescription.IsSyntheticNoOpExecutableEntry = syntheticNoOpEntry;
         descriptions.Add(entryDescription);
         var declaringType = nativeScriptEntry ? PowerShellHybridNativeEntryEmitter.DeclaringTypeName :
@@ -187,18 +186,21 @@ internal static class PowerShellTypedExecutableCompiler
                 body.GeneratedDeclaringTypeName = declaringType;
         }
         var reachableCommandProviders = CollectReachableCommandProviders(semantic, entry.Function.Symbol);
-        var runtimeSources = semantic.Lowered.Functions
+        var expressions = semantic.Lowered.Functions
             .SelectMany(static function => PowerShellLoweredTreeEnumerator.EnumerateExpressions(function.Statements))
+            .ToArray();
+        var runtimeSources = expressions
             .OfType<PowerShellLoweredClrInvocationExpression>()
-            .Select(static invocation => invocation.DeclaringType.IsConstructedGenericType &&
-                invocation.DeclaringType.GetGenericTypeDefinition() == typeof(Generated.Runtime.PowerShellStrictPipelineOperations<>)
-                    ? typeof(Generated.Runtime.PowerShellStrictPipelineOperations) : invocation.DeclaringType)
+            .Select(static invocation => invocation.DeclaringType)
             .Where(static type => type == typeof(Generated.Runtime.PowerShellStrictFileSystemReader) ||
                 type == typeof(Generated.Runtime.PowerShellStrictCsvReader) ||
                 type == typeof(Generated.Runtime.PowerShellStrictPipelineOperations) ||
                 type == typeof(Generated.Runtime.PowerShellStrictConsoleProgress) ||
                 type == typeof(Generated.Runtime.PowerShellStrictProjectionRecord))
             .Select(static type => type.Name).Distinct(StringComparer.Ordinal).ToArray();
+        if (expressions.OfType<PowerShellLoweredRuntimeStateExpression>().Any(static expression =>
+                expression.Kind == PowerShellRuntimeStateIntrinsicKind.CaughtCommandErrorLine))
+            runtimeSources = runtimeSources.Append(nameof(Generated.Runtime.PowerShellScriptCommandError)).ToArray();
         return new PowerShellTypedExecutableCompilation(
             new PowerShellTypedExecutableContract(entryDescription, entry.Function.Parameters
                 .Select(static parameter => new PowerShellTypedExecutableParameter(parameter.ClrType, parameter.Contract))
