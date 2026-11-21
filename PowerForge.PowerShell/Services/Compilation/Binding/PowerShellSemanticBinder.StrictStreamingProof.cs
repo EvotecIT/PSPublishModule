@@ -47,21 +47,34 @@ internal sealed partial class PowerShellSemanticBinder
         ISet<string> counterWrites,
         ICollection<PowerShellSemanticDiagnostic> diagnostics,
         SourceSpan span,
-        Func<StatementAst, IReadOnlyDictionary<string, PowerShellSemanticSymbolBinding>, PowerShellBoundStatement?> bind)
+        Func<StatementAst, IReadOnlyDictionary<string, PowerShellSemanticSymbolBinding>, PowerShellBoundStatement?> bind,
+        int? catchableOverflowLine)
     {
         if (!TryGetStrictStageIncrement(syntax, out var variable) ||
             variable.VariablePath.UserPath.Equals("_", StringComparison.OrdinalIgnoreCase) ||
             variable.VariablePath.UserPath.Equals("PSItem", StringComparison.OrdinalIgnoreCase) ||
             !symbols.TryGetValue(variable.VariablePath.UserPath, out var target) ||
             target.Symbol.Kind != PowerShellSymbolKind.Local || target.Type.ClrType != typeof(int) ||
-            initializer is null || FindStrictPipelineInitializer(preceding, target.Symbol) is not { } initialValue ||
-            PowerShellInt32RangePolicy.GetRange(initialValue) is not { } range ||
-            (long)range.Maximum + initializer.Elements.Length > int.MaxValue ||
+            !(initializer is not null && FindStrictPipelineInitializer(preceding, target.Symbol) is { } initialValue &&
+              PowerShellInt32RangePolicy.GetRange(initialValue) is { } range &&
+              (long)range.Maximum + initializer.Elements.Length <= int.MaxValue ||
+              catchableOverflowLine.HasValue && target.Type.Provenance == PowerShellTypeFactProvenance.Explicit) ||
             !counterWrites.Add(target.Symbol.StableKey))
         {
             RejectStrictPipeline(diagnostics, span,
                 "requires each record counter to be a distinct initialized Int32 local with a proven non-overflowing bound");
             return null;
+        }
+
+        if (catchableOverflowLine is int line)
+        {
+            var current = new PowerShellBoundVariableExpression(span, target.Symbol, target.Type, target.ValueState);
+            var helper = typeof(Generated.Runtime.PowerShellStrictPipelineOperations);
+            var increment = new PowerShellBoundClrInvocationExpression(span, helper,
+                nameof(Generated.Runtime.PowerShellStrictPipelineOperations.IncrementInt32),
+                PowerShellClrInvocationKind.StaticMethod, null, PowerShellClrReceiverBehavior.None,
+                new PowerShellBoundExpression[] { current, StrictIntLiteral(span, line) }, new[] { typeof(int), typeof(int) }, target.Type);
+            return new PowerShellBoundAssignmentStatement(span, target.Symbol, increment);
         }
 
         var updateSymbols = CloneSymbols(symbols);
@@ -81,9 +94,15 @@ internal sealed partial class PowerShellSemanticBinder
                 literal.Value is null || PowerShellStableScalarTypePolicy.IsSupported(literal.Type),
             PowerShellBoundVariableExpression variable => variable.Symbol.StableKey == current?.StableKey,
             PowerShellBoundConversionExpression conversion =>
-                conversion.Type.ClrType == conversion.Operand.Type.ClrType &&
-                conversion.Type.ClrType != typeof(string) &&
+                ((conversion.Type.ClrType == conversion.Operand.Type.ClrType && conversion.Type.ClrType != typeof(string)) ||
+                 conversion.Type.ClrType == typeof(long) && conversion.Operand.Type.ClrType == typeof(int)) &&
                 IsTotalStrictStageExpression(conversion.Operand, current),
+            PowerShellBoundClrMemberExpression { Receiver: PowerShellBoundVariableExpression receiver } member =>
+                receiver.Symbol.StableKey == current?.StableKey &&
+                (member.DeclaringType == typeof(FileInfo) && member.MemberName is nameof(FileInfo.Length) or nameof(FileInfo.Name) or nameof(FileInfo.FullName) ||
+                 member.DeclaringType == typeof(FileSystemInfo) && member.MemberName is nameof(FileSystemInfo.Name) or nameof(FileSystemInfo.FullName)),
+            PowerShellBoundInterpolatedStringExpression text =>
+                text.Parts.All(part => part.Expression is null || IsTotalStrictStageExpression(part.Expression, current)),
             PowerShellBoundUnaryExpression { Operation: PowerShellBoundUnaryOperator.LogicalNot } unary =>
                 unary.Operand.Type.ClrType == typeof(bool) && IsTotalStrictStageExpression(unary.Operand, current),
             PowerShellBoundBinaryExpression binary =>
@@ -103,7 +122,8 @@ internal sealed partial class PowerShellSemanticBinder
             PowerShellBoundBinaryOperator.Equal or PowerShellBoundBinaryOperator.NotEqual or
             PowerShellBoundBinaryOperator.LessThan or PowerShellBoundBinaryOperator.LessThanOrEqual or
             PowerShellBoundBinaryOperator.GreaterThan or PowerShellBoundBinaryOperator.GreaterThanOrEqual =>
-                binary.Left.Type.ClrType == typeof(int) && binary.Right.Type.ClrType == typeof(int),
+            binary.Left.Type.ClrType == binary.Right.Type.ClrType &&
+            (binary.Left.Type.ClrType == typeof(int) || binary.Left.Type.ClrType == typeof(long)),
             PowerShellBoundBinaryOperator.Add or PowerShellBoundBinaryOperator.Subtract or
             PowerShellBoundBinaryOperator.Multiply => PowerShellInt32RangePolicy.GetRange(binary) is not null,
             _ => false

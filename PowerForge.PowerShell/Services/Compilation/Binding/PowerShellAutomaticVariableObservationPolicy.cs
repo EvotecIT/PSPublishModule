@@ -8,13 +8,13 @@ namespace PowerForge;
 internal static class PowerShellAutomaticVariableObservationPolicy
 {
     /// <summary>Separates a catch-owned error item from the enclosing switch's current item.</summary>
-    internal static bool ObservesSwitchState(SwitchStatementAst statement)
+    internal static bool ObservesSwitchState(SwitchStatementAst statement, Func<VariableExpressionAst, bool>? hasPipelineOwner = null)
         => statement.FindAll(node => node is VariableExpressionAst variable &&
                 !PowerShellAssignmentTargetPolicy.IsDirectAssignmentTarget(variable) &&
                 (variable.VariablePath.UserPath.Equals("switch", StringComparison.OrdinalIgnoreCase) ||
                  (variable.VariablePath.UserPath.Equals("_", StringComparison.OrdinalIgnoreCase) ||
                   variable.VariablePath.UserPath.Equals("PSItem", StringComparison.OrdinalIgnoreCase)) &&
-                 !HasImmediateCatchOwner(variable, statement)),
+                 !HasImmediateCatchOwner(variable, statement) && hasPipelineOwner?.Invoke(variable) != true),
             searchNestedScriptBlocks: true).Any();
 
     /// <summary>Finds direct reads whose current error item belongs to an authored catch.</summary>

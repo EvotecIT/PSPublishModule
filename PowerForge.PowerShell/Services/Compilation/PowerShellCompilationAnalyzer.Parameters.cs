@@ -223,6 +223,8 @@ public sealed partial class PowerShellCompilationAnalyzer
                     PowerShellCompilationFeatureIds.ParameterBinding));
             }
             if (parameter.DefaultValue is not null &&
+                !(isScriptUnit && capabilities == PowerShellCompilationCapabilities.TypedExecutable &&
+                  PowerShellStrictParameterDefaultPolicy.UsesFileSystemCurrentDirectory(parameter)) &&
                 (!capabilities.HasFlag(PowerShellCompilationCapability.BoundParameters) ||
                  !PowerShellCompilationLiteralPolicy.TryResolve(
                      parameter.DefaultValue,

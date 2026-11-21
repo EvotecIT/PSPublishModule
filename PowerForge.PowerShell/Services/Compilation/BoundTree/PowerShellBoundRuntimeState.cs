@@ -15,11 +15,14 @@ internal sealed class PowerShellBoundRuntimeStateExpression : PowerShellBoundExp
                 PowerShellRuntimeStateIntrinsicPolicy.GetType(kind),
                 PowerShellTypeFactProvenance.Inferred,
                 "The bounded runtime-state intrinsic defines its CLR result type."),
-            kind is PowerShellRuntimeStateIntrinsicKind.EnvironmentVariable or PowerShellRuntimeStateIntrinsicKind.ModuleVariable or PowerShellRuntimeStateIntrinsicKind.WhatIfPreference
+            kind is PowerShellRuntimeStateIntrinsicKind.EnvironmentVariable or PowerShellRuntimeStateIntrinsicKind.ModuleVariable or
+                PowerShellRuntimeStateIntrinsicKind.WhatIfPreference or PowerShellRuntimeStateIntrinsicKind.PlainConsoleInput
                 ? PowerShellValueState.Unknown
                 : PowerShellValueState.Known,
             arguments.Aggregate(
-                KindRequiresHostBinding(kind) ? PowerShellSemanticEffect.Host : PowerShellSemanticEffect.None,
+                kind == PowerShellRuntimeStateIntrinsicKind.PlainConsoleInput
+                    ? PowerShellSemanticEffect.Mutation | PowerShellSemanticEffect.TerminatingError
+                    : KindRequiresHostBinding(kind) ? PowerShellSemanticEffect.Host : PowerShellSemanticEffect.None,
                 static (effects, argument) => effects | argument.Effects),
             arguments.Aggregate(GetRequiredCapabilities(kind), static (capabilities, argument) => capabilities | argument.Capabilities))
     {

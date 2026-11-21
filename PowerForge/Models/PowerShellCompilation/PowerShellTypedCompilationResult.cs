@@ -212,6 +212,9 @@ public sealed class PowerShellCompiledMethod
     /// <summary>Inferred CLR type of success records, independent of a void streaming method return; empty when no output is inferred.</summary>
     public string SuccessOutputType { get; internal set; } = string.Empty;
 
+    /// <summary>Concrete record types of a closed heterogeneous Strict success stream.</summary>
+    public string[] ClosedSuccessRecordTypes { get; internal set; } = Array.Empty<string>();
+
     /// <summary>Authored OutputType metadata, or an empty string when none is declared.</summary>
     public string DeclaredOutputType { get; }
 

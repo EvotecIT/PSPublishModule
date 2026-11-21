@@ -130,7 +130,8 @@ internal static partial class PowerShellClrMemberSemanticBinder
     {
         var span = PowerShellSourceParser.GetSpan(document, syntax.Extent);
         if (!TryResolveTarget(document, syntax.Expression, bindExpression, targetFramework, diagnostics, out var target)) return null;
-        if (!TryGetMemberName(document, syntax, diagnostics, out var name)) return null;
+        if (!TryGetMemberName(document, syntax, diagnostics, out var name,
+                allowWhiteSpace: target.Receiver?.Type.DictionaryValueKind == PowerShellDictionaryValueKind.CsvRow)) return null;
         if (!target.IsStatic && PowerShellModuleStateOriginPolicy.IsDerived(target.Receiver!) &&
             (!PowerShellModuleStateOriginPolicy.IsExactAuthoredTypedRead(syntax.Expression, target.Receiver!) ||
              PowerShellModuleStateOriginPolicy.UsesDynamicMemberSemantics(target.Type)))
@@ -139,10 +140,11 @@ internal static partial class PowerShellClrMemberSemanticBinder
                 "PSB2621",
                 "CLR member access to live Hybrid module state requires one exact authored non-object conversion directly over the $script: variable and cannot use dynamic adapted-member semantics.",
                 target.Receiver!.Span);
-        if (!target.IsStatic && target.Receiver!.Type.DictionaryValueKind == PowerShellDictionaryValueKind.HelpMetadata)
+        if (!target.IsStatic && target.Receiver!.Type.DictionaryValueKind is
+            PowerShellDictionaryValueKind.HelpMetadata or PowerShellDictionaryValueKind.CsvRow)
         {
-            if (!target.Receiver.Type.TryGetKnownProperty(name, out var helpProperty))
-                return Reject(diagnostics, "PSB2933", $"The bounded runtime-free Get-Help contract does not expose property '{name}'.", span);
+            if (!target.Receiver.Type.TryGetKnownProperty(name, out var recordProperty))
+                return Reject(diagnostics, "PSB2933", $"The bounded runtime-free record does not expose property '{name}'.", span);
             return new PowerShellBoundClrMemberExpression(
                 span,
                 target.Type,
@@ -150,7 +152,7 @@ internal static partial class PowerShellClrMemberSemanticBinder
                 false,
                 target.Receiver,
                 PowerShellClrReceiverBehavior.DictionaryKeyLookup,
-                helpProperty);
+                recordProperty);
         }
         var flags = BindingFlags.Public | BindingFlags.IgnoreCase |
                     (target.IsStatic ? BindingFlags.Static | BindingFlags.FlattenHierarchy : BindingFlags.Instance);
@@ -521,9 +523,10 @@ internal static partial class PowerShellClrMemberSemanticBinder
         ParsedSourceDocument document,
         MemberExpressionAst syntax,
         ICollection<PowerShellSemanticDiagnostic> diagnostics,
-        out string name)
+        out string name,
+        bool allowWhiteSpace = false)
     {
-        if (syntax.Member is StringConstantExpressionAst member && !string.IsNullOrWhiteSpace(member.Value))
+        if (syntax.Member is StringConstantExpressionAst member && (allowWhiteSpace || !string.IsNullOrWhiteSpace(member.Value)))
         {
             name = member.Value;
             return true;

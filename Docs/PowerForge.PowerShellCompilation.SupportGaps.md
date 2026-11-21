@@ -13,25 +13,37 @@ constant initializers, selected scalar types, one-dimensional arrays and literal
 references from a separate script block to a function-local class, still use
 hosted source.
 
-Strict `net10.0` executables can lower a top-level pipeline statement over a
-one-dimensional stable-scalar array into one CLR loop. The supported stages
-are literal Boolean `Where-Object` predicates, `ForEach-Object` blocks that
-return one scalar, and terminal `Select-Object -First` with a positive Int32
-literal. `$_` and `$PSItem` refer to the current record. A map can increment
-an enclosing Int32 local when the compiler can prove the update stays in
-range. Early stopping occurs inside the loop, so later upstream records
-cannot increment the counter. A null reference-array source contributes one
-null record to a filter or map, and `Select-Object -First` skips null records.
-An empty array contributes zero records.
+Strict `net10.0` executables lower supported pipelines to typed CLR loops
+inside ordinary statements and supported control-flow blocks. A pipeline can
+emit directly, supply an explicit `return`, or populate an explicitly typed
+array. Bounded filters, scalar maps and terminal `Select-Object -First` share
+the same record order and stopping rules. Null reference arrays contribute
+one null record to a filter or map. The take stage skips null records. An
+empty array contributes no records. A map can increment an enclosing Int32
+local with a proven finite bound. The recursive filesystem form also
+supports constrained Int32 counters with a surrounding catch for overflow.
 
 Pure filters can also feed a terminal local advanced function through the
 existing typed collection binding. The admitted function initializes one
 Int32 accumulator in `begin`, updates it with range-proven addition,
 subtraction or multiplication in `process`, and emits it once in `end`.
-Strict rejects possibly overflowing reducers. Capturing or explicitly
-discarding a streamed local call, general property projection, parallel
-script blocks, arbitrary stage commands and effectful lifecycle interleaving
-still require PowerShell.
+Strict rejects possibly overflowing reducers. A typed array can also feed a
+local advanced function that emits homogeneous scalar records from its
+lifecycle. A terminal `Select-Object -First` can stop that producer before
+it resumes after its final selected record. On the PowerShell 7 profile the
+admitted `clean` clause runs once and discards its success output. Fallible
+cleanup requires an exhaustive local catch. Multiple effectful local stages
+still require native lifecycle interleaving.
+
+Property expansion covers known scalar members such as string length,
+TimeSpan ticks and filesystem names. Terminal filesystem projection supports
+ordered string fields from the known file record. The bounded filesystem and
+explicit-header CSV contracts preserve supported local input paths, scalar
+interpolation and selected error paths. General provider paths, open CSV row
+usage, calculated properties, parallel stages and full interactive progress
+display still require PowerShell. Detached console output uses UTF-8. A pinned
+Windows PowerShell console can replace an authored Unicode glyph under a
+different output code page.
 
 The fixed Gallery packet emits **753/753 complete units (100%)**, up from
 114/753 (15.14%) and the preceding 720/753 (95.62%). Pester emits 491/491 and

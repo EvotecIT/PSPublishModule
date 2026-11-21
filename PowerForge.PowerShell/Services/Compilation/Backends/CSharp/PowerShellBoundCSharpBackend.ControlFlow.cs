@@ -86,6 +86,15 @@ internal sealed partial class PowerShellBoundCSharpBackend
             EmitArrayForEach(builder, loop, collection, indent, getTemporaryIdentifier, discardHelper, sourceMap, successOutputSink);
             return;
         }
+        if (loop.EnumerationKind == PowerShellForEachEnumerationKind.RuntimeFreeEnumerable)
+        {
+            var item = getTemporaryIdentifier("foreachItem");
+            builder.Append(prefix).Append("foreach (var ").Append(item).Append(" in ").Append(collection).AppendLine(")");
+            builder.Append(prefix).AppendLine("{");
+            EmitForEachBody(builder, loop, item, indent, getTemporaryIdentifier, discardHelper, sourceMap, successOutputSink);
+            builder.Append(prefix).AppendLine("}");
+            return;
+        }
 
         var elementTypeName = PowerShellCSharpSymbolRenderer.TypeName(loop.ElementType);
         if (loop.EnumerationKind is not (PowerShellForEachEnumerationKind.ScalarString or PowerShellForEachEnumerationKind.StableScalar))

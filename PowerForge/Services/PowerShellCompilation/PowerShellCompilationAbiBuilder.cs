@@ -75,6 +75,9 @@ internal static class PowerShellCompilationAbiBuilder
                 Boolean(method.SupportsShouldProcess),
                 method.ConfirmImpact,
                 string.Join("\0", method.Aliases.OrderBy(static value => value, StringComparer.OrdinalIgnoreCase)));
+            if (method.ClosedSuccessRecordTypes.Length != 0)
+                AppendRecord(builder, "closed-success-record-types",
+                    string.Join("\0", method.ClosedSuccessRecordTypes.OrderBy(static value => value, StringComparer.Ordinal)));
             foreach (var provider in method.CommandProviders.OrderBy(static item => item.ProviderId, StringComparer.Ordinal)
                          .ThenBy(static item => item.ProviderVersion, StringComparer.Ordinal)
                          .ThenBy(static item => item.CommandName, StringComparer.Ordinal))
@@ -197,6 +200,7 @@ internal static class PowerShellCompilationAbiBuilder
             OutputCardinality = outputCardinality,
             OutputValueStates = outputValueStates,
             CollectionElementType = method.CollectionElementType,
+            ClosedSuccessRecordTypes = method.ClosedSuccessRecordTypes,
             OutputScalarization = string.IsNullOrWhiteSpace(method.OutputScalarization)
                 ? GetLegacyScalarization(outputCardinality)
                 : method.OutputScalarization,

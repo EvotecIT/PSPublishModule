@@ -61,7 +61,8 @@ internal enum PowerShellDictionaryValueKind
     None,
     String,
     Object,
-    HelpMetadata
+    HelpMetadata,
+    CsvRow
 }
 
 internal sealed class PowerShellTypeFact
@@ -484,16 +485,19 @@ internal sealed class PowerShellBoundParameter
     internal PowerShellBoundParameter(
         PowerShellSymbolId symbol,
         PowerShellTypeFact type,
-        PowerShellCompilationParameter contract)
+        PowerShellCompilationParameter contract,
+        bool defaultsToCurrentDirectory = false)
     {
         Symbol = symbol;
         Type = type;
         Contract = contract;
+        DefaultsToCurrentDirectory = defaultsToCurrentDirectory;
     }
 
     internal PowerShellSymbolId Symbol { get; }
     internal PowerShellTypeFact Type { get; }
     internal PowerShellCompilationParameter Contract { get; }
+    internal bool DefaultsToCurrentDirectory { get; }
 }
 
 internal sealed class PowerShellBoundLocal

@@ -101,6 +101,38 @@ internal static class PowerShellSourceParser
         return document.Text.Substring(start, end - start);
     }
 
+    internal static string GetSourceLine(string source, SourceSpan span)
+    {
+        var start = span.StartOffset - span.StartColumn + 1;
+        var end = span.StartOffset;
+        while (end < source.Length && source[end] is not '\r' and not '\n') end++;
+        return source.Substring(start, end - start);
+    }
+
+    internal static int GetLineBreakLength(string source, int offset)
+        => source[offset] switch
+        {
+            '\r' => offset + 1 < source.Length && source[offset + 1] == '\n' ? 2 : 1,
+            '\n' => 1,
+            _ => 0
+        };
+
+    internal static (int Line, int Column) GetLineColumn(string source, int offset)
+    {
+        if (offset < 0 || offset > source.Length) throw new ArgumentOutOfRangeException(nameof(offset));
+        var line = 1;
+        var lineStart = 0;
+        for (var index = 0; index < offset; index++)
+        {
+            var width = GetLineBreakLength(source, index);
+            if (width == 0) continue;
+            index += width - 1;
+            line++;
+            lineStart = index + 1;
+        }
+        return (line, offset - lineStart + 1);
+    }
+
     internal static string CreateDocumentId(string path, string? identityRoot, StringComparison? pathComparison = null)
     {
         var fullPath = Path.GetFullPath(path);

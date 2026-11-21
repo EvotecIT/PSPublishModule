@@ -4,28 +4,32 @@ namespace PowerForge;
 internal static class PowerShellSuccessOutputTypePolicy
 {
     internal static Type? Resolve(PowerShellBoundFunction function, IReadOnlyDictionary<string, PowerShellBoundFunction> functions)
-        => Resolve(function, functions, new HashSet<string>(StringComparer.Ordinal));
+    {
+        var types = ResolveTypes(function, functions);
+        return types.Length == 0 ? null : types.Length == 1 ? types[0] : typeof(object);
+    }
 
-    private static Type? Resolve(PowerShellBoundFunction function, IReadOnlyDictionary<string, PowerShellBoundFunction> functions,
+    internal static Type[] ResolveTypes(PowerShellBoundFunction function, IReadOnlyDictionary<string, PowerShellBoundFunction> functions)
+        => ResolveTypes(function, functions, new HashSet<string>(StringComparer.Ordinal));
+
+    private static Type[] ResolveTypes(PowerShellBoundFunction function, IReadOnlyDictionary<string, PowerShellBoundFunction> functions,
         HashSet<string> visiting)
     {
-        if (!visiting.Add(function.Symbol.StableKey)) return typeof(object);
+        if (!visiting.Add(function.Symbol.StableKey)) return new[] { typeof(object) };
         try
         {
-            var types = PowerShellSemanticAnalyzer.EnumerateStatements(function.Body, descendIntoCaptures: false)
-                .Select(statement => ResolveStatement(statement, functions, visiting))
-                .Where(static type => type is not null).Distinct().ToArray();
-            return types.Length == 0 ? null : types.Length == 1 ? types[0] : typeof(object);
+            return PowerShellSemanticAnalyzer.EnumerateStatements(function.Body, descendIntoCaptures: false)
+                .SelectMany(statement => ResolveStatement(statement, functions, visiting)).Distinct().ToArray();
         }
         finally { visiting.Remove(function.Symbol.StableKey); }
     }
 
-    private static Type? ResolveStatement(PowerShellBoundStatement statement,
+    private static Type[] ResolveStatement(PowerShellBoundStatement statement,
         IReadOnlyDictionary<string, PowerShellBoundFunction> functions, HashSet<string> visiting)
     {
         // A hosted region can emit records without a typed output expression.
         // Captured regions do not contribute records to the enclosing command.
-        if (statement is PowerShellBoundCommandRegionStatement) return typeof(object);
+        if (statement is PowerShellBoundCommandRegionStatement) return new[] { typeof(object) };
         var expression = PowerShellSemanticAnalyzer.GetSuccessOutputExpression(statement);
         // An unconsumed local command writes directly to its caller's success stream.
         // Its invocation has a void CLR value contract, but still contributes the
@@ -34,10 +38,14 @@ internal static class PowerShellSuccessOutputTypePolicy
             {
                 Expression: PowerShellBoundInvocationExpression streamedCall
             } && functions.TryGetValue(streamedCall.Target.StableKey, out var streamedTarget))
-            return Resolve(streamedTarget, functions, visiting);
-        if (expression is null) return null;
+            return ResolveTypes(streamedTarget, functions, visiting);
+        if (expression is null) return Type.EmptyTypes;
+        // Null records do not add a concrete record type.
+        if (statement is PowerShellBoundStreamWriteStatement { RuntimeFree: true } &&
+            expression.ValueState == PowerShellValueState.Null)
+            return Type.EmptyTypes;
         if (statement is PowerShellBoundStreamWriteStatement { Provider.Adapter.EntryPoint: { } entryPoint })
-            return entryPoint.ResultType switch
+            return new[] { entryPoint.ResultType switch
             {
                 PowerShellCompilationProviderValueType.String => typeof(string),
                 PowerShellCompilationProviderValueType.Int32 => typeof(int),
@@ -45,12 +53,14 @@ internal static class PowerShellSuccessOutputTypePolicy
                 PowerShellCompilationProviderValueType.Double => typeof(double),
                 PowerShellCompilationProviderValueType.Boolean => typeof(bool),
                 _ => throw new ArgumentOutOfRangeException(nameof(entryPoint.ResultType))
-            };
+            } };
         if (statement is PowerShellBoundStreamWriteStatement { OutputBinding: not PowerShellOutputBindingKind.Default } stream)
-            return stream.OutputBinding == PowerShellOutputBindingKind.PositionalNoEnumeratePowerShell7
-                ? typeof(object) : expression.Type.ClrType;
-        return expression is PowerShellBoundInvocationExpression call && functions.TryGetValue(call.Target.StableKey, out var target)
-            ? Resolve(target, functions, visiting) : GetRecordType(expression.Type.ClrType);
+            return new[] { stream.OutputBinding == PowerShellOutputBindingKind.PositionalNoEnumeratePowerShell7
+                ? typeof(object) : expression.Type.ClrType };
+        if (expression is PowerShellBoundInvocationExpression call && functions.TryGetValue(call.Target.StableKey, out var target))
+            return ResolveTypes(target, functions, visiting);
+        var recordType = GetRecordType(expression.Type.ClrType);
+        return recordType is null ? Type.EmptyTypes : new[] { recordType };
     }
 
     private static Type? GetRecordType(Type type)

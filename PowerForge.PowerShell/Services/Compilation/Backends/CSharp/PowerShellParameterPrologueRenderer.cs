@@ -4,16 +4,19 @@ namespace PowerForge;
 
 internal sealed class PowerShellParameterEmissionContract
 {
-    internal PowerShellParameterEmissionContract(string name, Type clrType, PowerShellCompilationParameter metadata)
+    internal PowerShellParameterEmissionContract(string name, Type clrType, PowerShellCompilationParameter metadata,
+        bool defaultsToCurrentDirectory)
     {
         Name = name;
         ClrType = clrType;
         Metadata = metadata;
+        DefaultsToCurrentDirectory = defaultsToCurrentDirectory;
     }
 
     internal string Name { get; }
     internal Type ClrType { get; }
     internal PowerShellCompilationParameter Metadata { get; }
+    internal bool DefaultsToCurrentDirectory { get; }
 }
 
 /// <summary>Renders parameter defaults, normalization, and validation from neutral bound contracts.</summary>
@@ -45,10 +48,12 @@ internal sealed class PowerShellParameterPrologueRenderer
 
     private void RenderDefaults(IEnumerable<PowerShellParameterEmissionContract> parameters)
     {
-        foreach (var parameter in parameters.Where(static parameter => parameter.Metadata.DefaultValue is not null))
+        foreach (var parameter in parameters.Where(static parameter => parameter.DefaultsToCurrentDirectory || parameter.Metadata.DefaultValue is not null))
         {
             AppendLine($"if (!__boundParameters.Contains({PowerShellCSharpLiteral.QuoteString(parameter.Metadata.Name)}))");
-            AppendLine($"    {PowerShellClrSymbolMapper.MapIdentifier(parameter.Name)} = {PowerShellCSharpLiteral.Emit(parameter.Metadata.DefaultValue!, parameter.ClrType, _getTypeName)};");
+            var value = parameter.DefaultsToCurrentDirectory ? "global::System.Environment.CurrentDirectory" :
+                PowerShellCSharpLiteral.Emit(parameter.Metadata.DefaultValue!, parameter.ClrType, _getTypeName);
+            AppendLine($"    {PowerShellClrSymbolMapper.MapIdentifier(parameter.Name)} = {value};");
         }
     }
 

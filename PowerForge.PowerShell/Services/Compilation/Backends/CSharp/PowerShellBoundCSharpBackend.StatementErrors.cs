@@ -74,6 +74,16 @@ internal sealed partial class PowerShellBoundCSharpBackend
         ICollection<PowerShellCompilationSourceMapEntry> sourceMap, string? successOutputSink)
     {
         var prefix = new string(' ', indent * 4);
+        if (boundary.RuntimeFree)
+        {
+            builder.Append(prefix).AppendLine("try");
+            EmitBlock(builder, boundary.Statements, indent, getTemporaryIdentifier, discardHelper, sourceMap,
+                successOutputSink: successOutputSink);
+            builder.Append(prefix).Append("catch (global::PowerForge.Generated.Runtime.PowerShellScriptCommandError ")
+                .Append(boundary.ExceptionTemporary).AppendLine(")");
+            builder.Append(prefix).Append("{ ").Append(boundary.ExceptionTemporary).AppendLine(".Report(); }");
+            return;
+        }
         builder.Append(prefix).AppendLine("try");
         builder.Append(prefix).AppendLine("{");
         if (boundary.NativeSequencePoint)

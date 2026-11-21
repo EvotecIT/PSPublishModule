@@ -229,7 +229,8 @@ public sealed partial class PowerShellCompilationAnalyzer
         AnalyzeUnsupportedNamedBlock(root.DynamicParamBlock, "dynamicparam", root, file, diagnostics, localVariables, targetFramework, unitCapabilities, localFunctionNames, reportLifecycleDiagnostic: true);
         AnalyzeUnsupportedNamedBlock(root.BeginBlock, "begin", root, file, diagnostics, localVariables, targetFramework, unitCapabilities, localFunctionNames, reportLifecycleDiagnostic: !runtimeFreeLifecycle);
         AnalyzeUnsupportedNamedBlock(root.ProcessBlock, "process", root, file, diagnostics, localVariables, targetFramework, unitCapabilities, localFunctionNames, reportLifecycleDiagnostic: !runtimeFreeLifecycle);
-        AnalyzeUnsupportedNamedBlock(GetNamedBlock(root, "CleanBlock"), "clean", root, file, diagnostics, localVariables, targetFramework, unitCapabilities, localFunctionNames, reportLifecycleDiagnostic: true);
+        AnalyzeUnsupportedNamedBlock(GetNamedBlock(root, "CleanBlock"), "clean", root, file, diagnostics, localVariables, targetFramework, unitCapabilities, localFunctionNames,
+            reportLifecycleDiagnostic: !runtimeFreeLifecycle || _semanticProfileId != PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId);
 
         foreach (var statement in executableStatements)
         {
@@ -270,6 +271,9 @@ public sealed partial class PowerShellCompilationAnalyzer
                 continue;
             }
 
+            if (capabilities == PowerShellCompilationCapabilities.TypedExecutable &&
+                PowerShellStrictCatchObservation.Contains(candidate, localFunctionNames))
+                continue;
             switch (candidate)
             {
                 case ScriptBlockExpressionAst:
@@ -319,6 +323,12 @@ public sealed partial class PowerShellCompilationAnalyzer
                 case CommandAst command:
                     var commandName = command.GetCommandName();
                     var semanticResolution = _commandResolver.Resolve(command, localFunctionNames, capabilities);
+                    if (capabilities == PowerShellCompilationCapabilities.TypedExecutable &&
+                        (PowerShellStrictFilePipelinePolicy.TryGetSource(command, semanticResolution, out _, out _) ||
+                         PowerShellStrictCsvPolicy.TryGetRead(command, localFunctionNames, out _, out _, out _) ||
+                         PowerShellStrictFileCommandPolicy.TryGetResolvePath(command, localFunctionNames, out _, out _) ||
+                         PowerShellStrictFileCommandPolicy.TryGetProgress(command, localFunctionNames, out _, out _)))
+                        break;
                     if (command.Parent is PipelineAst mappingPipeline &&
                         PowerShellMappingCommandSemanticBinder.TryGetRuntimeFreeProcess(
                             mappingPipeline,

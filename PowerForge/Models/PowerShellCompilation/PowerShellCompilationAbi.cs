@@ -83,6 +83,9 @@ public sealed class PowerShellCompilationAbiMethod
     /// <summary>CLR element type for collection output, or empty for non-collection output.</summary>
     public string CollectionElementType { get; set; } = string.Empty;
 
+    /// <summary>Concrete record types when an object-valued collection has a closed success-stream contract.</summary>
+    public string[] ClosedSuccessRecordTypes { get; set; } = Array.Empty<string>();
+
     /// <summary>PowerShell scalarization contract applied at the generated host boundary.</summary>
     public string OutputScalarization { get; set; } = string.Empty;
 

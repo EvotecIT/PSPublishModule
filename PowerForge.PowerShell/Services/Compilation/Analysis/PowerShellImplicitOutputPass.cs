@@ -12,10 +12,22 @@ internal sealed class PowerShellImplicitOutputPass : IPowerShellSemanticPass
     {
         var commandHost = program.TargetCapabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams) &&
             program.TargetCapabilities.HasFlag(PowerShellCompilationCapability.PipelineParameterBinding);
+        var runtimeFree = program.TargetCapabilities == PowerShellCompilationCapabilities.TypedExecutable;
+        var calls = program.Functions.ToDictionary(static function => function.Symbol.StableKey,
+            static function => GetCallees(function.Body).Distinct(StringComparer.Ordinal).ToArray(), StringComparer.Ordinal);
+        var exiting = program.Functions.Where(function => runtimeFree && ContainsRuntimeFreeExit(function.Body))
+            .Select(static function => function.Symbol.StableKey).ToHashSet(StringComparer.Ordinal);
+        AddCallers(exiting, calls);
         var selected = program.Functions.Where(function =>
                 function.NativeFunctionBinding is not null || function.Capabilities.HasFlag(PowerShellRequiredCapability.PowerShellStatementErrors) ||
                 PowerShellSemanticAnalyzer.EnumerateStatements(function.Body).Any(static statement =>
                     statement is PowerShellBoundStreamWriteStatement { Provider: null }) ||
+                exiting.Contains(function.Symbol.StableKey) &&
+                PowerShellSemanticAnalyzer.EnumerateStatements(function.Body).OfType<PowerShellBoundTryStatement>()
+                    .Any(attempt => attempt.FinallyBlock is { } cleanup &&
+                        (ContainsReturningOutput(attempt.Body) ||
+                         attempt.Catches.Any(static clause => ContainsReturningOutput(clause.Body))) &&
+                        (ContainsRuntimeFreeExit(cleanup) || GetCallees(cleanup).Any(exiting.Contains))) ||
                 commandHost && PowerShellSemanticAnalyzer.EnumerateStatements(function.Body).Any(statement =>
                     PowerShellSemanticAnalyzer.GetSuccessOutputExpression(statement) is { } output &&
                     output is not PowerShellBoundInvocationExpression && output.Type.ClrType != typeof(void) &&
@@ -24,30 +36,43 @@ internal sealed class PowerShellImplicitOutputPass : IPowerShellSemanticPass
                 PowerShellSemanticAnalyzer.EnumerateStatements(function.Body).Any(static statement =>
                     statement is PowerShellBoundTryStatement { FinallyBlock: not null }))
             .Select(static function => function.Symbol.StableKey).ToHashSet(StringComparer.Ordinal);
-        var calls = program.Functions.ToDictionary(static function => function.Symbol.StableKey,
-            static function => PowerShellSemanticAnalyzer.EnumerateStatements(function.Body)
-                .SelectMany(PowerShellSemanticAnalyzer.EnumerateDirectExpressions)
-                .SelectMany(PowerShellSemanticAnalyzer.EnumerateExpressions)
-                .OfType<PowerShellBoundInvocationExpression>()
-                .Select(static invocation => invocation.Target.StableKey).Distinct(StringComparer.Ordinal).ToArray(),
-            StringComparer.Ordinal);
         // A caller must use the same output contract before its own return can unwind.
         // Compute this from canonical bound calls before CLR return-type propagation.
-        bool changed;
-        do
-        {
-            changed = false;
-            foreach (var function in program.Functions)
-                if (!selected.Contains(function.Symbol.StableKey) && calls[function.Symbol.StableKey].Any(selected.Contains))
-                    changed |= selected.Add(function.Symbol.StableKey);
-        } while (changed);
+        AddCallers(selected, calls);
         var documents = program.Documents.ToDictionary(static document => document.DocumentId, StringComparer.Ordinal);
         var commandEnumeration = program.TargetCapabilities.HasFlag(PowerShellCompilationCapability.PowerShellStatementErrors);
         return program.WithFunctions(program.Functions.Select(function => selected.Contains(function.Symbol.StableKey)
             ? function.WithBody(RewriteBlock(function.Body, function.NativeFunctionBinding is not null,
-                commandEnumeration, documents[function.Symbol.DocumentId],
-                runtimeFree: program.TargetCapabilities == PowerShellCompilationCapabilities.TypedExecutable))
+                commandEnumeration, documents[function.Symbol.DocumentId], runtimeFree: runtimeFree))
             : function).ToArray());
+    }
+
+    private static IEnumerable<string> GetCallees(PowerShellBoundBlock block)
+        => PowerShellSemanticAnalyzer.EnumerateStatements(block)
+            .SelectMany(PowerShellSemanticAnalyzer.EnumerateDirectExpressions)
+            .SelectMany(PowerShellSemanticAnalyzer.EnumerateExpressions)
+            .OfType<PowerShellBoundInvocationExpression>()
+            .Select(static invocation => invocation.Target.StableKey);
+
+    private static bool ContainsRuntimeFreeExit(PowerShellBoundBlock block)
+        => PowerShellSemanticAnalyzer.EnumerateStatements(block)
+            .Any(static statement => statement is PowerShellBoundExitStatement { RuntimeFree: true });
+
+    private static bool ContainsReturningOutput(PowerShellBoundBlock block)
+        => PowerShellSemanticAnalyzer.EnumerateStatements(block, descendIntoCaptures: false)
+            .Any(static statement => statement is PowerShellBoundReturnStatement { EmitsSuccessOutput: true });
+
+    private static void AddCallers(HashSet<string> selected, IReadOnlyDictionary<string, string[]> calls)
+    {
+        if (selected.Count == 0) return;
+        bool changed;
+        do
+        {
+            changed = false;
+            foreach (var call in calls)
+                if (!selected.Contains(call.Key) && call.Value.Any(selected.Contains))
+                    changed |= selected.Add(call.Key);
+        } while (changed);
     }
 
     /// <summary>Uses the canonical native output rewrite before a statement block becomes an expression value.</summary>
@@ -65,7 +90,7 @@ internal sealed class PowerShellImplicitOutputPass : IPowerShellSemanticPass
             {
                 statements.Add(new PowerShellBoundStatementErrorBoundary(
                     RewriteBlock(boundary.Body, usesNativeInvocation, commandEnumeration, document, true, runtimeFree),
-                    boundary.SourcePath, boundary.SourceText, boundary.NativeSuccessStatus, boundary.NativeSequencePoint));
+                    boundary.SourcePath, boundary.SourceText, boundary.NativeSuccessStatus, boundary.NativeSequencePoint, boundary.RuntimeFree));
             }
             else if (statement is PowerShellBoundReturnStatement { EmitsSuccessOutput: true, Expression: not null } returned)
             {

@@ -41,6 +41,16 @@ internal static class Program
             var values = ParseArguments(args, out var boundParameters);
 {{INVOCATION}}
         }
+        catch (PowerShellScriptExit exit)
+        {
+            if (UsesSemanticObservationProtocol())
+            {
+                if (!PowerShellStreamsUseObservationProtocol)
+                    BeginPowerShellStreams();
+                EndPowerShellStreams(authoredExit: true);
+            }
+            return exit.Code;
+        }
         catch (Exception exception)
         {
             Console.Error.WriteLine(exception.Message);
@@ -310,14 +320,17 @@ internal static class Program
             WriteSemanticFrame("BEGIN", string.Empty, string.Empty);
     }
 
-    private static void EndPowerShellStreams()
+    private static void EndPowerShellStreams(bool authoredExit = false)
     {
+{{FINISH_PROJECTION_RECORDS}}
         if (PowerShellStreamsUseObservationProtocol)
-            WriteSemanticFrame("END", string.Empty, PowerShellObservationFrameCount.ToString(CultureInfo.InvariantCulture));
+            WriteSemanticFrame("END", authoredExit ? "Exit" : string.Empty,
+                PowerShellObservationFrameCount.ToString(CultureInfo.InvariantCulture));
     }
 
     private static void WritePowerShellOutput(object? value)
     {
+{{WRITE_PROJECTION_RECORD}}
         if (PowerShellStreamsUseObservationProtocol)
         {
             WriteSemanticValue(value);
@@ -546,4 +559,11 @@ internal static class Program
         internal ValidationKind Kind { get; }
         internal string[] Arguments { get; }
     }
+}
+
+internal sealed class PowerShellScriptExit : Exception
+{
+    internal PowerShellScriptExit(int code) => Code = code;
+
+    internal int Code { get; }
 }

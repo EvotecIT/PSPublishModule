@@ -33,19 +33,10 @@ internal sealed class PowerShellAuthoredSourceProjection
             !synthetic.Text.Substring(extent.StartOffset, extent.EndOffset - extent.StartOffset)
                 .Equals(_authored.Text.Substring(start, end - start), StringComparison.Ordinal))
             throw new InvalidDataException("Executable entry hosted statement differs from its authored source.");
-        var startPosition = GetPosition(_authored.Text, start);
-        var endPosition = GetPosition(_authored.Text, end);
+        var startPosition = PowerShellSourceParser.GetLineColumn(_authored.Text, start);
+        var endPosition = PowerShellSourceParser.GetLineColumn(_authored.Text, end);
         return new SourceSpan(_authored.DocumentId, start, end,
             startPosition.Line, startPosition.Column, endPosition.Line, endPosition.Column);
     }
 
-    private static (int Line, int Column) GetPosition(string source, int offset)
-    {
-        var line = 1;
-        var column = 1;
-        for (var index = 0; index < offset; index++)
-            if (source[index] == '\n') { line++; column = 1; }
-            else column++;
-        return (line, column);
-    }
 }

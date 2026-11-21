@@ -31,10 +31,12 @@ internal static class PowerShellRuntimeFreePipelineLifecyclePolicy
             reason = "Runtime-free pipeline lifecycle lowering requires a typed executable or CLR library collection ABI.";
             return false;
         }
-        if (body.DynamicParamBlock is not null || GetCleanBlock(body) is not null ||
+        var clean = GetCleanBlock(body);
+        if (body.DynamicParamBlock is not null ||
+            clean is not null && capabilities != PowerShellCompilationCapabilities.TypedExecutable ||
             body.BeginBlock is null || body.ProcessBlock is null)
         {
-            reason = "Runtime-free pipeline lifecycle lowering requires begin and process blocks without dynamicparam or clean.";
+            reason = "Runtime-free pipeline lifecycle lowering requires begin and process blocks, with clean available only for Strict executables.";
             return false;
         }
         var parameters = PowerShellParameterSyntax.GetParameters(body).ToArray();
@@ -87,7 +89,8 @@ internal static class PowerShellRuntimeFreePipelineLifecyclePolicy
             return false;
         }
         var parameterName = candidate.Name.VariablePath.UserPath;
-        if (ReferencesVariable(body.BeginBlock, parameterName) || ReferencesVariable(body.EndBlock, parameterName))
+        if (ReferencesVariable(body.BeginBlock, parameterName) || ReferencesVariable(body.EndBlock, parameterName) ||
+            ReferencesVariable(clean, parameterName))
         {
             reason = "The runtime-free pipeline parameter is available only during process; begin and end cannot observe its stale or unbound value.";
             return false;
@@ -95,6 +98,21 @@ internal static class PowerShellRuntimeFreePipelineLifecyclePolicy
         if (body.ProcessBlock.FindAll(static node => node is ReturnStatementAst or BreakStatementAst or ContinueStatementAst or ExitStatementAst or TrapStatementAst, searchNestedScriptBlocks: false).Any())
         {
             reason = "Runtime-free process blocks do not yet support return, exit, trap, break, or continue lifecycle control flow.";
+            return false;
+        }
+        if (clean?.Find(static node => node is ReturnStatementAst or BreakStatementAst or ContinueStatementAst or
+                ExitStatementAst or TrapStatementAst or ThrowStatementAst, searchNestedScriptBlocks: false) is not null)
+        {
+            reason = "Strict lifecycle clean blocks cannot transfer control or explicitly throw.";
+            return false;
+        }
+        if (capabilities == PowerShellCompilationCapabilities.TypedExecutable &&
+            (body.BeginBlock.Find(static node => node is ReturnStatementAst or ExitStatementAst, searchNestedScriptBlocks: false) is not null ||
+             body.EndBlock is { } endBlock && endBlock.Find(node =>
+                 node is ExitStatementAst || node is ReturnStatementAst && !ReferenceEquals(node, endBlock.Statements.LastOrDefault()),
+                 searchNestedScriptBlocks: false) is not null))
+        {
+            reason = "Strict lifecycle stages allow an explicit return only as the final end statement.";
             return false;
         }
         if (body.EndBlock is { Statements.Count: > 0 } end &&

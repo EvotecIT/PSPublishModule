@@ -4,6 +4,20 @@ internal sealed partial class PowerShellBoundCSharpBackend
 {
     private string EmitRuntimeState(PowerShellLoweredRuntimeStateExpression expression)
     {
+        if (expression.Kind is PowerShellRuntimeStateIntrinsicKind.CaughtCommandErrorMessage or PowerShellRuntimeStateIntrinsicKind.CaughtCommandErrorLine)
+        {
+            var caught = _strictCaughtException ??
+                throw new InvalidOperationException("A caught command error must be emitted within its lexical catch body.");
+            return expression.Kind == PowerShellRuntimeStateIntrinsicKind.CaughtCommandErrorMessage
+                ? $"{caught}.Message"
+                : $"(({caught} as global::PowerForge.Generated.Runtime.PowerShellScriptCommandError)?.SourceLine ?? 0)";
+        }
+        if (expression.Kind == PowerShellRuntimeStateIntrinsicKind.PlainConsoleInput)
+        {
+            var arguments = string.Join(", ", expression.Arguments.Select(EmitExpression));
+            var windowsPowerShell = _semanticHostFamily == PowerShellCompilationSemanticHostFamily.WindowsPowerShell51 ? "true" : "false";
+            return $"global::PowerForge.Generated.Runtime.PowerShellStrictConsoleInput.ReadPlainLine({arguments}, {windowsPowerShell})!";
+        }
         if (expression.Kind == PowerShellRuntimeStateIntrinsicKind.FormattedCurrentLocalDateTime)
             return $"global::System.DateTime.Now.ToString({EmitExpression(expression.Arguments[0])}, global::System.Globalization.CultureInfo.CurrentCulture)";
         if (expression.Kind == PowerShellRuntimeStateIntrinsicKind.ShouldProcessTarget)
