@@ -138,6 +138,44 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
     }
 
     [PinnedSemanticHostFact]
+    public async Task StrictRecursiveReaderContinuesAfterAnEnumeratedDirectoryDisappearsOnBothPinnedHosts()
+    {
+        using var fixture = OracleFixture.Create("""
+            param([string] $Tree)
+            Get-ChildItem -LiteralPath $Tree -Recurse | ForEach-Object {
+                $_.Name
+                if ($_.Name -eq 'disappearing') { [IO.Directory]::Delete($_.FullName) }
+            }
+            exit 0
+            """);
+        var tree = Path.Combine(fixture.RootPath, "tree");
+        var disappearing = Path.Combine(tree, "disappearing");
+        var readable = Directory.CreateDirectory(Path.Combine(tree, "readable"));
+        File.WriteAllText(Path.Combine(readable.FullName, "survives.txt"), "fixture");
+        var expected = new[] { "disappearing", "readable", "survives.txt" };
+        foreach (var pin in PowerShellCompilationSemanticHostArtifactPinCatalog.Pins)
+        {
+            var host = StrictStreamingHostPath(pin) ??
+                Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe");
+            Directory.CreateDirectory(disappearing);
+            var native = await ObserveExitedConsole(host, fixture.RootPath,
+                new[] { "-NoProfile", "-NonInteractive", "-File", fixture.ScriptPath, tree }, string.Empty);
+            Assert.Equal((0, string.Join(Environment.NewLine, expected) + Environment.NewLine, string.Empty), native);
+            Assert.False(Directory.Exists(disappearing));
+        }
+        Directory.CreateDirectory(disappearing);
+        using var reader = PowerForge.Generated.Runtime.PowerShellStrictFileSystemReader.ReadItems(tree).GetEnumerator();
+        Assert.True(reader.MoveNext());
+        Assert.Equal(expected[0], reader.Current.Name);
+        Directory.Delete(disappearing);
+        Assert.True(reader.MoveNext());
+        Assert.Equal(expected[1], reader.Current.Name);
+        Assert.True(reader.MoveNext());
+        Assert.Equal(expected[2], reader.Current.Name);
+        Assert.False(reader.MoveNext());
+    }
+
+    [PinnedSemanticHostFact]
     [SupportedOSPlatform("windows")]
     public async Task StrictRecursivePipelineReportsDeniedDirectoriesAndContinuesOnBothPinnedHosts()
     {

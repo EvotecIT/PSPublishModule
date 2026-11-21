@@ -164,6 +164,7 @@ internal static class PowerShellStrictFileSystemReader
     private static FileSystemInfo[] ReadDirectory(DirectoryInfo directory)
     {
         try { return Visible(directory.GetFileSystemInfos()); }
+        catch (DirectoryNotFoundException) { return Array.Empty<FileSystemInfo>(); }
         catch (UnauthorizedAccessException error)
         {
             Console.Error.WriteLine("Get-ChildItem: " + error.Message);
