@@ -213,6 +213,16 @@ public sealed partial class ManagedModuleRestoreService(ILogger logger)
     private static bool SameVersion(string left, string right)
         => ManagedModuleVersionComparer.Instance.Compare(left, right) == 0;
 
+    private static IEnumerable<ManagedModuleDependencyInfo> SelectRestoreDependencies(ManagedModulePackageMetadata metadata)
+    {
+        var manifestNames = metadata.ManifestDependencies.Select(static dependency => dependency.Id)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        // The package reader has already merged manifest requirements and filtered external dependencies.
+        return metadata.Dependencies.Where(dependency => manifestNames.Contains(dependency.Id))
+            .Concat(ManagedModuleInstallService.SelectDependencies(metadata)
+                .Where(dependency => !manifestNames.Contains(dependency.Id)));
+    }
+
     private sealed class PreparedPackage(ManagedModuleRestorePackage pin, ManagedModulePackageMetadata metadata)
     {
         public ManagedModuleRestorePackage Pin { get; } = pin;
@@ -220,7 +230,7 @@ public sealed partial class ManagedModuleRestoreService(ILogger logger)
         public string ModuleDirectoryVersion { get; } = Version.TryParse(metadata.ModuleManifestVersion, out var version)
             ? version.ToString()
             : throw new InvalidOperationException($"Package '{pin.Name}' version '{pin.Version}' must declare a numeric ModuleVersion.");
-        public DependencyConstraint[] Dependencies { get; } = ManagedModuleInstallService.SelectDependencies(metadata)
+        public DependencyConstraint[] Dependencies { get; } = SelectRestoreDependencies(metadata)
             .Select(dependency => new DependencyConstraint(pin.Name, dependency.Id,
                 ManagedModuleVersionRange.Parse(dependency.VersionRange), dependency.RequiredModuleGuid))
             .ToArray();
