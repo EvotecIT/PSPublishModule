@@ -14,6 +14,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         var existingArtifacts = existingFiles
             .GroupBy(static file => Path.GetFullPath(file.Path), PowerShellCompilationPathSafety.PathComparer)
             .ToDictionary(static group => group.Key, static group => group.First(), PowerShellCompilationPathSafety.PathComparer);
+        var typedAssembly = existingArtifacts.Values.SingleOrDefault(static file => file.Role == "TypedAssembly");
+        var generatedAssemblyFileName = typedAssembly is null ? artifactName + ".dll" : Path.GetFileName(typedAssembly.Path);
         var existing = existingArtifacts.Keys.ToHashSet(PowerShellCompilationPathSafety.PathComparer);
         var copied = new List<PowerShellCompilationArtifactFile>();
         foreach (var dependency in dependencies.Where(static dependency =>
@@ -31,7 +33,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 payloadRoot,
                 targetPath,
                 $"Planned payload '{dependency.RelativePath}' escapes the generated artifact root.");
-            EnsurePayloadDoesNotOccupyGeneratedNamespace(relativePath, artifactName);
+            EnsurePayloadDoesNotOccupyGeneratedNamespace(relativePath, artifactName, generatedAssemblyFileName);
             if (existing.Contains(targetPath))
             {
                 // The hybrid composer may already have produced a deliberately transformed
@@ -61,14 +63,14 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         return copied.ToArray();
     }
 
-    private static void EnsurePayloadDoesNotOccupyGeneratedNamespace(string relativePath, string artifactName)
+    private static void EnsurePayloadDoesNotOccupyGeneratedNamespace(string relativePath, string artifactName, string generatedAssemblyFileName)
     {
         var normalized = relativePath.Replace('\\', '/');
         var generatedDirectory = artifactName + ".generated/";
         if (normalized.Equals(artifactName, StringComparison.OrdinalIgnoreCase) ||
             normalized.Equals(artifactName + ".exe", StringComparison.OrdinalIgnoreCase) ||
-            normalized.Equals(artifactName + ".dll", StringComparison.OrdinalIgnoreCase) ||
-            normalized.Equals(artifactName + ".pdb", StringComparison.OrdinalIgnoreCase) ||
+            normalized.Equals(generatedAssemblyFileName, StringComparison.OrdinalIgnoreCase) ||
+            normalized.Equals(Path.ChangeExtension(generatedAssemblyFileName, ".pdb"), StringComparison.OrdinalIgnoreCase) ||
             normalized.Equals(artifactName + ".generated", StringComparison.OrdinalIgnoreCase) ||
             normalized.Equals(artifactName + ".powerforge-compilation.json", StringComparison.OrdinalIgnoreCase) ||
             normalized.StartsWith(generatedDirectory, StringComparison.OrdinalIgnoreCase) ||

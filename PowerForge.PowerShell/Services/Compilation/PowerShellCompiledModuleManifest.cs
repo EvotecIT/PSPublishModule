@@ -93,6 +93,14 @@ internal static class PowerShellCompiledModuleManifest
         return ExcludeSelectedSource(CollectRuntimeScriptFiles(sourceManifest), sourcePath, sourceManifest);
     }
 
+    internal static bool ReferencesStagedPath(string sourcePath, string? moduleManifestPath, string relativePath)
+    {
+        var sourceManifest = ResolveSourceManifest(sourcePath, moduleManifestPath);
+        return File.Exists(sourceManifest) &&
+               ReadReferencedFileClosure(sourceManifest).Any(reference =>
+                   reference.RelativePath.Equals(relativePath, StringComparison.OrdinalIgnoreCase));
+    }
+
     private static string[] ExcludeSelectedSource(IEnumerable<string> references, string sourcePath, string manifestPath)
     {
         var root = Path.GetDirectoryName(Path.GetFullPath(manifestPath)) ?? Directory.GetCurrentDirectory();

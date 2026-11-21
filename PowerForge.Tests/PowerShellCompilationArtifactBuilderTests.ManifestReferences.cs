@@ -80,17 +80,19 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.True(string.IsNullOrWhiteSpace(run.StandardError), run.StandardError);
     }
 
-    [Fact]
-    public void Build_HybridModuleKeepsGeneratedAssemblyIdentityDistinctFromSameNamedAuthoredAssembly()
+    [Theory]
+    [InlineData("lib/PowerForge.dll", "PowerForge.dll")]
+    [InlineData("PowerForge.dll", "PowerForge.PowerForge.Compiled.dll")]
+    public void Build_HybridModuleKeepsGeneratedAssemblyIdentityDistinctFromSameNamedAuthoredAssembly(
+        string requiredAssembly, string publishedAssemblyName)
     {
         const string artifactName = "PowerForge";
         using var fixture = ArtifactFixture.Create("function Get-PublicValue { return 1 }", ".psm1");
-        var dependencyDirectory = Path.Combine(fixture.RootPath, "lib");
-        Directory.CreateDirectory(dependencyDirectory);
-        var authoredAssemblyPath = Path.Combine(dependencyDirectory, artifactName + ".dll");
+        var authoredAssemblyPath = Path.Combine(fixture.RootPath, requiredAssembly);
+        Directory.CreateDirectory(Path.GetDirectoryName(authoredAssemblyPath)!);
         File.Copy(typeof(AboutTopicTemplateResult).Assembly.Location, authoredAssemblyPath);
         File.WriteAllText(Path.ChangeExtension(fixture.ScriptPath, ".psd1"),
-            $"@{{ RootModule = 'input.psm1'; ModuleVersion = '1.0.0'; GUID = 'e8d5ff5c-d829-4b9b-9729-11daf14828fd'; FunctionsToExport = @('Get-PublicValue'); CmdletsToExport = @(); VariablesToExport = @(); AliasesToExport = @(); RequiredAssemblies = @('lib/{artifactName}.dll') }}");
+            $"@{{ RootModule = 'input.psm1'; ModuleVersion = '1.0.0'; GUID = 'e8d5ff5c-d829-4b9b-9729-11daf14828fd'; FunctionsToExport = @('Get-PublicValue'); CmdletsToExport = @(); VariablesToExport = @(); AliasesToExport = @(); RequiredAssemblies = @('{requiredAssembly}') }}");
 
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             fixture.ScriptPath,
@@ -102,11 +104,11 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var moduleRoot = Path.GetDirectoryName(result.ArtifactPath!)!;
-        var generatedAssemblyPath = Path.Combine(moduleRoot, artifactName + ".dll");
+        var generatedAssemblyPath = Path.Combine(moduleRoot, publishedAssemblyName);
         Assert.Equal(
             artifactName + ".PowerForge.Compiled",
             System.Reflection.AssemblyName.GetAssemblyName(generatedAssemblyPath).Name);
-        Assert.True(File.Exists(Path.Combine(moduleRoot, "lib", artifactName + ".dll")));
+        Assert.Equal(File.ReadAllBytes(authoredAssemblyPath), File.ReadAllBytes(Path.Combine(moduleRoot, requiredAssembly)));
 
         var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
         var run = RunPowerShell(
