@@ -118,7 +118,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         return paths;
     }
 
-    private static PowerShellCompilationPlan AnalyzeCompilationSources(
+    private static (PowerShellCompilationPlan Plan, ParsedSourceDocument[] Documents) AnalyzeCompilationSources(
         IEnumerable<string> sourcePaths,
         PowerShellCompilationMode mode,
         string targetFramework,
@@ -134,7 +134,12 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         var basePath = paths.Length == 0
             ? Directory.GetCurrentDirectory()
             : Path.GetDirectoryName(paths[0]) ?? Directory.GetCurrentDirectory();
-        return analyzer.AnalyzeFiles(mode, paths, basePath, targetFramework, capabilities, cancellationToken);
+        var documents = paths.Select(path =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return PowerShellSourceParser.ParseFile(path, basePath, semanticProfileId);
+        }).ToArray();
+        return (analyzer.AnalyzeDocuments(mode, documents, basePath, targetFramework, capabilities, cancellationToken), documents);
     }
 
     internal static string[] GetValidatedRuntimeManifestHooks(PowerShellCompilationBuildSpec spec)

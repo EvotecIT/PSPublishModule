@@ -63,6 +63,23 @@ choose the deployment explicitly. The current supported executable targets are
 Strict `net10.0` on Windows x64 and Linux x64, framework-dependent or NativeAOT.
 Other combinations remain experimental. Packaging does not conceal source.
 
+### Source encoding
+
+A byte order mark controls how the compiler reads a script. Without one, the
+PowerShell 7 profile reads UTF-8 and the Windows PowerShell 5.1 profile uses
+the active Windows code page. Use a UTF-8 BOM for non-ASCII source when
+building for Windows PowerShell 5.1 on another operating system.
+
+### Inspecting Package artifacts
+
+A Package executable embeds PowerShell source and runs it with the bundled
+engine. The launcher extracts the script and its bundled files to
+`PowerForge/PackagedSources` under the user's local application data directory.
+The source is also readable from the managed assembly's resources without
+running the executable. The entry script can include generated path setup
+and checks around a bundled dot-source call. Package provides an executable
+distribution format for the scripts it carries.
+
 Packaged entries preserve compatible `#requires -Version` and
 `#requires -PSEdition` directives in the embedded script. Check and build apply
 the embedded PowerShell host's supported major and minor versions and edition.

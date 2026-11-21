@@ -13,15 +13,16 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         PowerShellCompilationDependency[] dependencyPlan,
         IReadOnlyDictionary<string, string> inputHashes,
         PowerShellCompilationCommandProviderContract[] commandProviders,
-        string providerProjectReferences)
+        string providerProjectReferences,
+        IReadOnlyList<ParsedSourceDocument> sourceDocuments)
     {
         var capabilities = PowerShellCompilationBuildSpec.GetCapabilities(spec.Kind, spec.Mode);
         var entry = PowerShellHybridExecutableEntryPlanner.TryPlan(
             spec.SourcePath, compilationSourcePaths, plan, spec.TargetFramework,
-            spec.SemanticProfileId, commandProviders);
+            spec.SemanticProfileId, commandProviders, sourceDocuments);
         var nativeEntry = entry?.EntryPointMethod.NativeFunctionBinding is not null;
-        var typed = new PowerShellTypedCompilationTranspiler(commandProviders, spec.SemanticProfileId).TranspileForBinaryModule(
-            compilationSourcePaths,
+        var typed = new PowerShellTypedCompilationTranspiler(commandProviders, spec.SemanticProfileId).TranspileAnalyzed(
+            sourceDocuments, plan,
             "PowerForge.Compiled",
             PowerShellCSharpSymbolRenderer.Identifier(artifactName) + "Methods",
             spec.TargetFramework,

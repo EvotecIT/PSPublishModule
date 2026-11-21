@@ -142,7 +142,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             var nativeManifestPath = spec.Kind == PowerShellCompilationArtifactKind.BinaryModule
                 ? PowerShellCompiledModuleManifest.ResolveSourceManifest(spec.SourcePath, spec.ModuleManifestPath) : spec.ModuleManifestPath;
             var nativeDependencyTypes = PowerShellNativeDependencyTypes.Create(nativeManifestPath, dependencyPlan, dependencyGraph);
-            var plan = AnalyzeCompilationSources(compilationSourcePaths, spec.Mode, spec.TargetFramework, spec.SemanticProfileId, capabilities,
+            var (plan, sourceDocuments) = AnalyzeCompilationSources(compilationSourcePaths, spec.Mode, spec.TargetFramework, spec.SemanticProfileId, capabilities,
                 commandProviderInputs, nativeDependencyTypes, cancellationToken);
             // Artifact shaping must use the same resolved target as explain, locks
             // and publication. Source-only analysis intentionally has no delivery target.
@@ -178,7 +178,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                     plan,
                     spec.TargetFramework,
                     spec.SemanticProfileId,
-                    commandProviderInputs);
+                    commandProviderInputs,
+                    sourceDocuments);
                 WriteCompiledPowerShellSource(Path.Combine(workspace, "CompiledPowerShellScript.cs"), executable.CompiledSource,
                     spec.SourcePath, compilationSourcePaths, includeSyntheticEntry: true);
                 File.WriteAllText(Path.Combine(workspace, "Program.cs"), executable.ProgramSource, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
@@ -215,7 +216,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                     dependencyPlan,
                     inputHashes,
                     commandProviderInputs,
-                    providerProjectReferences);
+                    providerProjectReferences,
+                    sourceDocuments);
                 typed = hybrid.Typed;
                 projectPath = hybrid.ProjectPath;
                 requiresPowerShellRuntime = true;
@@ -231,18 +233,9 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 if (spec.Mode == PowerShellCompilationMode.Package)
                     throw new InvalidOperationException("DLL artifacts require Hybrid or Strict mode because they contain genuinely typed methods.");
                 var transpiler = new PowerShellTypedCompilationTranspiler(commandProviderInputs, spec.SemanticProfileId, nativeDependencyTypes);
-                typed = spec.Kind == PowerShellCompilationArtifactKind.BinaryModule
-                    ? transpiler.TranspileForBinaryModule(
-                        compilationSourcePaths,
-                        "PowerForge.Compiled",
-                        PowerShellCSharpSymbolRenderer.Identifier(artifactName) + "Methods",
-                        spec.TargetFramework,
-                        capabilities)
-                    : transpiler.Transpile(
-                        compilationSourcePaths,
-                        "PowerForge.Compiled",
-                        PowerShellCSharpSymbolRenderer.Identifier(artifactName) + "Methods",
-                        spec.TargetFramework);
+                typed = transpiler.TranspileAnalyzed(
+                    sourceDocuments, plan, "PowerForge.Compiled",
+                    PowerShellCSharpSymbolRenderer.Identifier(artifactName) + "Methods", spec.TargetFramework, capabilities);
                 string[]? exportedFunctions = null;
                 if (spec.Kind == PowerShellCompilationArtifactKind.BinaryModule)
                 {
@@ -255,7 +248,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                     if (spec.Mode == PowerShellCompilationMode.Hybrid)
                     {
                         typed = PowerShellHybridFunctionCollisionResolver.RouteNameCollisionsToFallback(typed, spec.TargetFramework, spec.SemanticProfileId, capabilities, nativeDependencyTypes);
-                        typed = PowerShellAdvancedFunctionLifecyclePlanner.AddHostedLifecycleMethods(typed, spec.TargetFramework);
+                        typed = PowerShellAdvancedFunctionLifecyclePlanner.AddHostedLifecycleMethods(typed, spec.TargetFramework, sourceDocuments);
                     }
                     exportedFunctions = exportContract?.SelectFunctions(typed.Methods.Select(static method => method.SourceName));
                     typed = PowerShellBinaryCmdletSourceGenerator.PrepareForBinaryModule(typed, exportedFunctions, spec.TargetFramework, spec.SemanticProfileId, capabilities);
@@ -265,7 +258,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 {
                     if (spec.Kind == PowerShellCompilationArtifactKind.BinaryModule &&
                         spec.Mode == PowerShellCompilationMode.Strict &&
-                        PowerShellAdvancedFunctionLifecyclePlanner.HasNamedLifecycle(compilationSourcePaths))
+                        PowerShellAdvancedFunctionLifecyclePlanner.HasNamedLifecycle(sourceDocuments))
                     {
                         throw new InvalidOperationException(
                             "Strict binary-module compilation rejects hosted advanced-function begin/process/end/clean lifecycle blocks; use Hybrid mode until these blocks have a runtime-free typed lifecycle owner.");

@@ -21,14 +21,15 @@ internal static class PowerShellSourceParser
             return Parse(File.ReadAllText(fullPath), fullPath, identityRoot);
 
 #if NETFRAMEWORK
-        var encoding = Encoding.Default;
+        var syntax = Parser.ParseFile(fullPath, out var tokens, out var errors);
+        return new ParsedSourceDocument(CreateDocumentId(fullPath, identityRoot), fullPath,
+            syntax.Extent.Text, syntax, tokens, errors);
 #else
         // The provider's code page 0 means the active Windows ANSI code page.
         // Encoding.Default itself is UTF-8 on modern .NET.
         var encoding = OperatingSystem.IsWindows()
             ? CodePagesEncodingProvider.Instance.GetEncoding(0) ?? Encoding.UTF8
             : Encoding.GetEncoding(20127, EncoderFallback.ExceptionFallback, DecoderFallback.ExceptionFallback);
-#endif
         try
         {
             using var reader = new StreamReader(fullPath, encoding, detectEncodingFromByteOrderMarks: true);
@@ -36,10 +37,11 @@ internal static class PowerShellSourceParser
         }
         catch (DecoderFallbackException error)
         {
-            throw new InvalidDataException(
+            throw new InvalidOperationException(
                 $"Source '{fullPath}' uses non-ASCII bytes without a Unicode byte order mark. Add a UTF-8 BOM or compile the Windows PowerShell 5.1 profile on Windows.",
                 error);
         }
+#endif
     }
 
     internal static ParsedSourceDocument Parse(string source, string path)
@@ -49,9 +51,12 @@ internal static class PowerShellSourceParser
     {
         if (source is null) throw new ArgumentNullException(nameof(source));
         var fullPath = Path.GetFullPath(path);
-        // The Windows PowerShell 5.1 parser exposes only the shared three-argument overload.
-        // Document identity is carried separately so semantic spans remain stable across hosts.
+#if NETFRAMEWORK
+        // The Windows PowerShell reference assembly exposes the three-argument overload.
         var syntax = Parser.ParseInput(source, out var tokens, out var errors);
+#else
+        var syntax = Parser.ParseInput(source, fullPath, out var tokens, out var errors);
+#endif
         return new ParsedSourceDocument(CreateDocumentId(fullPath, identityRoot), fullPath, source, syntax, tokens, errors);
     }
 

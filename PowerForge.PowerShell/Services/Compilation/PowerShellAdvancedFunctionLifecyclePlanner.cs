@@ -5,18 +5,21 @@ using System.Management.Automation.Language;
 /// <summary>Creates explicit hosted lifecycle contracts from canonical front-end sources.</summary>
 internal static class PowerShellAdvancedFunctionLifecyclePlanner
 {
-    internal static bool HasNamedLifecycle(IEnumerable<string> sourcePaths)
-        => sourcePaths.Select(PowerShellSourceParser.ParseFile)
+    internal static bool HasNamedLifecycle(IEnumerable<ParsedSourceDocument> sourceDocuments)
+        => sourceDocuments
             .SelectMany(static document => PowerShellLifecycleSourceBinder.Bind(document, targetFramework: null))
             .Any();
 
     internal static PowerShellTypedCompilationResult AddHostedLifecycleMethods(
         PowerShellTypedCompilationResult typed,
-        string? targetFramework)
+        string? targetFramework,
+        IReadOnlyList<ParsedSourceDocument>? sourceDocuments = null,
+        string semanticProfileId = PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId)
     {
         var existing = typed.Methods.Select(static method => MethodKey(method.SourcePath, method.SourceName, method.SourceLine))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var documents = typed.SourcePaths.Select(PowerShellSourceParser.ParseFile)
+        var documents = (sourceDocuments ?? typed.SourcePaths.Select(path =>
+                PowerShellSourceParser.ParseFile(path, Path.GetDirectoryName(path), semanticProfileId)).ToArray())
             .ToDictionary(static document => Path.GetFullPath(document.Path), PowerShellCompilationPathSafety.PathComparer);
         var isolatedSources = documents
             .Where(static entry => CanHostLifecycleInIsolation(entry.Value))

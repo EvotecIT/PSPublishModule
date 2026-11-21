@@ -128,13 +128,9 @@ internal sealed partial class PowerShellBoundCSharpBackend
             case PowerShellLoweredReturnStatement returned:
                 builder.Append(prefix).Append("return ").Append(EmitExpression(returned.Expression!)).AppendLine(";");
                 return;
-            case PowerShellLoweredExpressionStatement
-            {
-                Expression: PowerShellLoweredClrInvocationExpression
-                { MemberName: nameof(List<int>.Add), Receiver: PowerShellLoweredVariableExpression collector } addition
-            } when successOutputSink is not null && collector.Symbol.Equals(_strictStageCollector):
+            case PowerShellLoweredExpressionStatement { AttachedLifecycleRecord: { } stageRecord } when successOutputSink is not null:
                 builder.Append(prefix).Append(successOutputSink).Append("((object?)")
-                    .Append(EmitExpression(addition.Arguments[0])).AppendLine(");");
+                    .Append(EmitExpression(stageRecord)).AppendLine(");");
                 return;
             case PowerShellLoweredExpressionStatement { DiscardValue: true } expression:
                 builder.Append(prefix).Append(discardHelper).Append('<')

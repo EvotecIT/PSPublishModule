@@ -175,6 +175,7 @@ internal sealed partial class PowerShellSemanticBinder
         var limitParameter = supportsOutputLimit
             ? CreateLifecycleLimitParameter(document, function, symbols, pipelineParameter, sourceParameter) : null;
         PowerShellBoundBlock body;
+        PowerShellSymbolId? collector = null;
         var needsLiveOutput = supportsOutputLimit || composition && processOutputs.Any(static output => output.ValueState == PowerShellValueState.Null) ||
             (streamsSuccessOutput || composition) &&
             (beginOutputs.Length != 0 || new[] { begin, process, end }.Any(LifecycleHasObservableFailure) ||
@@ -214,6 +215,7 @@ internal sealed partial class PowerShellSemanticBinder
                 outputListType,
                 PowerShellTypeFactProvenance.Inferred,
                 "The compiler materializes ordered lifecycle success output in one typed collector.");
+            collector = outputSymbol;
             locals = locals.Append(new PowerShellBoundLocal(outputSymbol, outputListFact))
                 .OrderBy(static local => local.Symbol.StableKey, StringComparer.Ordinal)
                 .ToArray();
@@ -269,6 +271,7 @@ internal sealed partial class PowerShellSemanticBinder
         var lifecycleParameters = sourceParameters.Select(parameter => parameter.Symbol.Equals(sourceParameter.Symbol)
             ? collectionParameter : parameter).ToArray();
         if (limitParameter is not null) lifecycleParameters = lifecycleParameters.Append(limitParameter).ToArray();
+        PowerShellBoundStrictLifecycle? strictLifecycle = null;
         if (composition)
         {
             var name = CreatePipelineCollectionName(symbols, pipelineParameter.Extent.EndOffset);
@@ -277,6 +280,8 @@ internal sealed partial class PowerShellSemanticBinder
             var type = typeof(Generated.Runtime.PowerShellStrictPipelineStage<>).MakeGenericType(sourceParameter.Type.ClrType);
             lifecycleParameters = lifecycleParameters.Append(new PowerShellBoundParameter(symbol, StrictPipelineType(type),
                 new PowerShellCompilationParameter(name, type.FullName!, false, false, false, null, true, null))).ToArray();
+            strictLifecycle = new PowerShellBoundStrictLifecycle(symbol, limitParameter?.Symbol, collector,
+                lifecycleLoop.Variable, lifecycleLoop.Span, clean is not null);
         }
         var scopeSymbols = lifecycleParameters.Select(static parameter => parameter.Symbol)
             .Concat(locals.Select(static local => local.Symbol))
@@ -298,7 +303,8 @@ internal sealed partial class PowerShellSemanticBinder
             PowerShellSemanticEffect.None,
             PowerShellRequiredCapability.None,
             PowerShellExecutionDisposition.Typed,
-            outputTypeDeclarations: outputTypeDeclarations);
+            outputTypeDeclarations: outputTypeDeclarations,
+            strictLifecycle: strictLifecycle);
     }
 
     private PowerShellBoundBlock? BindLifecycleBlock(
@@ -555,7 +561,7 @@ internal sealed partial class PowerShellSemanticBinder
             new[] { expression },
             new[] { outputElementType },
             new PowerShellTypeFact(typeof(void), PowerShellTypeFactProvenance.Inferred, "List.Add is output-free."));
-        return new PowerShellBoundExpressionStatement(statement.Span, add, emitsOutput: false);
+        return new PowerShellBoundExpressionStatement(statement.Span, add, emitsOutput: false, collectsLifecycleOutput: true);
     }
 
     private static PowerShellBoundExpression LifecycleOutputArray(PowerShellBoundExpression output, Type element)

@@ -20,7 +20,8 @@ internal static class PowerShellTypedExecutableEmitter
         PowerShellCompilationPlan plan,
         string targetFramework,
         string semanticProfileId = PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId,
-        IEnumerable<PowerShellCompilationCommandProviderContract>? commandProviders = null)
+        IEnumerable<PowerShellCompilationCommandProviderContract>? commandProviders = null,
+        IReadOnlyList<ParsedSourceDocument>? sourceDocuments = null)
     {
         var commandProviderArray = commandProviders?.ToArray();
         var compilation = PowerShellTypedExecutableCompiler.Compile(
@@ -29,7 +30,8 @@ internal static class PowerShellTypedExecutableEmitter
             plan,
             targetFramework,
             semanticProfileId,
-            commandProviderArray);
+            commandProviderArray,
+            sourceDocuments);
         var contract = compilation.EntryPoint;
         var method = compilation.EntryPointMethod;
         var reachableCommandProviders = compilation.ReachableCommandProviders;

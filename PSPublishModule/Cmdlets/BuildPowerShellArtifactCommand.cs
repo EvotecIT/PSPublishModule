@@ -165,7 +165,10 @@ public sealed class BuildPowerShellArtifactCommand : AsyncPSCmdlet
         PowerShellCompilationResolvedInput resolved;
         try
         {
-            resolved = new PowerShellCompilationInputResolver().Resolve(requestedPaths, Kind, Mode, entryPointPath);
+            var profileId = TargetContract?.SemanticProfileId ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(profileId))
+                profileId = PowerShellCompilationTargetContractService.GetDefaultSemanticProfileId(TargetFramework);
+            resolved = new PowerShellCompilationInputResolver(profileId).Resolve(requestedPaths, Kind, Mode, entryPointPath);
         }
         catch (Exception ex)
         {

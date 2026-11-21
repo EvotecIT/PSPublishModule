@@ -81,6 +81,15 @@ public sealed class PowerShellCompilationResolvedInput
 /// </summary>
 public sealed class PowerShellCompilationInputResolver
 {
+    private readonly string? _semanticProfileId;
+
+    /// <summary>Resolves source using the active PowerShell parser's file encoding.</summary>
+    public PowerShellCompilationInputResolver() { }
+
+    /// <summary>Resolves executable sources using the selected compiler profile's file encoding.</summary>
+    public PowerShellCompilationInputResolver(string semanticProfileId)
+        => _semanticProfileId = PowerShellCompilationSemanticOracleCatalog.Get(semanticProfileId).ProfileId;
+
     internal static PowerShellCompilationArtifactKind InferDefaultArtifactKind(string path)
     {
         if (string.IsNullOrWhiteSpace(path))
@@ -145,7 +154,8 @@ public sealed class PowerShellCompilationInputResolver
                 throw new InvalidOperationException("The executable entrypoint must also be present in the requested path set.");
             var sourceRoot = Path.GetDirectoryName(entryPoint) ?? Directory.GetCurrentDirectory();
             var closure = PowerShellHybridDependencyResolver.DiscoverDependencies(entryPoint,
-                allowDerivedPaths: (mode ?? PowerShellCompilationMode.Package) != PowerShellCompilationMode.Strict);
+                allowDerivedPaths: (mode ?? PowerShellCompilationMode.Package) != PowerShellCompilationMode.Strict,
+                semanticProfileId: _semanticProfileId);
             var unreachable = requestedPaths.Where(path => !closure.Contains(path, PowerShellCompilationPathSafety.PathComparer)).ToArray();
             if (unreachable.Length > 0)
                 throw new InvalidOperationException($"Executable path set contains source file(s) unreachable from the entrypoint: {string.Join(", ", unreachable.Select(Path.GetFileName))}.");
@@ -268,7 +278,7 @@ public sealed class PowerShellCompilationInputResolver
         if (resolvedKind == PowerShellCompilationArtifactKind.Executable)
         {
             compilationSourceFiles = PowerShellHybridDependencyResolver.DiscoverDependencies(sourcePath,
-                allowDerivedPaths: resolvedMode != PowerShellCompilationMode.Strict);
+                allowDerivedPaths: resolvedMode != PowerShellCompilationMode.Strict, semanticProfileId: _semanticProfileId);
             sourceFiles = compilationSourceFiles;
         }
         else

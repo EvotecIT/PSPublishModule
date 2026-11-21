@@ -20,9 +20,10 @@ internal static class PowerShellHybridExecutableEntryPlanner
         PowerShellCompilationPlan plan,
         string targetFramework,
         string semanticProfileId,
-        IEnumerable<PowerShellCompilationCommandProviderContract> commandProviders)
-        => TryPlanPrebound(sourcePath, sourcePaths, plan, targetFramework, semanticProfileId, commandProviders)
-           ?? PowerShellHybridNativeEntryPlanner.TryPlan(sourcePath, sourcePaths, plan, targetFramework, semanticProfileId);
+        IEnumerable<PowerShellCompilationCommandProviderContract> commandProviders,
+        IReadOnlyList<ParsedSourceDocument>? sourceDocuments = null)
+        => TryPlanPrebound(sourcePath, sourcePaths, plan, targetFramework, semanticProfileId, commandProviders, sourceDocuments)
+           ?? PowerShellHybridNativeEntryPlanner.TryPlan(sourcePath, sourcePaths, plan, targetFramework, semanticProfileId, sourceDocuments);
 
     private static PowerShellTypedExecutableCompilation? TryPlanPrebound(
         string sourcePath,
@@ -30,7 +31,8 @@ internal static class PowerShellHybridExecutableEntryPlanner
         PowerShellCompilationPlan plan,
         string targetFramework,
         string semanticProfileId,
-        IEnumerable<PowerShellCompilationCommandProviderContract> commandProviders)
+        IEnumerable<PowerShellCompilationCommandProviderContract> commandProviders,
+        IReadOnlyList<ParsedSourceDocument>? sourceDocuments)
     {
         if (plan.Mode != PowerShellCompilationMode.Hybrid || sourcePaths.Count != 1)
             return null;
@@ -42,8 +44,10 @@ internal static class PowerShellHybridExecutableEntryPlanner
         if (root?.IsCompilable != true)
             return null;
 
-        var ast = Parser.ParseFile(fullPath, out _, out var errors);
-        if (errors.Length != 0 || PowerShellSourceParser.HasUsingStatements(ast) ||
+        var document = sourceDocuments?.Single() ??
+            PowerShellSourceParser.ParseFile(fullPath, Path.GetDirectoryName(fullPath), semanticProfileId);
+        var ast = document.SyntaxRoot;
+        if (document.Errors.Length != 0 || PowerShellSourceParser.HasUsingStatements(ast) ||
             ast.EndBlock?.Statements is not { Count: > 0 } statements ||
             ast.ParamBlock?.Attributes.Count > 0)
             return null;
@@ -68,7 +72,7 @@ internal static class PowerShellHybridExecutableEntryPlanner
         try
         {
             compiled = PowerShellTypedExecutableCompiler.CompileHybridPreboundEntry(
-                fullPath, sourcePaths, plan, targetFramework, semanticProfileId, commandProviders);
+                fullPath, sourcePaths, plan, targetFramework, semanticProfileId, commandProviders, new[] { document });
         }
         catch (InvalidOperationException)
         {

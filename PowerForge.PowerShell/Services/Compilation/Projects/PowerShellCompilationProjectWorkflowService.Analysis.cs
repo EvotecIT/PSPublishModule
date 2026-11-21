@@ -144,7 +144,9 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
     private static PowerShellCompilationResolvedInput ResolveInput(
         PowerShellCompilationProjectManifestService.ProjectContext context,
         PowerShellCompilationProjectArtifact artifact)
-        => new PowerShellCompilationInputResolver().Resolve(
+        => new PowerShellCompilationInputResolver(string.IsNullOrWhiteSpace(artifact.Target.SemanticProfileId)
+            ? PowerShellCompilationTargetContractService.GetDefaultSemanticProfileId(artifact.Target.TargetFramework)
+            : artifact.Target.SemanticProfileId).Resolve(
             context.Sources,
             artifact.Target.ArtifactKind,
             artifact.Target.Mode,

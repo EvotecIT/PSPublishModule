@@ -17,7 +17,10 @@ public sealed class PowerShellCompilationHostService
             if (selected is not null && (request.Kind is { } kind && kind != selected.ArtifactKind ||
                                         request.Mode is { } mode && mode != selected.Mode))
                 throw new ArgumentException("The explicit kind or mode conflicts with the selected target.");
-            var input = new PowerShellCompilationInputResolver().Resolve(
+            var profileId = selected?.SemanticProfileId ?? request.SemanticProfileId ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(profileId))
+                profileId = PowerShellCompilationTargetContractService.GetDefaultSemanticProfileId(request.TargetFramework);
+            var input = new PowerShellCompilationInputResolver(profileId).Resolve(
                 request.Path, selected?.ArtifactKind ?? request.Kind, selected?.Mode ?? request.Mode,
                 allowDynamicModuleRuntimeSources: request.ResourceMode == PowerShellCompilationResourceMode.CompleteModule &&
                                                   (selected?.Mode ?? request.Mode) != PowerShellCompilationMode.Strict);

@@ -63,9 +63,11 @@ internal static class PowerShellHybridDependencyResolver
         IEnumerable<string>? additionalEntryPaths = null,
         IReadOnlyCollection<PowerShellConventionalLoaderIdentity>? conventionalLoaders = null,
         bool allowDerivedPaths = false,
-        PowerShellModuleRuntimeAlternatives runtimeAlternatives = PowerShellModuleRuntimeAlternatives.Reject)
+        PowerShellModuleRuntimeAlternatives runtimeAlternatives = PowerShellModuleRuntimeAlternatives.Reject,
+        IReadOnlyDictionary<string, ParsedSourceDocument>? sourceDocuments = null,
+        string? semanticProfileId = null)
         => DiscoverDependenciesCore(sourcePath, additionalEntryPaths, moduleScopeOnly: false,
-            conventionalLoaders, allowDerivedPaths, runtimeAlternatives);
+            conventionalLoaders, allowDerivedPaths, runtimeAlternatives, sourceDocuments, semanticProfileId);
 
     internal static string[] DiscoverModuleScopeDependencies(string sourcePath)
         => DiscoverModuleScopeDependencies(sourcePath, null, null);
@@ -97,7 +99,9 @@ internal static class PowerShellHybridDependencyResolver
         bool moduleScopeOnly,
         IReadOnlyCollection<PowerShellConventionalLoaderIdentity>? conventionalLoaders,
         bool allowDerivedPaths = false,
-        PowerShellModuleRuntimeAlternatives runtimeAlternatives = PowerShellModuleRuntimeAlternatives.Reject)
+        PowerShellModuleRuntimeAlternatives runtimeAlternatives = PowerShellModuleRuntimeAlternatives.Reject,
+        IReadOnlyDictionary<string, ParsedSourceDocument>? sourceDocuments = null,
+        string? semanticProfileId = null)
     {
         var primarySource = Path.GetFullPath(sourcePath);
         var sourceRoot = Path.GetFullPath(Path.GetDirectoryName(sourcePath) ?? Directory.GetCurrentDirectory());
@@ -119,7 +123,18 @@ internal static class PowerShellHybridDependencyResolver
             var (current, runtimeSelected) = pending.Dequeue();
             Token[] tokens;
             ParseError[] errors;
-            var ast = Parser.ParseFile(current, out tokens, out errors);
+            ScriptBlockAst ast;
+            ParsedSourceDocument? document = null;
+            sourceDocuments?.TryGetValue(current, out document);
+            if (document is null && semanticProfileId is not null)
+                document = PowerShellSourceParser.ParseFile(current, sourceRoot, semanticProfileId);
+            if (document is not null)
+            {
+                ast = document.SyntaxRoot;
+                tokens = document.Tokens;
+                errors = document.Errors;
+            }
+            else ast = Parser.ParseFile(current, out tokens, out errors);
             // A retained alternative can refer to types already declared in the importing module.
             // Its authored file is loaded in that scope, outside the CLR compilation source set.
             if (runtimeSelected)
