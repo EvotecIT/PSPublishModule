@@ -33,6 +33,14 @@ internal sealed class PowerShellModuleExportContract
 
     internal static PowerShellModuleExportContract? TryRead(ScriptBlockAst ast)
     {
+        // A module-scope function can add exports when called by the initializer.
+        if (ast.FindAll(static node => node is FunctionDefinitionAst, searchNestedScriptBlocks: false)
+            .OfType<FunctionDefinitionAst>()
+            .Any(static function => function.Body.Find(
+                static node => node is CommandAst command && IsExportModuleMember(command),
+                searchNestedScriptBlocks: false) is not null))
+            return RuntimeControlledExports();
+
         var allCommands = ast.FindAll(
                 static node => node is CommandAst command && IsExportModuleMember(command),
                 searchNestedScriptBlocks: false)

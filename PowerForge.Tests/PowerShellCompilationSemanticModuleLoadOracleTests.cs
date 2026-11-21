@@ -207,6 +207,43 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
             retainAdditionalSources: true, manifestFunctionPattern: null);
     }
 
+    [PinnedSemanticHostFact]
+    [Trait("Category", "PowerShellCompilerGate")]
+    public void HybridModuleRetainsExportsSelectedByAnInitializationFunctionOnBothHosts()
+    {
+        const string source = """
+            . "$PSScriptRoot/Context.ps1"
+            function Get-DefaultValue { return 19 }
+            function Get-OptionalValue { return 23 }
+            function Enable-OptionalCommands {
+                Export-ModuleMember -Function Get-OptionalValue
+            }
+            if ($env:POWERFORGE_EXPORT_ORACLE -eq 'enabled') { Enable-OptionalCommands }
+            Export-ModuleMember -Function Get-DefaultValue
+            """;
+        const string probe = """
+            $module = Get-Module ScopedValues
+            $manifest = Join-Path $module.ModuleBase 'ScopedValues.psd1'
+            $initial = @($module.ExportedCommands.Keys | Sort-Object)
+            $default = Get-DefaultValue
+            Remove-Module ScopedValues -Force
+            $env:POWERFORGE_EXPORT_ORACLE = 'enabled'
+            $module = Import-Module -Name $manifest -PassThru -Force -ErrorAction Stop
+            [ordered]@{
+                initial = $initial
+                default = $default
+                enabled = @($module.ExportedCommands.Keys | Sort-Object)
+                optional = Get-OptionalValue
+            } | ConvertTo-Json -Compress
+            """;
+        CompareScopedArtifacts(source, probe, new[] { "Get-DefaultValue", "Get-OptionalValue" },
+            value => Assert.Equal(
+                "{\"initial\":[\"Get-DefaultValue\"],\"default\":19,\"enabled\":[\"Get-DefaultValue\",\"Get-OptionalValue\"],\"optional\":23}", value),
+            importSetup: "$env:POWERFORGE_EXPORT_ORACLE = 'disabled'",
+            additionalSources: new Dictionary<string, string> { ["Context.ps1"] = "Set-Variable -Name ModuleReady -Value $true" },
+            retainAdditionalSources: true, manifestFunctionPattern: "Get-*");
+    }
+
     private static void AssertRuntimeModulePathRejectsAnUnstagedFile(PowerShellCompilationBuildResult built)
     {
         using var fixture = OracleFixture.Create(string.Empty);
