@@ -36,3 +36,11 @@ The runner verifies source package hashes and the exact PowerShell version for e
 Each lane retains separate source, built, and installed observations. The artifact comparisons withdraw the copied compiler inputs, and the installation entrypoint must match the built entrypoint by SHA-256. The observation compares output, errors, exit status, and changed or removed files. Module observations also compare exported commands. The full process streams remain available for investigating differences. Comparison removes terminal coloring, replaces the known per-case and entry paths, and normalizes elapsed time for the three fixtures that print it.
 
 A stage failure records where the lane stopped. A semantic difference records a completed lifecycle whose observations disagree with source. Parity records matching observations for the selected cases. The build receipt separately identifies the emitted CLR bodies.
+
+Combine the completed target reports into a portable baseline. Pass one report per target when the matrix ran in separate processes.
+
+```powershell
+./Publish-WorkflowBaseline.ps1 -EvidencePath $reports -OutputPath $baseline
+```
+
+The output records every declared target lane, exact fixture hashes, and digests of the observations. Publication requires all lanes and one compiler revision. If an invalid source fixture was corrected, pass its targeted replay after the original report. The baseline records both fixture identities and uses the valid source case. Build, installation, and semantic failures remain visible in their recorded lanes.
