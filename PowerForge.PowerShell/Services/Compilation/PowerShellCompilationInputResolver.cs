@@ -461,7 +461,7 @@ public sealed class PowerShellCompilationInputResolver
         return path;
     }
 
-    private static bool IsPowerShellSource(string path)
+    internal static bool IsPowerShellSource(string path)
         => Path.GetExtension(path) is var extension &&
            (extension.Equals(".ps1", StringComparison.OrdinalIgnoreCase) || extension.Equals(".psm1", StringComparison.OrdinalIgnoreCase));
 

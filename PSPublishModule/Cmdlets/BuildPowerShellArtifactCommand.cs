@@ -164,16 +164,18 @@ public sealed class BuildPowerShellArtifactCommand : AsyncPSCmdlet
         }
         PowerShellCompilationResolvedInput resolved;
         string profileId;
+        PowerShellCompilationTargetContract? target;
         try
         {
-            var kind = Kind ?? (entryPointPath is not null ? PowerShellCompilationArtifactKind.Executable
+            target = TargetContract is null ? null : PowerShellCompilationTargetContractService.Normalize(TargetContract);
+            var kind = Kind ?? target?.ArtifactKind ?? (entryPointPath is not null ? PowerShellCompilationArtifactKind.Executable
                 : requestedPaths.Length > 1 ? PowerShellCompilationArtifactKind.Library
                 : PowerShellCompilationInputResolver.InferDefaultArtifactKind(requestedPaths[0]));
-            var mode = TargetContract?.Mode ?? Mode ?? PowerShellCompilationBuildSpec.GetDefaultMode(kind);
-            profileId = TargetContract?.SemanticProfileId ?? string.Empty;
-            if (string.IsNullOrWhiteSpace(profileId))
-                profileId = PowerShellCompilationArtifactBuilder.GetDefaultBuildSemanticProfileId(mode, TargetFramework);
-            resolved = new PowerShellCompilationInputResolver(profileId).Resolve(requestedPaths, Kind, Mode, entryPointPath);
+            var mode = Mode ?? target?.Mode ?? PowerShellCompilationBuildSpec.GetDefaultMode(kind);
+            profileId = target?.SemanticProfileId ??
+                PowerShellCompilationArtifactBuilder.GetDefaultBuildSemanticProfileId(mode, TargetFramework);
+            resolved = new PowerShellCompilationInputResolver(profileId).Resolve(requestedPaths, Kind ?? target?.ArtifactKind,
+                Mode ?? target?.Mode, entryPointPath);
         }
         catch (Exception ex)
         {
@@ -201,7 +203,7 @@ public sealed class BuildPowerShellArtifactCommand : AsyncPSCmdlet
             SelfContained = SelfContained.IsPresent,
             SingleFile = SingleFile,
             Optimization = Optimization,
-            TargetContract = TargetContract,
+            TargetContract = target,
             UseBuildCache = UseBuildCache,
             BuildCacheDirectory = BuildCacheDirectory,
             SignArtifact = SignArtifact.IsPresent,

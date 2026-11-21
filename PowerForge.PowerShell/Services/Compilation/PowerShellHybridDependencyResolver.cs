@@ -16,7 +16,8 @@ internal static class PowerShellHybridDependencyResolver
         IEnumerable<string>? explicitDependencyPaths = null,
         IReadOnlyCollection<PowerShellConventionalLoaderIdentity>? conventionalLoaders = null,
         Action<string, string>? verifyCopiedInput = null,
-        PowerShellSourceSnapshot? snapshot = null)
+        PowerShellSourceSnapshot? snapshot = null,
+        string? deliveryProfile = null)
     {
         var sourceRoot = Path.GetFullPath(Path.GetDirectoryName(sourcePath) ?? Directory.GetCurrentDirectory());
         var comparer = PowerShellCompilationPathSafety.PathComparer;
@@ -34,7 +35,8 @@ internal static class PowerShellHybridDependencyResolver
             var target = Path.GetFullPath(Path.Combine(moduleDirectory, FrameworkCompatibility.GetRelativePath(sourceRoot, dependency)));
             PowerShellCompilationPathSafety.EnsureContained(Path.GetFullPath(moduleDirectory), target, $"Dot-source target for '{dependency}' escapes the hybrid module staging root.");
             Directory.CreateDirectory(Path.GetDirectoryName(target) ?? moduleDirectory);
-            var transformedContent = contentTransformer?.Invoke(dependency);
+            var transformedContent = contentTransformer?.Invoke(dependency) ??
+                (deliveryProfile is null ? null : snapshot?.GetDeliveryRewrite(dependency, deliveryProfile));
             if (File.Exists(target))
             {
                 var matches = transformedContent is null
@@ -45,6 +47,7 @@ internal static class PowerShellHybridDependencyResolver
             }
             else if (transformedContent is not null)
             {
+                verifyCopiedInput?.Invoke(dependency, dependency);
                 File.WriteAllText(target, transformedContent, new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
                 copied.Add(new PowerShellHybridDependencyCopy(target, isGenerated: true));
             }

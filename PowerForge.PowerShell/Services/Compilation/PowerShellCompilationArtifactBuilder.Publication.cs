@@ -24,7 +24,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 return CopyHybridModule(spec, artifactName, source, typed ?? throw new InvalidOperationException("Typed module metadata was not available."), outputDirectory, VerifyCopiedInput, snapshot);
             if (spec.Kind == PowerShellCompilationArtifactKind.BinaryModule &&
                 (!string.IsNullOrWhiteSpace(spec.ModuleManifestPath) || HasSiblingModuleManifest(spec.SourcePath)))
-                return CopyStrictModuleWithManifest(spec, artifactName, source, typed ?? throw new InvalidOperationException("Typed module metadata was not available."), outputDirectory, VerifyCopiedInput);
+                return CopyStrictModuleWithManifest(spec, artifactName, source, typed ?? throw new InvalidOperationException("Typed module metadata was not available."), outputDirectory, VerifyCopiedInput, snapshot);
             var target = Path.Combine(outputDirectory, artifactName + ".dll");
             File.Copy(source, target, overwrite: true);
             return CreateCopiedArtifactWithSymbols(source, target, "Primary");

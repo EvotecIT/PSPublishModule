@@ -68,20 +68,14 @@ internal static partial class PowerShellPackagedScriptRewriter
             var extent = plan.Fact.Operand.Extent;
             PowerShellCompilationPathSafety.EnsureContained(artifactSourceRoot, plan.TargetPath,
                 $"Packaged dot-source target '{plan.TargetPath}' escapes its source root.");
-            var operand = new StringBuilder(extent.Text);
-            foreach (var replacement in existing.Where(replacement => replacement.StartOffset >= extent.StartOffset &&
-                         replacement.EndOffset <= extent.EndOffset).OrderByDescending(static replacement => replacement.StartOffset))
-            {
-                operand.Remove(replacement.StartOffset - extent.StartOffset, replacement.EndOffset - replacement.StartOffset);
-                operand.Insert(replacement.StartOffset - extent.StartOffset, replacement.Text);
-            }
             if (existing.Any(replacement => replacement.StartOffset < extent.EndOffset && replacement.EndOffset > extent.StartOffset &&
                     (replacement.StartOffset < extent.StartOffset || replacement.EndOffset > extent.EndOffset)))
                 throw new InvalidOperationException("A packaged source-load guard overlaps another script-semantics rewrite.");
+            var operand = RenderGuardOperand(plan.Fact.Operand, existing);
             var relative = FrameworkCompatibility.GetRelativePath(artifactSourceRoot, plan.TargetPath).Replace('\\', '/');
             guards.Add(new SourceReplacement(extent.StartOffset, extent.EndOffset,
                 "([PowerForge.Compiled.PowerForgePackagedEntryPoint]::ValidateDotSource((" + operand + "), '" +
-                relative.Replace("'", "''") + "'))"));
+                CodeGeneration.EscapeSingleQuotedStringContent(relative) + "'))"));
         }
         return existing.Where(replacement => !guards.Any(guard => replacement.StartOffset >= guard.StartOffset &&
                     replacement.EndOffset <= guard.EndOffset))

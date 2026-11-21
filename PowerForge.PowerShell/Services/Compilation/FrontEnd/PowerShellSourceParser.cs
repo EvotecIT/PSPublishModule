@@ -28,22 +28,27 @@ internal static class PowerShellSourceParser
 
     internal static ParsedSourceDocument ParseFile(Stream contents, string fullPath, string? identityRoot, string semanticProfileId)
     {
+        try
+        {
+            return Parse(ReadText(contents, semanticProfileId), fullPath, identityRoot);
+        }
+        catch (DecoderFallbackException error)
+        {
+            throw new InvalidOperationException(
+                $"Source '{fullPath}' uses non-ASCII bytes without a Unicode byte order mark. Add a UTF-8 BOM or compile the Windows PowerShell 5.1 profile on Windows.",
+                error);
+        }
+    }
+
+    internal static string ReadText(Stream contents, string semanticProfileId)
+    {
         using (contents)
         {
             var profile = PowerShellCompilationSemanticOracleCatalog.Get(semanticProfileId);
             var encoding = profile.Family == PowerShellCompilationSemanticHostFamily.WindowsPowerShell51
                 ? GetDesktopDefaultEncoding() : Encoding.UTF8;
-            try
-            {
-                using var reader = new StreamReader(contents, encoding, detectEncodingFromByteOrderMarks: true);
-                return Parse(reader.ReadToEnd(), fullPath, identityRoot);
-            }
-            catch (DecoderFallbackException error)
-            {
-                throw new InvalidOperationException(
-                    $"Source '{fullPath}' uses non-ASCII bytes without a Unicode byte order mark. Add a UTF-8 BOM or compile the Windows PowerShell 5.1 profile on Windows.",
-                    error);
-            }
+            using var reader = new StreamReader(contents, encoding, detectEncodingFromByteOrderMarks: true);
+            return reader.ReadToEnd();
         }
     }
 

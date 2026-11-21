@@ -89,9 +89,9 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
     public async Task EncodedResourcesAndRetainedScriptsUseTheSameProfileOnBothPinnedHosts()
     {
         const string source = """
-            . "$PSScriptRoot/café.ps1"
+            . $PSScriptRoot/café.ps1
             Get-Value
-            Get-Content -LiteralPath "$PSScriptRoot/café.txt"
+            Get-Content -LiteralPath $PSScriptRoot/café.txt
             """;
         using var fixture = OracleFixture.Create(source);
         File.WriteAllText(fixture.ScriptPath, source, Encoding.Latin1);
@@ -180,6 +180,69 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
                 Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe");
             var native = await ObserveExitedConsole(host, fixture.RootPath,
                 new[] { "-NoProfile", "-NonInteractive", "-File", observer, modulePath }, string.Empty);
+            var compiled = await ObserveExitedConsole(host, fixture.RootPath,
+                new[] { "-NoProfile", "-NonInteractive", "-File", observer, build.ArtifactPath! }, string.Empty);
+            Assert.Equal(0, native.Code);
+            Assert.Empty(native.Error);
+            Assert.Equal(native, compiled);
+        }
+    }
+
+    [PinnedSemanticHostFact]
+    public async Task HybridManifestRetainsEncodedSwitchAlternativesOnBothPinnedHosts()
+    {
+        const string source = """
+            $path = switch ($PSVersionTable.PSVersion.Major) {
+                { $_ -ge 7 } { 'café.ps1' }
+                default { 'Desktop.ps1' }
+            }
+            . (Join-Path $PSScriptRoot $path)
+            function Get-CompiledCount { return 21 }
+            Export-ModuleMember -Function Get-ProfileValue, Get-CompiledCount
+            """;
+        const string manifest = "@{ RootModule = 'Module.psm1'; ModuleVersion = '1.0.0'; FunctionsToExport = @('Get-*') }";
+        const string desktopScript = "function Get-ProfileValue { 'desktop'; [int][char]'é' }";
+        const string modernScript = "function Get-ProfileValue { 'modern'; [int][char]'é' }";
+        const string profile = PowerShellCompilationSemanticOracleCatalog.WindowsPowerShell51ProfileId;
+        using var fixture = OracleFixture.Create(source);
+        var moduleRoot = Path.Combine(fixture.RootPath, "authored");
+        var referenceRoot = Path.Combine(fixture.RootPath, "reference");
+        var legacy = CodePagesEncodingProvider.Instance.GetEncoding(0) ?? Encoding.UTF8;
+        var modernName = legacy.GetString(Encoding.Latin1.GetBytes("café.ps1"));
+        foreach (var (name, text) in new[] { ("Module.psm1", source), ("Desktop.ps1", desktopScript), (modernName, modernScript) })
+        {
+            Directory.CreateDirectory(moduleRoot);
+            Directory.CreateDirectory(referenceRoot);
+            var bytes = Encoding.Latin1.GetBytes(text);
+            File.WriteAllBytes(Path.Combine(moduleRoot, name), bytes);
+            File.WriteAllText(Path.Combine(referenceRoot, name), legacy.GetString(bytes), new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+        }
+        File.WriteAllText(Path.Combine(moduleRoot, "Module.psd1"), manifest);
+        File.WriteAllText(Path.Combine(referenceRoot, "Module.psd1"), manifest);
+        var observer = Path.Combine(fixture.RootPath, "ObserveManifest.ps1");
+        File.WriteAllText(observer, "Import-Module -Name $args[0] -ErrorAction Stop; Get-ProfileValue; Get-CompiledCount");
+        foreach (var pin in PowerShellCompilationSemanticHostArtifactPinCatalog.Pins)
+        {
+            var target = pin.ProfileId == profile ? "net472" : "net10.0";
+            var input = new PowerShellCompilationInputResolver(profile).Resolve(moduleRoot,
+                PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Hybrid);
+            Assert.Single(input.CompilationSourceFiles);
+            var build = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+                input.SourcePath, Path.Combine(fixture.RootPath, target), "EncodedHybridManifest",
+                input.Kind, input.Mode, allowUnreviewedDependencyResolution: true)
+            {
+                ModuleManifestPath = input.ModuleManifestPath,
+                TargetFramework = target,
+                SemanticProfileId = profile,
+                CompilationSourcePaths = input.CompilationSourceFiles,
+                RuntimeSourcePaths = input.SourceFiles
+            });
+            Assert.True(build.Succeeded, build.Error + Environment.NewLine + build.BuildOutput);
+            Assert.Equal(1, build.Manifest!.UnitDispositionLedger!.EmittedUnits);
+            var host = StrictStreamingHostPath(pin) ??
+                Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe");
+            var native = await ObserveExitedConsole(host, fixture.RootPath,
+                new[] { "-NoProfile", "-NonInteractive", "-File", observer, Path.Combine(referenceRoot, "Module.psd1") }, string.Empty);
             var compiled = await ObserveExitedConsole(host, fixture.RootPath,
                 new[] { "-NoProfile", "-NonInteractive", "-File", observer, build.ArtifactPath! }, string.Empty);
             Assert.Equal(0, native.Code);
