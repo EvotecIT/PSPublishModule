@@ -1104,7 +1104,7 @@ public sealed partial class ManagedModuleInstallService
             PackageSha256 = ComputePackageSha256(packagePath)
         };
 
-    private static IEnumerable<ManagedModuleDependencyInfo> SelectDependencies(ManagedModulePackageMetadata? metadata)
+    internal static IEnumerable<ManagedModuleDependencyInfo> SelectDependencies(ManagedModulePackageMetadata? metadata)
     {
         if (metadata?.Dependencies is null || metadata.Dependencies.Count == 0)
             return Array.Empty<ManagedModuleDependencyInfo>();

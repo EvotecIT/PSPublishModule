@@ -1074,7 +1074,7 @@ public sealed partial class ManagedModuleInstallService
     private static string ResolveTargetPath(ManagedModuleInstallRequest request, string moduleRoot, string moduleName, string version)
         => request.SaveAsNupkg
             ? ResolveSavedPackagePath(moduleRoot, moduleName, version)
-            : ResolveInstalledModulePath(moduleRoot, moduleName, version);
+            : ResolveInstalledModulePath(moduleRoot, moduleName, version, allowFlatInstall: !request.RequireVersionedModulePath);
 
     private static string ResolveWriteTargetPath(ManagedModuleInstallRequest request, string moduleRoot, string moduleName, string version)
         => request.SaveAsNupkg
@@ -1091,7 +1091,7 @@ public sealed partial class ManagedModuleInstallService
     private static bool TargetExists(ManagedModuleInstallRequest request, string path)
         => request.SaveAsNupkg ? File.Exists(path) : Directory.Exists(path);
 
-    private static string ResolveInstalledModulePath(string moduleRoot, string moduleName, string version)
+    private static string ResolveInstalledModulePath(string moduleRoot, string moduleName, string version, bool allowFlatInstall = true)
     {
         var moduleFolder = Path.Combine(moduleRoot, moduleName.Trim());
         var versionPath = Path.Combine(moduleFolder, ResolveModuleDirectoryVersion(version));
@@ -1101,6 +1101,9 @@ public sealed partial class ManagedModuleInstallService
         var equivalentVersionPath = ResolveInstalledVersionDirectoryPath(moduleFolder, moduleName, version);
         if (!string.IsNullOrWhiteSpace(equivalentVersionPath))
             return equivalentVersionPath!;
+
+        if (!allowFlatInstall)
+            return versionPath;
 
         var flatManifestPath = ResolveInstalledManifestPath(moduleName, moduleFolder);
         if (!string.IsNullOrWhiteSpace(flatManifestPath) &&
