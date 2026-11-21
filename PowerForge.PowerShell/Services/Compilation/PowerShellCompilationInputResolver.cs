@@ -167,13 +167,11 @@ public sealed class PowerShellCompilationInputResolver
                 throw new InvalidOperationException("The executable entrypoint must also be present in the requested path set.");
             var sourceRoot = Path.GetDirectoryName(entryPoint) ?? Directory.GetCurrentDirectory();
             var snapshot = new PowerShellSourceSnapshot(sourceRoot, _semanticProfileId);
-            var closure = PowerShellHybridDependencyResolver.DiscoverDependencies(entryPoint,
-                allowDerivedPaths: (mode ?? PowerShellCompilationMode.Package) != PowerShellCompilationMode.Strict,
-                snapshot: snapshot);
-            var unreachable = requestedPaths.Where(path => !closure.Contains(path, PowerShellCompilationPathSafety.PathComparer)).ToArray();
+            var executableMode = mode ?? PowerShellCompilationMode.Package;
+            var closure = PowerShellHybridDependencyResolver.DiscoverExecutableSources(entryPoint, executableMode, snapshot);
+            var unreachable = requestedPaths.Where(path => !closure.Runtime.Contains(path, PowerShellCompilationPathSafety.PathComparer)).ToArray();
             if (unreachable.Length > 0)
                 throw new InvalidOperationException($"Executable path set contains source file(s) unreachable from the entrypoint: {string.Join(", ", unreachable.Select(Path.GetFileName))}.");
-            var executableMode = mode ?? PowerShellCompilationMode.Package;
             return new PowerShellCompilationResolvedInput(
                 entryPoint,
                 entryPoint,
@@ -182,8 +180,8 @@ public sealed class PowerShellCompilationInputResolver
                 Path.GetFileNameWithoutExtension(entryPoint),
                 resolvedKind,
                 executableMode,
-                closure,
-                closure,
+                closure.Runtime,
+                closure.Compilation,
                 sourceSnapshot: snapshot);
         }
         var resolvedMode = mode ?? (resolvedKind == PowerShellCompilationArtifactKind.BinaryModule
@@ -294,9 +292,8 @@ public sealed class PowerShellCompilationInputResolver
         var recursiveSourceDirectories = Array.Empty<string>();
         if (resolvedKind == PowerShellCompilationArtifactKind.Executable)
         {
-            compilationSourceFiles = PowerShellHybridDependencyResolver.DiscoverDependencies(sourcePath,
-                allowDerivedPaths: resolvedMode != PowerShellCompilationMode.Strict, snapshot: snapshot);
-            sourceFiles = compilationSourceFiles;
+            (compilationSourceFiles, sourceFiles) =
+                PowerShellHybridDependencyResolver.DiscoverExecutableSources(sourcePath, resolvedMode, snapshot);
         }
         else
         {

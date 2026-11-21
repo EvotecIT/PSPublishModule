@@ -22,7 +22,8 @@ internal static partial class PowerShellPackagedScriptRewriter
         string? packagedScriptRootExpression = null,
         bool guardDotSources = false,
         PowerShellPackagedSourceMapping? sourceMapping = null,
-        ParsedSourceDocument? document = null)
+        ParsedSourceDocument? document = null,
+        IReadOnlyCollection<string>? retainedScriptPaths = null)
     {
         var commandPathExpression = string.IsNullOrWhiteSpace(packagedCommandPathExpression)
             ? PackagedCommandPathExpression
@@ -44,6 +45,7 @@ internal static partial class PowerShellPackagedScriptRewriter
         }
 
         var dotSources = PlanDotSources(ast, sourcePath, embeddedScriptPaths ?? Array.Empty<string>(), guardDotSources);
+        var scriptCalls = PlanScriptCalls(ast, sourcePath, retainedScriptPaths);
 
         var explicitNamedBlock = FindExplicitNamedBlock(ast);
         if (explicitNamedBlock is not null)
@@ -53,7 +55,7 @@ internal static partial class PowerShellPackagedScriptRewriter
         }
 
         var invocationPaths = FindInvocationPaths(ast).ToArray();
-        ValidateHostInteraction(ast);
+        ValidateHostInteraction(ast, scriptCalls.Keys);
         ValidateReadHostDefaults(ast, sourcePath, embeddedScriptPaths ?? Array.Empty<string>());
         var parameterBindingPaths = FindParameterBindingPaths(ast).ToArray();
         var dependencyLoadPaths = string.IsNullOrWhiteSpace(dependencyCommandPathExpression)
@@ -88,8 +90,9 @@ internal static partial class PowerShellPackagedScriptRewriter
                 "$([System.IO.Path]::GetDirectoryName(" + dependencyCommandPathExpression + "))")))
             .OrderByDescending(static replacement => replacement.StartOffset)
             .ToArray();
-        if (guardDotSources)
-            replacements = AddDotSourceGuards(dotSources, Path.GetDirectoryName(Path.GetFullPath(sourcePath))!, replacements);
+        if (guardDotSources || scriptCalls.Count > 0)
+            replacements = AddSourceOperandGuards((guardDotSources ? dotSources : Array.Empty<PackagedSourceOperand>())
+                .Concat(scriptCalls.Values), Path.GetDirectoryName(Path.GetFullPath(sourcePath))!, replacements);
         replacements = AddPathOperandGuards(ast, replacements);
 
         var source = new StringBuilder(document.Text);
@@ -351,23 +354,25 @@ internal static partial class PowerShellPackagedScriptRewriter
         string dependencyPath,
         IReadOnlyCollection<string> embeddedScriptPaths,
         bool allowDerivedPaths = false,
-        ParsedSourceDocument? document = null)
+        ParsedSourceDocument? document = null,
+        IReadOnlyCollection<string>? retainedScriptPaths = null)
     {
         document ??= PowerShellSourceParser.ParseHostFile(dependencyPath);
         if (document.Errors.Length > 0)
             throw new InvalidOperationException($"Packaged dependency '{dependencyPath}' could not be parsed while validating package semantics.");
-        ValidateDependency(document, dependencyPath, embeddedScriptPaths, allowDerivedPaths);
+        ValidateDependency(document, dependencyPath, embeddedScriptPaths, allowDerivedPaths, retainedScriptPaths);
     }
 
     internal static void ValidateDependency(
         ParsedSourceDocument document,
         string dependencyPath,
         IReadOnlyCollection<string> embeddedScriptPaths,
-        bool allowDerivedPaths)
+        bool allowDerivedPaths,
+        IReadOnlyCollection<string>? retainedScriptPaths = null)
     {
         var ast = document.SyntaxRoot;
         ValidatePackagedRequirements(ast, document.Tokens, dependencyPath);
-        ValidateHostInteraction(ast);
+        ValidateHostInteraction(ast, PlanScriptCalls(ast, dependencyPath, retainedScriptPaths).Keys);
         ValidateDotSources(ast, dependencyPath, embeddedScriptPaths, allowDerivedPaths);
         var exit = ast.FindAll(static node => node is ExitStatementAst, searchNestedScriptBlocks: true)
             .Cast<ExitStatementAst>()
@@ -421,11 +426,11 @@ internal static partial class PowerShellPackagedScriptRewriter
             {
                 "NAME" => "$([System.IO.Path]::GetFileName(" + commandPathExpression + "))",
                 "COMMANDTYPE" => "([System.Management.Automation.CommandTypes]::ExternalScript)",
-                _ => commandPathExpression
+                _ => "(" + commandPathExpression + ")"
             }
             : throw new InvalidOperationException("Packaged invocation metadata must use a literal member name.");
 
-    internal static void ValidateHostInteraction(ScriptBlockAst ast)
+    internal static void ValidateHostInteraction(ScriptBlockAst ast, ICollection<CommandAst>? guardedCalls = null)
     {
         PowerShellPackagedPathOperandPolicy.ValidateGuardableReads(ast);
         var confirmation = (Ast?)FindConfirmationInvocation(ast) ?? FindConfirmationDeclaration(ast);
@@ -494,7 +499,7 @@ internal static partial class PowerShellPackagedScriptRewriter
 
         var dynamicCommand = ast.FindAll(static node => node is CommandAst, searchNestedScriptBlocks: true)
             .Cast<CommandAst>()
-            .FirstOrDefault(static command => IsDynamicCommandInvocation(command));
+            .FirstOrDefault(command => IsDynamicCommandInvocation(command) && guardedCalls?.Contains(command) != true);
         if (dynamicCommand is not null)
         {
             throw PowerShellCompilationSourceFailure.Create(

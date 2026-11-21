@@ -11,17 +11,18 @@ internal static partial class PowerShellPackagedScriptRewriter
         => PlanDotSources(ast, sourcePath, embeddedScriptPaths, allowDerivedPaths);
 
     /// <summary>Adds only source-load checks to retained dependency text; file-backed metadata and scope remain intact.</summary>
-    internal static string RewriteDependencyDotSources(string source, string sourcePath, string artifactSourceRoot,
-        IReadOnlyCollection<string> embeddedScriptPaths)
+    internal static string RewriteDependencySourceLoads(string source, string sourcePath, string artifactSourceRoot,
+        IReadOnlyCollection<string> embeddedScriptPaths, IReadOnlyCollection<string> retainedScriptPaths)
     {
         // This rewrite uses text offsets; source admission uses sourcePath separately.
         // The shared overload also supports the Windows PowerShell 5.1 reference contract.
         var ast = Parser.ParseInput(source, out _, out var errors);
         if (errors.Length != 0)
             throw new InvalidOperationException($"Packaged dependency '{sourcePath}' could not be parsed while guarding source loads.");
-        var plans = PlanDotSources(ast, sourcePath, embeddedScriptPaths, allowDerivedPaths: true);
+        var plans = PlanDotSources(ast, sourcePath, embeddedScriptPaths, allowDerivedPaths: true)
+            .Concat(PlanScriptCalls(ast, sourcePath, retainedScriptPaths).Values);
         var replacements = AddPathOperandGuards(ast,
-            AddDotSourceGuards(plans, artifactSourceRoot, Array.Empty<SourceReplacement>()));
+            AddSourceOperandGuards(plans, artifactSourceRoot, Array.Empty<SourceReplacement>()));
         var rewritten = new StringBuilder(source);
         foreach (var replacement in replacements)
         {
@@ -31,12 +32,12 @@ internal static partial class PowerShellPackagedScriptRewriter
         return rewritten.ToString();
     }
 
-    private static PackagedDotSource[] PlanDotSources(ScriptBlockAst ast, string sourcePath,
+    private static PackagedSourceOperand[] PlanDotSources(ScriptBlockAst ast, string sourcePath,
         IReadOnlyCollection<string> embeddedScriptPaths, bool allowDerivedPaths)
     {
         var allowed = embeddedScriptPaths.Select(Path.GetFullPath).ToHashSet(PowerShellCompilationPathSafety.PathComparer);
         var directory = Path.GetDirectoryName(Path.GetFullPath(sourcePath))!;
-        var plans = new List<PackagedDotSource>();
+        var plans = new List<PackagedSourceOperand>();
         foreach (var command in ast.FindAll(static node => node is CommandAst { InvocationOperator: TokenKind.Dot },
                      searchNestedScriptBlocks: true).Cast<CommandAst>())
         {
@@ -54,12 +55,32 @@ internal static partial class PowerShellPackagedScriptRewriter
             }
             if (!allowed.Contains(targetPath))
                 throw new InvalidOperationException($"Packaged executable generation does not support dot-sourced command '{command.Extent.Text}' because resolved dependency '{targetPath}' is not embedded with the artifact.");
-            plans.Add(new PackagedDotSource(fact, targetPath));
+            plans.Add(new PackagedSourceOperand(fact, targetPath));
         }
         return plans.ToArray();
     }
 
-    private static SourceReplacement[] AddDotSourceGuards(PackagedDotSource[] plans, string artifactSourceRoot,
+    private static Dictionary<CommandAst, PackagedSourceOperand> PlanScriptCalls(ScriptBlockAst ast, string sourcePath,
+        IReadOnlyCollection<string>? retainedScriptPaths)
+    {
+        var plans = new Dictionary<CommandAst, PackagedSourceOperand>();
+        if (retainedScriptPaths is not { Count: > 0 }) return plans;
+        var allowed = retainedScriptPaths.ToHashSet(PowerShellCompilationPathSafety.PathComparer);
+        var directory = Path.GetDirectoryName(Path.GetFullPath(sourcePath))!;
+        foreach (var command in ast.FindAll(static node => node is CommandAst { InvocationOperator: TokenKind.Ampersand },
+                     searchNestedScriptBlocks: true).Cast<CommandAst>())
+        {
+            if (PowerShellCompilationSourcePathPlanner.PlanScriptCall(command) is not { } fact) continue;
+            var relative = fact.RelativePath.Replace('/', Path.DirectorySeparatorChar).Replace('\\', Path.DirectorySeparatorChar);
+            if (WildcardPattern.ContainsWildcardCharacters(relative)) continue;
+            var target = Path.GetFullPath(Path.Combine(directory, relative));
+            if (allowed.Contains(target))
+                plans.Add(command, new PackagedSourceOperand(fact, target, "ValidateCalledSource"));
+        }
+        return plans;
+    }
+
+    private static SourceReplacement[] AddSourceOperandGuards(IEnumerable<PackagedSourceOperand> plans, string artifactSourceRoot,
         SourceReplacement[] existing)
     {
         var guards = new List<SourceReplacement>();
@@ -67,14 +88,14 @@ internal static partial class PowerShellPackagedScriptRewriter
         {
             var extent = plan.Fact.Operand.Extent;
             PowerShellCompilationPathSafety.EnsureContained(artifactSourceRoot, plan.TargetPath,
-                $"Packaged dot-source target '{plan.TargetPath}' escapes its source root.");
+                $"Packaged source target '{plan.TargetPath}' escapes its source root.");
             if (existing.Any(replacement => replacement.StartOffset < extent.EndOffset && replacement.EndOffset > extent.StartOffset &&
                     (replacement.StartOffset < extent.StartOffset || replacement.EndOffset > extent.EndOffset)))
                 throw new InvalidOperationException("A packaged source-load guard overlaps another script-semantics rewrite.");
             var operand = RenderGuardOperand(plan.Fact.Operand, existing);
             var relative = FrameworkCompatibility.GetRelativePath(artifactSourceRoot, plan.TargetPath).Replace('\\', '/');
             guards.Add(new SourceReplacement(extent.StartOffset, extent.EndOffset,
-                "([PowerForge.Compiled.PowerForgePackagedEntryPoint]::ValidateDotSource((" + operand + "), '" +
+                "([PowerForge.Compiled.PowerForgePackagedEntryPoint]::" + plan.GuardMethod + "((" + operand + "), '" +
                 CodeGeneration.EscapeSingleQuotedStringContent(relative) + "'))"));
         }
         return existing.Where(replacement => !guards.Any(guard => replacement.StartOffset >= guard.StartOffset &&
@@ -82,14 +103,16 @@ internal static partial class PowerShellPackagedScriptRewriter
             .Concat(guards).OrderByDescending(static replacement => replacement.StartOffset).ToArray();
     }
 
-    private sealed class PackagedDotSource
+    private sealed class PackagedSourceOperand
     {
-        internal PackagedDotSource(PowerShellCompilationSourcePathFact fact, string targetPath)
+        internal PackagedSourceOperand(PowerShellCompilationSourcePathFact fact, string targetPath, string guardMethod = "ValidateDotSource")
         {
             Fact = fact;
             TargetPath = targetPath;
+            GuardMethod = guardMethod;
         }
         internal PowerShellCompilationSourcePathFact Fact { get; }
         internal string TargetPath { get; }
+        internal string GuardMethod { get; }
     }
 }

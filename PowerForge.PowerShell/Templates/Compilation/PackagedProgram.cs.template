@@ -45,10 +45,6 @@ internal static class Program
 
             using var output = new PSDataCollection<PSObject>();
             output.DataAdded += (_, eventArgs) => Console.Out.WriteLine(output[eventArgs.Index]?.ToString());
-            // The host owns information display, including visibility preferences and Write-Host's newline policy.
-            powerShell.Streams.Verbose.DataAdded += (_, eventArgs) => Console.Out.WriteLine($"VERBOSE: {powerShell.Streams.Verbose[eventArgs.Index].Message}");
-            powerShell.Streams.Debug.DataAdded += (_, eventArgs) => Console.Out.WriteLine($"DEBUG: {powerShell.Streams.Debug[eventArgs.Index].Message}");
-            powerShell.Streams.Warning.DataAdded += (_, eventArgs) => Console.Out.WriteLine($"WARNING: {powerShell.Streams.Warning[eventArgs.Index].Message}");
             powerShell.Streams.Error.DataAdded += (_, eventArgs) =>
             {
                 var error = powerShell.Streams.Error[eventArgs.Index];
@@ -233,41 +229,47 @@ internal static class Program
     }
 
     internal static string ValidateDotSource(object? operand, string selectedRelativePath)
+        => ValidateSourceOperand(operand, selectedRelativePath, "Packaged dot-source");
+
+    internal static string ValidateCalledSource(object? operand, string selectedRelativePath)
+        => ValidateSourceOperand(operand, selectedRelativePath, "Packaged script invocation");
+
+    private static string ValidateSourceOperand(object? operand, string selectedRelativePath, string operation)
     {
         if (operand is PSObject wrapped) operand = wrapped.BaseObject;
         if (operand is not string actualPath || string.IsNullOrWhiteSpace(actualPath) ||
             !System.IO.Path.IsPathFullyQualified(actualPath) || WildcardPattern.ContainsWildcardCharacters(actualPath))
-            throw new InvalidOperationException("Packaged dot-source operand must identify its selected staged source file.");
+            throw new InvalidOperationException(operation + " operand must identify its selected staged source file.");
         var root = System.IO.Path.GetDirectoryName(PowerForgePackagedEntryPoint.Path)
             ?? throw new InvalidOperationException("Packaged source extraction has not established its source root.");
         var selectedPath = ResolveContainedExtractionPath(root, selectedRelativePath);
         var actual = System.IO.Path.GetFullPath(actualPath);
         var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
         if (!actual.Equals(selectedPath, comparison))
-            throw new InvalidOperationException("Packaged dot-source operand does not match its selected staged source file.");
+            throw new InvalidOperationException(operation + " operand does not match its selected staged source file.");
         var expectedHash = selectedRelativePath.Equals(EntryRelativePath, StringComparison.Ordinal)
             ? EntrySha256
             : Dependencies.SingleOrDefault(dependency => dependency.RelativePath.Equals(selectedRelativePath, StringComparison.Ordinal))?.Sha256;
         if (expectedHash is null)
-            throw new InvalidOperationException("Packaged dot-source target is absent from the embedded payload catalog.");
+            throw new InvalidOperationException(operation + " target is absent from the embedded payload catalog.");
         var current = System.IO.Path.GetFullPath(root);
-        RejectSourceLink(current);
+        RejectSourceLink(current, operation);
         foreach (var segment in selectedRelativePath.Replace('\\', '/').Split('/', StringSplitOptions.RemoveEmptyEntries))
         {
             current = System.IO.Path.Combine(current, segment);
-            RejectSourceLink(current);
+            RejectSourceLink(current, operation);
         }
         // This verifies the actual selected path immediately before file-backed loading.
         // PowerShell reopens the file; this is not an atomic lease against concurrent filesystem writers.
         if (!File.Exists(actual) || !ComputeFileSha256(actual).Equals(expectedHash, StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("Packaged dot-source target changed after payload extraction.");
+            throw new InvalidOperationException(operation + " target changed after payload extraction.");
         return actual;
     }
 
-    private static void RejectSourceLink(string path)
+    private static void RejectSourceLink(string path, string operation)
     {
         if ((File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0)
-            throw new InvalidOperationException("Packaged dot-source target traverses a symbolic link or junction.");
+            throw new InvalidOperationException(operation + " target traverses a symbolic link or junction.");
     }
 
     private static string ResolveContainedExtractionPath(string root, string relativePath)
@@ -412,4 +414,6 @@ public static class PowerForgePackagedEntryPoint
     /// <remarks>This is a point-in-time source-load check, not an atomic filesystem lease.</remarks>
     public static string ValidateDotSource(object? operand, string selectedRelativePath)
         => Program.ValidateDotSource(operand, selectedRelativePath);
+    public static string ValidateCalledSource(object? operand, string selectedRelativePath)
+        => Program.ValidateCalledSource(operand, selectedRelativePath);
 }

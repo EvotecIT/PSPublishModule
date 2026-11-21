@@ -264,7 +264,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             string[] embeddedScriptPaths,
             string[] embeddedResourceRelativePaths,
             bool usesExtractedRoot,
-            PowerShellCompilationDependency[]? nativeMirroredResources = null)
+            PowerShellCompilationDependency[]? nativeMirroredResources = null,
+            string[]? retainedScriptPaths = null)
         {
             EntryRelativePath = entryRelativePath;
             ProjectResources = projectResources;
@@ -274,6 +275,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             EmbeddedResourceRelativePaths = embeddedResourceRelativePaths;
             UsesExtractedRoot = usesExtractedRoot;
             NativeMirroredResources = nativeMirroredResources ?? Array.Empty<PowerShellCompilationDependency>();
+            RetainedScriptPaths = retainedScriptPaths ?? Array.Empty<string>();
         }
 
         internal string EntryRelativePath { get; }
@@ -284,5 +286,6 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         internal string[] EmbeddedResourceRelativePaths { get; }
         internal bool UsesExtractedRoot { get; }
         internal PowerShellCompilationDependency[] NativeMirroredResources { get; }
+        internal string[] RetainedScriptPaths { get; }
     }
 }

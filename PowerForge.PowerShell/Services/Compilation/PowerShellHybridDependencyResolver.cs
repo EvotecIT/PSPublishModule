@@ -77,6 +77,18 @@ internal static class PowerShellHybridDependencyResolver
     internal static string[] DiscoverModuleScopeDependencies(string sourcePath)
         => DiscoverModuleScopeDependencies(sourcePath, null, null);
 
+    internal static (string[] Compilation, string[] Runtime) DiscoverExecutableSources(
+        string sourcePath, PowerShellCompilationMode mode, PowerShellSourceSnapshot snapshot)
+    {
+        var hosted = mode != PowerShellCompilationMode.Strict;
+        var compiled = DiscoverDependencies(sourcePath, allowDerivedPaths: hosted, snapshot: snapshot);
+        if (!hosted) return (compiled, compiled);
+        // Called scripts own a child scope. Stage them, but do not add their functions to the caller's symbol table.
+        var runtime = DiscoverDependenciesCore(sourcePath, null, moduleScopeOnly: false, conventionalLoaders: null,
+            allowDerivedPaths: true, snapshot: snapshot, includeScriptCalls: true);
+        return (compiled, runtime);
+    }
+
     internal static string[] DiscoverModuleScopeDependencies(string sourcePath,
         IEnumerable<string>? additionalEntryPaths,
         IReadOnlyCollection<PowerShellConventionalLoaderIdentity>? conventionalLoaders,
@@ -109,7 +121,8 @@ internal static class PowerShellHybridDependencyResolver
         PowerShellModuleRuntimeAlternatives runtimeAlternatives = PowerShellModuleRuntimeAlternatives.Reject,
         IReadOnlyDictionary<string, ParsedSourceDocument>? sourceDocuments = null,
         string? semanticProfileId = null,
-        PowerShellSourceSnapshot? snapshot = null)
+        PowerShellSourceSnapshot? snapshot = null,
+        bool includeScriptCalls = false)
     {
         var primarySource = Path.GetFullPath(sourcePath);
         var sourceRoot = Path.GetFullPath(Path.GetDirectoryName(sourcePath) ?? Directory.GetCurrentDirectory());
@@ -156,11 +169,31 @@ internal static class PowerShellHybridDependencyResolver
             var dotSourceCommands = moduleScopeOnly
                 ? PowerShellCompilationSourcePathPlanner.GetModuleScopeDotSources(ast)
                 : ast.FindAll(
-                        static node => node is CommandAst { InvocationOperator: TokenKind.Dot },
+                        node => node is CommandAst command &&
+                                (command.InvocationOperator == TokenKind.Dot ||
+                                 includeScriptCalls && command.InvocationOperator == TokenKind.Ampersand),
                         searchNestedScriptBlocks: true)
                     .Cast<CommandAst>();
             foreach (var command in dotSourceCommands)
             {
+                if (command.InvocationOperator == TokenKind.Ampersand)
+                {
+                    if (PowerShellCompilationSourcePathPlanner.PlanScriptCall(command) is not { } call) continue;
+                    var relative = NormalizeRelativePath(call.RelativePath);
+                    if (Path.IsPathRooted(relative) || WildcardPattern.ContainsWildcardCharacters(relative))
+                        throw PowerShellCompilationSourceFailure.Create(
+                            "A packaged script invocation needs a contained .ps1 target without wildcards.", current, call.Operand.Extent);
+                    var calledScript = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(current)!, relative));
+                    PowerShellCompilationPathSafety.EnsureContained(sourceRoot, calledScript, "A packaged script invocation escapes the executable source root.");
+                    if (!File.Exists(calledScript))
+                        throw PowerShellCompilationSourceFailure.Create(
+                            $"The called script '{call.RelativePath}' is missing. Supply the contained script or run the source in PowerShell.", current, call.Operand.Extent);
+                    PowerShellCompilationPathSafety.EnsureNoLinks(sourceRoot, calledScript,
+                        "A packaged script invocation target traverses a symbolic link or junction.");
+                    if (discovered.Add(calledScript))
+                        pending.Enqueue((calledScript, RuntimeSelected: false));
+                    continue;
+                }
                 var expression = command.CommandElements.FirstOrDefault()
                     ?? throw new InvalidOperationException($"Dot-source expression at {current}:{command.Extent.StartLineNumber} has no path.");
                 if (expression is ScriptBlockExpressionAst)
