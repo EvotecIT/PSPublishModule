@@ -87,12 +87,13 @@ internal static partial class Program
         }
         else
         {
-            logger.Success(result.Plan
+            var resultLogger = result.Plan && logger is QuietLogger quietLogger ? quietLogger.Inner : logger;
+            resultLogger.Success(result.Plan
                 ? $"Planned {result.Lock.Packages.Length} module(s) for {result.Destination}"
                 : $"Restored {result.Lock.Packages.Length} module(s) to {result.Destination}");
             if (result.Plan || !cli.Quiet)
                 foreach (var package in result.Lock.Packages)
-                    logger.Info($"  {package.Name} {package.Version}");
+                    resultLogger.Info($"  {package.Name} {package.Version}");
             if (result.LockWritten)
                 logger.Info($"Wrote {result.LockPath}");
         }
