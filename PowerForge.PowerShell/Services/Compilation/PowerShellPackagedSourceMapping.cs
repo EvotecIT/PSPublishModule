@@ -1,4 +1,3 @@
-using System.Management.Automation.Language;
 using System.Text;
 
 namespace PowerForge;
@@ -10,10 +9,10 @@ internal sealed class PowerShellPackagedSourceMapping
     private readonly string _document;
     private readonly List<int> _edits = new();
 
-    internal PowerShellPackagedSourceMapping(string path)
+    internal PowerShellPackagedSourceMapping(ParsedSourceDocument document)
     {
-        _path = Path.GetFullPath(path);
-        _document = Parser.ParseFile(_path, out _, out _).Extent.Text;
+        _path = document.Path;
+        _document = document.Text;
     }
 
     internal void Record(int start, int length, string replacement)

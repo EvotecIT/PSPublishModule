@@ -84,9 +84,11 @@ public sealed partial class PowerShellTypedCompilationTranspiler
         ISet<string> excludedMethods,
         PowerShellCompilationCapability capabilities = PowerShellCompilationCapability.None,
         IReadOnlyCollection<string>? nativeDeclarationTimingSourcePaths = null,
-        string? guardedExecutableEntryPath = null)
+        string? guardedExecutableEntryPath = null,
+        IReadOnlyList<ParsedSourceDocument>? analyzedDocuments = null,
+        PowerShellCompilationPlan? analysisPlan = null)
         => TranspileCore(sourcePaths, namespaceName, typeName, targetFramework, excludedMethods, capabilities, _commandRegistry, _semanticProfileId,
-            _nativeDependencyTypes, guardedExecutableEntryPath, nativeDeclarationTimingSourcePaths);
+            _nativeDependencyTypes, guardedExecutableEntryPath, nativeDeclarationTimingSourcePaths, analyzedDocuments: analyzedDocuments, analysisPlan: analysisPlan);
 
     internal PowerShellTypedCompilationResult TranspileAnalyzed(
         IReadOnlyList<ParsedSourceDocument> documents,

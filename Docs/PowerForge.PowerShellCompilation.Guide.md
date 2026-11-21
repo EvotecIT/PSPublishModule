@@ -67,8 +67,12 @@ Other combinations remain experimental. Packaging does not conceal source.
 
 A byte order mark controls how the compiler reads a script. Without one, the
 PowerShell 7 profile reads UTF-8 and the Windows PowerShell 5.1 profile uses
-the active Windows code page. Use a UTF-8 BOM for non-ASCII source when
-building for Windows PowerShell 5.1 on another operating system.
+the active Windows code page. The selected profile also applies to scripts
+loaded by literal dot-source statements, module source discovery and literal
+paths used to identify bundled resources. Package uses the build host's source
+encoding rules when no semantic profile is selected. Use a UTF-8 BOM for
+non-ASCII source when building for Windows PowerShell 5.1 on another operating
+system.
 
 ### Inspecting Package artifacts
 

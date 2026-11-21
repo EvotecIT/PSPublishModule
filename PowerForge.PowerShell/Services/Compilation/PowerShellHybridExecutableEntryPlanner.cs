@@ -90,7 +90,7 @@ internal static class PowerShellHybridExecutableEntryPlanner
         {
             // Explain and Build must agree that the packaged source still contains the exact body selected above.
             PowerShellHybridExecutableEntryEmitter.ComposeScript(
-                PowerShellPackagedScriptRewriter.Rewrite(fullPath), fullPath, compiled);
+                PowerShellPackagedScriptRewriter.Rewrite(fullPath, document: document), document, compiled);
             return compiled;
         }
         catch (InvalidOperationException)

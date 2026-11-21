@@ -12,37 +12,55 @@ internal static class PowerShellSourceParser
     internal static ParsedSourceDocument ParseFile(string path)
         => ParseFile(path, Path.GetDirectoryName(Path.GetFullPath(path)));
 
+    internal static string HostSemanticProfileId
+#if NETFRAMEWORK
+        => PowerShellCompilationSemanticOracleCatalog.WindowsPowerShell51ProfileId;
+#else
+        => PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId;
+#endif
+
     internal static ParsedSourceDocument ParseFile(string path, string? identityRoot,
         string semanticProfileId = PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId)
     {
         var fullPath = Path.GetFullPath(path);
-        var profile = PowerShellCompilationSemanticOracleCatalog.Get(semanticProfileId);
-        if (profile.Family != PowerShellCompilationSemanticHostFamily.WindowsPowerShell51)
-            return Parse(File.ReadAllText(fullPath), fullPath, identityRoot);
+        return ParseFile(File.OpenRead(fullPath), fullPath, identityRoot, semanticProfileId);
+    }
 
+    internal static ParsedSourceDocument ParseFile(Stream contents, string fullPath, string? identityRoot, string semanticProfileId)
+    {
+        using (contents)
+        {
+            var profile = PowerShellCompilationSemanticOracleCatalog.Get(semanticProfileId);
+            var encoding = profile.Family == PowerShellCompilationSemanticHostFamily.WindowsPowerShell51
+                ? GetDesktopDefaultEncoding() : Encoding.UTF8;
+            try
+            {
+                using var reader = new StreamReader(contents, encoding, detectEncodingFromByteOrderMarks: true);
+                return Parse(reader.ReadToEnd(), fullPath, identityRoot);
+            }
+            catch (DecoderFallbackException error)
+            {
+                throw new InvalidOperationException(
+                    $"Source '{fullPath}' uses non-ASCII bytes without a Unicode byte order mark. Add a UTF-8 BOM or compile the Windows PowerShell 5.1 profile on Windows.",
+                    error);
+            }
+        }
+    }
+
+    private static Encoding GetDesktopDefaultEncoding()
+    {
 #if NETFRAMEWORK
-        var syntax = Parser.ParseFile(fullPath, out var tokens, out var errors);
-        return new ParsedSourceDocument(CreateDocumentId(fullPath, identityRoot), fullPath,
-            syntax.Extent.Text, syntax, tokens, errors);
+        return Encoding.Default;
 #else
-        // The provider's code page 0 means the active Windows ANSI code page.
-        // Encoding.Default itself is UTF-8 on modern .NET.
-        var encoding = OperatingSystem.IsWindows()
+        // The provider's code page 0 represents the active Windows ANSI code page.
+        return OperatingSystem.IsWindows()
             ? CodePagesEncodingProvider.Instance.GetEncoding(0) ?? Encoding.UTF8
             : Encoding.GetEncoding(20127, EncoderFallback.ExceptionFallback, DecoderFallback.ExceptionFallback);
-        try
-        {
-            using var reader = new StreamReader(fullPath, encoding, detectEncodingFromByteOrderMarks: true);
-            return Parse(reader.ReadToEnd(), fullPath, identityRoot);
-        }
-        catch (DecoderFallbackException error)
-        {
-            throw new InvalidOperationException(
-                $"Source '{fullPath}' uses non-ASCII bytes without a Unicode byte order mark. Add a UTF-8 BOM or compile the Windows PowerShell 5.1 profile on Windows.",
-                error);
-        }
 #endif
     }
+
+    internal static ParsedSourceDocument ParseHostFile(string path, string? identityRoot = null)
+        => ParseFile(path, identityRoot, HostSemanticProfileId);
 
     internal static ParsedSourceDocument Parse(string source, string path)
         => Parse(source, path, Path.GetDirectoryName(Path.GetFullPath(path)));
@@ -52,13 +70,21 @@ internal static class PowerShellSourceParser
         if (source is null) throw new ArgumentNullException(nameof(source));
         var fullPath = Path.GetFullPath(path);
 #if NETFRAMEWORK
-        // The Windows PowerShell reference assembly exposes the three-argument overload.
-        var syntax = Parser.ParseInput(source, out var tokens, out var errors);
+        var syntax = ParseDesktopFile(source, fullPath, out var tokens, out var errors);
 #else
         var syntax = Parser.ParseInput(source, fullPath, out var tokens, out var errors);
 #endif
         return new ParsedSourceDocument(CreateDocumentId(fullPath, identityRoot), fullPath, source, syntax, tokens, errors);
     }
+
+#if NETFRAMEWORK
+    private delegate ScriptBlockAst DesktopFileParser(string source, string path, out Token[] tokens, out ParseError[] errors);
+
+    // Windows PowerShell exposes the file-aware overload at runtime, while the 5.1 reference
+    // assembly exposes only the overload without a file name.
+    private static readonly DesktopFileParser ParseDesktopFile = (DesktopFileParser)Delegate.CreateDelegate(
+        typeof(DesktopFileParser), typeof(Parser), nameof(Parser.ParseInput));
+#endif
 
     internal static SourceSpan GetSpan(ParsedSourceDocument document, IScriptExtent extent)
         => new(

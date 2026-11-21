@@ -42,7 +42,7 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
             var binding = compiled.EntryPointMethod.NativeFunctionBinding;
             Assert.NotNull(binding);
             Assert.True(binding.HasBegin && binding.HasProcess && binding.HasEnd);
-            File.WriteAllText(Path.Combine(fixture.RootPath, "CompiledRoot.cs"), PowerShellHybridNativeEntryEmitter.GenerateSource(compiled, script));
+            File.WriteAllText(Path.Combine(fixture.RootPath, "CompiledRoot.cs"), PowerShellHybridNativeEntryEmitter.GenerateSource(compiled, PowerShellSourceParser.ParseFile(script)));
             var project = Path.Combine(fixture.RootPath, "Lifecycle.csproj");
             File.WriteAllText(project, File.ReadAllText(template)
                 .Replace("..\\..\\..\\PowerForge.PowerShell", Path.Combine(repository, "PowerForge.PowerShell"), StringComparison.Ordinal)

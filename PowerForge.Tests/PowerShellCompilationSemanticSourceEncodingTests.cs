@@ -58,6 +58,11 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
             var input = new PowerShellCompilationInputResolver(pin.ProfileId).Resolve(fixture.ScriptPath,
                 PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Strict);
             Assert.Equal(2, input.CompilationSourceFiles.Length);
+            var plan = new PowerShellCompilationAnalyzer(Array.Empty<PowerShellCompilationCommandProviderContract>(), pin.ProfileId)
+                .Analyze(input, PowerShellCompilationMode.Strict, "net10.0");
+            var explanation = PowerShellCompilationExplainShaper.CreateFinalExplanation(input, plan, "net10.0");
+            Assert.True(explanation.CanProceed);
+            Assert.Equal(2, explanation.TypedUnits);
             var build = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
                 input.SourcePath, Path.Combine(fixture.RootPath, "strict"), "StrictEncodedDotSource",
                 input.Kind, input.Mode, allowUnreviewedDependencyResolution: true)
@@ -77,6 +82,109 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
             Assert.Equal(0, native.Code);
             Assert.Empty(native.Error);
             Assert.Equal(native, await ObserveExitedConsole(build.ArtifactPath!, fixture.RootPath, Array.Empty<string>(), string.Empty));
+        }
+    }
+
+    [PinnedSemanticHostFact]
+    public async Task EncodedResourcesAndRetainedScriptsUseTheSameProfileOnBothPinnedHosts()
+    {
+        const string source = """
+            . "$PSScriptRoot/café.ps1"
+            Get-Value
+            Get-Content -LiteralPath "$PSScriptRoot/café.txt"
+            """;
+        using var fixture = OracleFixture.Create(source);
+        File.WriteAllText(fixture.ScriptPath, source, Encoding.Latin1);
+        var legacyCodePage = CodePagesEncodingProvider.Instance.GetEncoding(0) ?? Encoding.UTF8;
+        var suffix = new byte[] { 0xe9 };
+        var legacyStem = "caf" + legacyCodePage.GetString(suffix);
+        var modernStem = "caf" + Encoding.UTF8.GetString(suffix);
+        foreach (var stem in new[] { modernStem, legacyStem }.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            var marker = stem == modernStem ? "modern" : "legacy";
+            File.WriteAllText(Path.Combine(fixture.RootPath, stem + ".ps1"),
+                "function Get-Value { '" + marker + "'; [int][char]'é' }", Encoding.Latin1);
+            File.WriteAllText(Path.Combine(fixture.RootPath, stem + ".txt"), marker + "-resource");
+        }
+
+        foreach (var pin in PowerShellCompilationSemanticHostArtifactPinCatalog.Pins)
+        {
+            var input = new PowerShellCompilationInputResolver(pin.ProfileId).Resolve(fixture.ScriptPath,
+                PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Package);
+            var plan = new PowerShellCompilationAnalyzer(Array.Empty<PowerShellCompilationCommandProviderContract>(), pin.ProfileId)
+                .Analyze(input, input.Mode, "net10.0");
+            Assert.True(plan.CanProceed);
+            var stem = pin.ProfileId == PowerShellCompilationSemanticOracleCatalog.WindowsPowerShell51ProfileId ? legacyStem : modernStem;
+            var inferred = Assert.Single(plan.Dependencies, candidate =>
+                candidate.Discovery == PowerShellCompilationDependencyDiscovery.InferredLiteralResource);
+            Assert.True(inferred.Exists);
+            Assert.Equal(stem + ".txt", inferred.RelativePath);
+            var build = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+                input.SourcePath, Path.Combine(fixture.RootPath, "package"), "EncodedPackage",
+                input.Kind, input.Mode)
+            {
+                TargetFramework = "net10.0",
+                SemanticProfileId = pin.ProfileId,
+                CompilationSourcePaths = input.CompilationSourceFiles,
+                RuntimeSourcePaths = input.SourceFiles,
+                ExpectedDependencyLock = plan.DependencyGraph,
+                SingleFile = false
+            });
+            Assert.True(build.Succeeded, build.Error + Environment.NewLine + build.BuildOutput);
+            var host = StrictStreamingHostPath(pin) ??
+                Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe");
+            var native = await ObserveExitedConsole(host, fixture.RootPath,
+                new[] { "-NoProfile", "-NonInteractive", "-File", fixture.ScriptPath }, string.Empty);
+            Assert.Equal(0, native.Code);
+            Assert.Empty(native.Error);
+            Assert.Equal(native, await ObserveExitedConsole(build.ArtifactPath!, fixture.RootPath, Array.Empty<string>(), string.Empty));
+        }
+    }
+
+    [PinnedSemanticHostFact]
+    public async Task HybridModuleLoadsEncodedModuleFilesOnBothPinnedHosts()
+    {
+        const string source = """
+            . "$PSScriptRoot/café.ps1"
+            Export-ModuleMember -Function Get-Value
+            """;
+        using var fixture = OracleFixture.Create(source);
+        var modulePath = Path.ChangeExtension(fixture.ScriptPath, ".psm1");
+        File.WriteAllText(modulePath, source, Encoding.Latin1);
+        var suffix = new byte[] { 0xe9 };
+        var legacyCodePage = CodePagesEncodingProvider.Instance.GetEncoding(0) ?? Encoding.UTF8;
+        var legacyName = "caf" + legacyCodePage.GetString(suffix) + ".ps1";
+        var modernName = "caf" + Encoding.UTF8.GetString(suffix) + ".ps1";
+        File.WriteAllText(Path.Combine(fixture.RootPath, modernName), "function Get-Value { return 20 }");
+        if (!string.Equals(legacyName, modernName, StringComparison.OrdinalIgnoreCase))
+            File.WriteAllText(Path.Combine(fixture.RootPath, legacyName), "function Get-Value { return 10 }");
+
+        var observer = Path.Combine(fixture.RootPath, "ObserveModule.ps1");
+        File.WriteAllText(observer, "Import-Module -Name $args[0] -ErrorAction Stop; Get-Value");
+        foreach (var pin in PowerShellCompilationSemanticHostArtifactPinCatalog.Pins)
+        {
+            var input = new PowerShellCompilationInputResolver(pin.ProfileId).Resolve(modulePath,
+                PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Hybrid);
+            var build = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+                input.SourcePath, Path.Combine(fixture.RootPath, "hybrid"), "EncodedHybrid",
+                input.Kind, input.Mode, allowUnreviewedDependencyResolution: true)
+            {
+                TargetFramework = pin.ProfileId == PowerShellCompilationSemanticOracleCatalog.WindowsPowerShell51ProfileId ? "net472" : "net10.0",
+                SemanticProfileId = pin.ProfileId,
+                CompilationSourcePaths = input.CompilationSourceFiles,
+                RuntimeSourcePaths = input.SourceFiles
+            });
+            Assert.True(build.Succeeded, build.Error + Environment.NewLine + build.BuildOutput);
+            Assert.Equal(1, build.Manifest!.UnitDispositionLedger!.EmittedUnits);
+            var host = StrictStreamingHostPath(pin) ??
+                Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe");
+            var native = await ObserveExitedConsole(host, fixture.RootPath,
+                new[] { "-NoProfile", "-NonInteractive", "-File", observer, modulePath }, string.Empty);
+            var compiled = await ObserveExitedConsole(host, fixture.RootPath,
+                new[] { "-NoProfile", "-NonInteractive", "-File", observer, build.ArtifactPath! }, string.Empty);
+            Assert.Equal(0, native.Code);
+            Assert.Empty(native.Error);
+            Assert.Equal(native, compiled);
         }
     }
 }

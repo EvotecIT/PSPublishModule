@@ -14,14 +14,17 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         IReadOnlyDictionary<string, string> inputHashes,
         PowerShellCompilationCommandProviderContract[] commandProviders,
         string providerProjectReferences,
-        IReadOnlyList<ParsedSourceDocument> sourceDocuments)
+        IReadOnlyList<ParsedSourceDocument> sourceDocuments,
+        PowerShellSourceSnapshot snapshot)
     {
+        var document = snapshot.Get(spec.SourcePath);
         var capabilities = PowerShellCompilationBuildSpec.GetCapabilities(spec.Kind, spec.Mode);
         var entry = PowerShellHybridExecutableEntryPlanner.TryPlan(
             spec.SourcePath, compilationSourcePaths, plan, spec.TargetFramework,
             spec.SemanticProfileId, commandProviders, sourceDocuments);
         var nativeEntry = entry?.EntryPointMethod.NativeFunctionBinding is not null;
-        var typed = new PowerShellTypedCompilationTranspiler(commandProviders, spec.SemanticProfileId).TranspileAnalyzed(
+        var transpiler = new PowerShellTypedCompilationTranspiler(commandProviders, spec.SemanticProfileId);
+        var typed = transpiler.TranspileAnalyzed(
             sourceDocuments, plan,
             "PowerForge.Compiled",
             PowerShellCSharpSymbolRenderer.Identifier(artifactName) + "Methods",
@@ -29,8 +32,10 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             capabilities,
             guardedExecutableEntryPath: spec.SourcePath,
             nativeScriptEntry: nativeEntry);
-        typed = PowerShellHybridFunctionCollisionResolver.RouteNameCollisionsToFallback(typed, spec.TargetFramework, spec.SemanticProfileId, capabilities);
-        typed = PowerShellBinaryCmdletSourceGenerator.PrepareForBinaryModule(typed, exportedFunctions: null, targetFramework: spec.TargetFramework, semanticProfileId: spec.SemanticProfileId, capabilities: capabilities);
+        typed = PowerShellHybridFunctionCollisionResolver.RouteNameCollisionsToFallback(typed, spec.TargetFramework, spec.SemanticProfileId, capabilities,
+            sourceDocuments: sourceDocuments, plan: plan, commandProviders: commandProviders);
+        typed = PowerShellBinaryCmdletSourceGenerator.PrepareForBinaryModule(typed, exportedFunctions: null, spec.TargetFramework,
+            spec.SemanticProfileId, capabilities, sourceDocuments, plan, transpiler);
         WriteCompiledPowerShellSource(Path.Combine(workspace, "CompiledPowerShell.cs"), typed.SourceCode,
             spec.SourcePath, compilationSourcePaths);
         WriteBinaryHostRuntime(workspace, typed, requiresExecutableEntryHost: entry is not null,
@@ -38,7 +43,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         if (entry is not null)
             WriteCompiledPowerShellSource(
                 Path.Combine(workspace, "CompiledPowerShellEntry.cs"),
-                nativeEntry ? PowerShellHybridNativeEntryEmitter.GenerateSource(entry, spec.SourcePath)
+                nativeEntry ? PowerShellHybridNativeEntryEmitter.GenerateSource(entry, document)
                     : PowerShellHybridExecutableEntryEmitter.GenerateSource(entry),
                 spec.SourcePath, compilationSourcePaths, includeSyntheticEntry: !nativeEntry);
         File.WriteAllText(
@@ -47,28 +52,29 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             new UTF8Encoding(false));
 
         var packagedSources = PreparePackagedSources(workspace, spec.SourcePath, compilationSourcePaths, dependencyPlan,
-            inputHashes, typed, nativeScriptEntry: nativeEntry);
+            inputHashes, snapshot, typed, nativeScriptEntry: nativeEntry);
         var parameterInitializers = PowerShellPackagedParameterBindingPolicy.Generate(spec.SourcePath, spec.TargetFramework,
-            nativeScriptEntry: nativeEntry);
+            nativeScriptEntry: nativeEntry, document: document);
         // The native owner reparses exact authored text. Do not rewrite its variables,
         // insert registrations or replace its body before hashing/native script dispatch.
-        var sourceMapping = nativeEntry ? null : new PowerShellPackagedSourceMapping(spec.SourcePath);
+        var sourceMapping = nativeEntry ? null : new PowerShellPackagedSourceMapping(document);
         var packagedScriptPath = Path.Combine(workspace, "Source.ps1");
         if (nativeEntry)
         {
             File.Copy(spec.SourcePath, packagedScriptPath, overwrite: false);
+            VerifyStagedPayload(spec.SourcePath, packagedSources.EntryRelativePath, ComputeSha256(packagedScriptPath), inputHashes);
+            if (!File.ReadAllText(packagedScriptPath).Equals(document.Text, StringComparison.Ordinal))
+                File.WriteAllText(packagedScriptPath, document.Text, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
         }
         else
         {
-            var packagedScript = GeneratePackagedScript(spec.SourcePath, packagedSources, typed, sourceMapping);
+            var packagedScript = GeneratePackagedScript(spec.SourcePath, packagedSources, document, typed, sourceMapping);
             if (entry is not null)
-                packagedScript = PowerShellHybridExecutableEntryEmitter.ComposeScript(packagedScript, spec.SourcePath, entry, sourceMapping);
+                packagedScript = PowerShellHybridExecutableEntryEmitter.ComposeScript(packagedScript, document, entry, sourceMapping);
             sourceMapping?.Write(workspace);
             File.WriteAllText(packagedScriptPath, packagedScript, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
         }
         var entryHash = ComputeSha256(packagedScriptPath);
-        if (nativeEntry)
-            VerifyStagedPayload(spec.SourcePath, packagedSources.EntryRelativePath, entryHash, inputHashes);
         File.WriteAllText(
             Path.Combine(workspace, "Program.cs"),
             ReadTemplate(PackagedProgramTemplate)

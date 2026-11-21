@@ -8,10 +8,11 @@ namespace PowerForge;
 internal static class PowerShellPackagedParameterBindingPolicy
 {
     internal static PowerShellPackagedParameterInitializers Generate(string sourcePath, string targetFramework,
-        bool nativeScriptEntry = false)
+        bool nativeScriptEntry = false, ParsedSourceDocument? document = null)
     {
-        var ast = Parser.ParseFile(sourcePath, out _, out var errors);
-        if (errors.Length > 0)
+        document ??= PowerShellSourceParser.ParseHostFile(sourcePath);
+        var ast = document.SyntaxRoot;
+        if (document.Errors.Length > 0)
             throw new InvalidOperationException("Packaged script parameters could not be parsed for native argument binding.");
 
         var parameters = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

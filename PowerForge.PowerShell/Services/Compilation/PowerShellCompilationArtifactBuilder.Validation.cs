@@ -118,30 +118,6 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         return paths;
     }
 
-    private static (PowerShellCompilationPlan Plan, ParsedSourceDocument[] Documents) AnalyzeCompilationSources(
-        IEnumerable<string> sourcePaths,
-        PowerShellCompilationMode mode,
-        string targetFramework,
-        string semanticProfileId,
-        PowerShellCompilationCapability capabilities,
-        IEnumerable<PowerShellCompilationCommandProviderContract> commandProviders,
-        PowerShellNativeDependencyTypes? nativeDependencyTypes = null,
-        CancellationToken cancellationToken = default)
-    {
-        var analyzer = new PowerShellCompilationAnalyzer(PowerShellCommandSemanticRegistry.Create(commandProviders), semanticProfileId,
-            nativeDependencyTypes ?? PowerShellNativeDependencyTypes.Empty);
-        var paths = sourcePaths.Select(Path.GetFullPath).Distinct(PowerShellCompilationPathSafety.PathComparer).ToArray();
-        var basePath = paths.Length == 0
-            ? Directory.GetCurrentDirectory()
-            : Path.GetDirectoryName(paths[0]) ?? Directory.GetCurrentDirectory();
-        var documents = paths.Select(path =>
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            return PowerShellSourceParser.ParseFile(path, basePath, semanticProfileId);
-        }).ToArray();
-        return (analyzer.AnalyzeDocuments(mode, documents, basePath, targetFramework, capabilities, cancellationToken), documents);
-    }
-
     internal static string[] GetValidatedRuntimeManifestHooks(PowerShellCompilationBuildSpec spec)
     {
         var hooks = spec.Kind == PowerShellCompilationArtifactKind.BinaryModule

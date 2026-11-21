@@ -106,12 +106,13 @@ internal sealed class PowerShellNativeDependencyTypes
     /// <summary>Reads delivered assembly types and manifest-loaded classes only after their bytes are locked.</summary>
     internal static PowerShellNativeDependencyTypes Create(string? manifestPath,
         IEnumerable<PowerShellCompilationDependency> dependencies, PowerShellCompilationDependencyGraph graph,
-        string? moduleRoot = null)
+        string? moduleRoot = null, PowerShellSourceSnapshot? snapshot = null)
     {
         if (string.IsNullOrWhiteSpace(manifestPath) || !File.Exists(manifestPath) ||
             graph.Conflicts.Length != 0 || graph.Cycles.Length != 0) return Empty;
         var root = Path.GetDirectoryName(Path.GetFullPath(manifestPath!))!;
         var graphRoot = Path.GetFullPath(moduleRoot ?? root);
+        snapshot ??= new PowerShellSourceSnapshot(graphRoot, null);
         var rootPrefix = root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
         var candidates = dependencies.Where(dependency =>
             dependency.Kind == PowerShellCompilationDependencyKind.ManagedAssembly && dependency.Exists &&
@@ -174,7 +175,7 @@ internal sealed class PowerShellNativeDependencyTypes
             .Where(static value => !Path.IsPathRooted(value) && value.EndsWith(".ps1", StringComparison.OrdinalIgnoreCase))
             .Select(value => Path.GetFullPath(Path.Combine(root, PowerShellCompiledModuleManifest.NormalizeManifestRelativePath(value))))
             .ToArray();
-        var moduleLocalSources = ReadModuleLocalSources(manifestPath!, root, declaredScripts.Length != 0,
+        var moduleLocalSources = ReadModuleLocalSources(manifestPath!, root, declaredScripts.Length != 0, snapshot,
             out var literalDotSources);
         var moduleLocalClasses = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var path in declaredScripts.Concat(literalDotSources).Distinct(PowerShellCompilationPathSafety.PathComparer))
@@ -191,15 +192,11 @@ internal sealed class PowerShellNativeDependencyTypes
                 node.Disposition != PowerShellCompilationDependencyGraphDisposition.Rejected &&
                 PowerShellCompilationPathSafety.PathEquals(Path.GetFullPath(Path.Combine(graphRoot, node.Identity.Source)), path)).ToArray();
             if (nodes.Length != 1 || string.IsNullOrWhiteSpace(nodes[0].Identity.Sha256)) continue;
-            var lockedBytes = File.ReadAllBytes(path);
-            using var sha = SHA256.Create();
-            var hash = BitConverter.ToString(sha.ComputeHash(lockedBytes)).Replace("-", string.Empty).ToLowerInvariant();
-            if (!hash.Equals(nodes[0].Identity.Sha256, StringComparison.OrdinalIgnoreCase))
+            var document = snapshot.Get(path);
+            if (!string.Equals(snapshot.GetCapturedSha256(path), nodes[0].Identity.Sha256, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("Authored class declaration changed after dependency locking.");
-            using var source = new StreamReader(new MemoryStream(lockedBytes, writable: false), Encoding.UTF8,
-                detectEncodingFromByteOrderMarks: true);
-            var syntax = Parser.ParseInput(source.ReadToEnd(), out _, out var errors);
-            if (errors.Length != 0) continue;
+            if (document.Errors.Length != 0) continue;
+            var syntax = document.SyntaxRoot;
             foreach (var definition in syntax.FindAll(static node => node is TypeDefinitionAst { IsClass: true },
                          searchNestedScriptBlocks: false).OfType<TypeDefinitionAst>()
                          .Where(definition => ReferenceEquals(definition.Parent, syntax.EndBlock)))
@@ -216,7 +213,7 @@ internal sealed class PowerShellNativeDependencyTypes
     }
 
     private static HashSet<string> ReadModuleLocalSources(string manifestPath, string root, bool includeConventional,
-        out HashSet<string> literalDotSources)
+        PowerShellSourceSnapshot snapshot, out HashSet<string> literalDotSources)
     {
         var relativeEntry = PowerShellCompiledModuleManifest.ReadRootModule(manifestPath);
         var paths = new HashSet<string>(PowerShellCompilationPathSafety.PathComparer);
@@ -227,9 +224,10 @@ internal sealed class PowerShellNativeDependencyTypes
         PowerShellCompilationPathSafety.EnsureContained(root, entry, "Module class loader must stay inside the root module.");
         PowerShellCompilationPathSafety.EnsureNoLinksFromFileSystemRoot(entry, "Module class loader must not traverse links.");
         if (!File.Exists(entry)) return paths;
-        if (includeConventional) paths.UnionWith(PowerShellConventionalModuleSourceDiscovery.Analyze(entry).SourcePaths);
-        var ast = Parser.ParseFile(entry, out _, out var errors);
-        if (errors.Length != 0) return paths;
+        if (includeConventional) paths.UnionWith(PowerShellConventionalModuleSourceDiscovery.Analyze(entry, snapshot: snapshot).SourcePaths);
+        var document = snapshot.Get(entry);
+        if (document.Errors.Length != 0) return paths;
+        var ast = document.SyntaxRoot;
         foreach (var command in ast.FindAll(static node => node is CommandAst { InvocationOperator: TokenKind.Dot },
                      searchNestedScriptBlocks: false).OfType<CommandAst>())
         {

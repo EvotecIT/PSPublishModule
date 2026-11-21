@@ -4,12 +4,13 @@ namespace PowerForge;
 
 public sealed partial class PowerShellCompilationDependencyPlanner
 {
-    private static IEnumerable<string> DiscoverLiteralResources(IEnumerable<string> sourceFiles, string moduleRoot)
+    private static IEnumerable<string> DiscoverLiteralResources(IEnumerable<string> sourceFiles, string moduleRoot, PowerShellSourceSnapshot snapshot)
     {
         foreach (var sourceFile in sourceFiles.Distinct(PowerShellCompilationPathSafety.PathComparer))
         {
-            var ast = Parser.ParseFile(sourceFile, out _, out var errors);
-            if (errors.Length > 0) continue;
+            var document = snapshot.Get(sourceFile);
+            if (document.Errors.Length > 0) continue;
+            var ast = document.SyntaxRoot;
             foreach (var literal in ast.FindAll(static node => node is ExpandableStringExpressionAst, searchNestedScriptBlocks: true)
                          .OfType<ExpandableStringExpressionAst>())
             {

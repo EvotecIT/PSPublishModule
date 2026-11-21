@@ -163,11 +163,16 @@ public sealed class BuildPowerShellArtifactCommand : AsyncPSCmdlet
             return;
         }
         PowerShellCompilationResolvedInput resolved;
+        string profileId;
         try
         {
-            var profileId = TargetContract?.SemanticProfileId ?? string.Empty;
+            var kind = Kind ?? (entryPointPath is not null ? PowerShellCompilationArtifactKind.Executable
+                : requestedPaths.Length > 1 ? PowerShellCompilationArtifactKind.Library
+                : PowerShellCompilationInputResolver.InferDefaultArtifactKind(requestedPaths[0]));
+            var mode = TargetContract?.Mode ?? Mode ?? PowerShellCompilationBuildSpec.GetDefaultMode(kind);
+            profileId = TargetContract?.SemanticProfileId ?? string.Empty;
             if (string.IsNullOrWhiteSpace(profileId))
-                profileId = PowerShellCompilationTargetContractService.GetDefaultSemanticProfileId(TargetFramework);
+                profileId = PowerShellCompilationArtifactBuilder.GetDefaultBuildSemanticProfileId(mode, TargetFramework);
             resolved = new PowerShellCompilationInputResolver(profileId).Resolve(requestedPaths, Kind, Mode, entryPointPath);
         }
         catch (Exception ex)
@@ -191,6 +196,7 @@ public sealed class BuildPowerShellArtifactCommand : AsyncPSCmdlet
             IncludeResource = IncludeResource,
             ExcludeResource = ExcludeResource,
             TargetFramework = TargetFramework,
+            SemanticProfileId = profileId,
             RuntimeIdentifier = RuntimeIdentifier,
             SelfContained = SelfContained.IsPresent,
             SingleFile = SingleFile,

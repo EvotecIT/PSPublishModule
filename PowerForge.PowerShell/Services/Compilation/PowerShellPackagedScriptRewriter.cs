@@ -21,13 +21,16 @@ internal static partial class PowerShellPackagedScriptRewriter
         IReadOnlyCollection<string>? embeddedResourceRelativePaths = null,
         string? packagedScriptRootExpression = null,
         bool guardDotSources = false,
-        PowerShellPackagedSourceMapping? sourceMapping = null)
+        PowerShellPackagedSourceMapping? sourceMapping = null,
+        ParsedSourceDocument? document = null)
     {
         var commandPathExpression = string.IsNullOrWhiteSpace(packagedCommandPathExpression)
             ? PackagedCommandPathExpression
             : packagedCommandPathExpression!;
-        var ast = Parser.ParseFile(sourcePath, out var tokens, out var errors);
-        if (errors.Length > 0)
+        document ??= PowerShellSourceParser.ParseHostFile(sourcePath);
+        var ast = document.SyntaxRoot;
+        var tokens = document.Tokens;
+        if (document.Errors.Length > 0)
             throw new InvalidOperationException("Packaged script could not be parsed while preserving script semantics.");
         ValidateEntryRequirements(ast, tokens, sourcePath);
 
@@ -89,10 +92,7 @@ internal static partial class PowerShellPackagedScriptRewriter
             replacements = AddDotSourceGuards(dotSources, Path.GetDirectoryName(Path.GetFullPath(sourcePath))!, replacements);
         replacements = AddPathOperandGuards(ast, replacements);
 
-        // Parser.ParseFile owns PowerShell's encoding detection (including Windows PowerShell's
-        // active-code-page handling for BOM-less files). Reuse that decoded text so the AST
-        // offsets and the buffer being rewritten always describe the same source.
-        var source = new StringBuilder(ast.Extent.Text);
+        var source = new StringBuilder(document.Text);
         foreach (var replacement in replacements)
         {
             sourceMapping?.Record(replacement.StartOffset, replacement.EndOffset - replacement.StartOffset, replacement.Text);
@@ -350,12 +350,13 @@ internal static partial class PowerShellPackagedScriptRewriter
     internal static void ValidateDependency(
         string dependencyPath,
         IReadOnlyCollection<string> embeddedScriptPaths,
-        bool allowDerivedPaths = false)
+        bool allowDerivedPaths = false,
+        ParsedSourceDocument? document = null)
     {
-        var ast = Parser.ParseFile(dependencyPath, out _, out var errors);
-        if (errors.Length > 0)
+        document ??= PowerShellSourceParser.ParseHostFile(dependencyPath);
+        if (document.Errors.Length > 0)
             throw new InvalidOperationException($"Packaged dependency '{dependencyPath}' could not be parsed while validating package semantics.");
-        ValidateDependency(ast, dependencyPath, embeddedScriptPaths, allowDerivedPaths);
+        ValidateDependency(document.SyntaxRoot, dependencyPath, embeddedScriptPaths, allowDerivedPaths);
     }
 
     internal static void ValidateDependency(
@@ -377,12 +378,14 @@ internal static partial class PowerShellPackagedScriptRewriter
         }
     }
 
-    internal static void ValidateRetainedEntryRequirements(string sourcePath, IEnumerable<string> embeddedSources)
+    internal static void ValidateRetainedEntryRequirements(string sourcePath, IEnumerable<string> embeddedSources,
+        ParsedSourceDocument? document = null)
     {
-        var ast = Parser.ParseFile(sourcePath, out var tokens, out var errors);
-        if (errors.Length == 0)
+        document ??= PowerShellSourceParser.ParseHostFile(sourcePath);
+        var ast = document.SyntaxRoot;
+        if (document.Errors.Length == 0)
         {
-            ValidateEntryRequirements(ast, tokens, sourcePath);
+            ValidateEntryRequirements(ast, document.Tokens, sourcePath);
             ValidateReadHostDefaults(ast, sourcePath, embeddedSources);
         }
     }

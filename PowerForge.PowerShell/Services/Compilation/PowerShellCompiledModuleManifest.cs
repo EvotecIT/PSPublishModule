@@ -49,7 +49,8 @@ internal static class PowerShellCompiledModuleManifest
         }
     }
 
-    internal static string[] GetProtectedSourceFiles(string sourcePath, bool includeHybridDependencies, string? moduleManifestPath = null)
+    internal static string[] GetProtectedSourceFiles(string sourcePath, bool includeHybridDependencies, string? moduleManifestPath = null,
+        PowerShellSourceSnapshot? snapshot = null)
     {
         var protectedFiles = new List<string> { Path.GetFullPath(sourcePath) };
         var sourceManifest = ResolveSourceManifest(sourcePath, moduleManifestPath);
@@ -63,14 +64,14 @@ internal static class PowerShellCompiledModuleManifest
         if (includeHybridDependencies)
         {
             var sourceRoot = Path.GetDirectoryName(Path.GetFullPath(sourcePath)) ?? Directory.GetCurrentDirectory();
-            var conventionalSources = PowerShellConventionalModuleSourceDiscovery.Analyze(sourcePath).SourcePaths;
+            var conventionalSources = PowerShellConventionalModuleSourceDiscovery.Analyze(sourcePath, snapshot: snapshot).SourcePaths;
             var runtimeHooks = GetContainedRuntimeScriptFiles(sourcePath, sourceManifest)
                 .Select(reference => Path.GetFullPath(Path.Combine(sourceRoot, NormalizeManifestRelativePath(reference))));
             protectedFiles.AddRange(PowerShellHybridDependencyResolver.DiscoverModuleScopeDependencies(
-                sourcePath, null, null, PowerShellModuleRuntimeAlternatives.Stage));
+                sourcePath, null, null, PowerShellModuleRuntimeAlternatives.Stage, snapshot));
             protectedFiles.AddRange(runtimeHooks.Concat(conventionalSources)
                 .Distinct(PowerShellCompilationPathSafety.PathComparer)
-                .SelectMany(PowerShellHybridDependencyResolver.DiscoverModuleScopeDependencies));
+                .SelectMany(path => PowerShellHybridDependencyResolver.DiscoverModuleScopeDependencies(path, null, null, snapshot: snapshot)));
         }
         return protectedFiles.Distinct(PowerShellCompilationPathSafety.PathComparer).ToArray();
     }

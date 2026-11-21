@@ -15,7 +15,8 @@ internal static class PowerShellHybridDependencyResolver
         Func<string, string?>? contentTransformer = null,
         IEnumerable<string>? explicitDependencyPaths = null,
         IReadOnlyCollection<PowerShellConventionalLoaderIdentity>? conventionalLoaders = null,
-        Action<string, string>? verifyCopiedInput = null)
+        Action<string, string>? verifyCopiedInput = null,
+        PowerShellSourceSnapshot? snapshot = null)
     {
         var sourceRoot = Path.GetFullPath(Path.GetDirectoryName(sourcePath) ?? Directory.GetCurrentDirectory());
         var comparer = PowerShellCompilationPathSafety.PathComparer;
@@ -26,7 +27,7 @@ internal static class PowerShellHybridDependencyResolver
             .Concat(explicitDependencyPaths ?? Array.Empty<string>());
         var copied = new List<PowerShellHybridDependencyCopy>();
         foreach (var dependency in DiscoverDependenciesCore(sourcePath, discoveryEntries, moduleScopeOnly: true, conventionalLoaders,
-                     runtimeAlternatives: PowerShellModuleRuntimeAlternatives.Stage))
+                     runtimeAlternatives: PowerShellModuleRuntimeAlternatives.Stage, snapshot: snapshot))
         {
             if (entryPaths.Contains(dependency))
                 continue;
@@ -65,9 +66,10 @@ internal static class PowerShellHybridDependencyResolver
         bool allowDerivedPaths = false,
         PowerShellModuleRuntimeAlternatives runtimeAlternatives = PowerShellModuleRuntimeAlternatives.Reject,
         IReadOnlyDictionary<string, ParsedSourceDocument>? sourceDocuments = null,
-        string? semanticProfileId = null)
+        string? semanticProfileId = null,
+        PowerShellSourceSnapshot? snapshot = null)
         => DiscoverDependenciesCore(sourcePath, additionalEntryPaths, moduleScopeOnly: false,
-            conventionalLoaders, allowDerivedPaths, runtimeAlternatives, sourceDocuments, semanticProfileId);
+            conventionalLoaders, allowDerivedPaths, runtimeAlternatives, sourceDocuments, semanticProfileId, snapshot);
 
     internal static string[] DiscoverModuleScopeDependencies(string sourcePath)
         => DiscoverModuleScopeDependencies(sourcePath, null, null);
@@ -75,16 +77,18 @@ internal static class PowerShellHybridDependencyResolver
     internal static string[] DiscoverModuleScopeDependencies(string sourcePath,
         IEnumerable<string>? additionalEntryPaths,
         IReadOnlyCollection<PowerShellConventionalLoaderIdentity>? conventionalLoaders,
-        PowerShellModuleRuntimeAlternatives runtimeAlternatives = PowerShellModuleRuntimeAlternatives.Reject)
+        PowerShellModuleRuntimeAlternatives runtimeAlternatives = PowerShellModuleRuntimeAlternatives.Reject,
+        PowerShellSourceSnapshot? snapshot = null)
         => DiscoverDependenciesCore(sourcePath, additionalEntryPaths, moduleScopeOnly: true,
-            conventionalLoaders, runtimeAlternatives: runtimeAlternatives);
+            conventionalLoaders, runtimeAlternatives: runtimeAlternatives, snapshot: snapshot);
 
-    internal static string[] DiscoverRetainedModuleAlternatives(string sourcePath, IEnumerable<string> compilationSources)
+    internal static string[] DiscoverRetainedModuleAlternatives(string sourcePath, IEnumerable<string> compilationSources,
+        PowerShellSourceSnapshot? snapshot = null)
     {
         // Traverse the alternate branches independently so a path reached by both
         // a static loader and a switch cannot disappear from the overlap check.
         var alternatives = DiscoverDependenciesCore(sourcePath, null, moduleScopeOnly: true, conventionalLoaders: null,
-                runtimeAlternatives: PowerShellModuleRuntimeAlternatives.StageAlternativesOnly)
+                runtimeAlternatives: PowerShellModuleRuntimeAlternatives.StageAlternativesOnly, snapshot: snapshot)
             .Where(path => !PowerShellCompilationPathSafety.PathEquals(path, Path.GetFullPath(sourcePath))).ToArray();
         var overlap = alternatives.Intersect(compilationSources, PowerShellCompilationPathSafety.PathComparer).FirstOrDefault();
         if (overlap is not null)
@@ -101,7 +105,8 @@ internal static class PowerShellHybridDependencyResolver
         bool allowDerivedPaths = false,
         PowerShellModuleRuntimeAlternatives runtimeAlternatives = PowerShellModuleRuntimeAlternatives.Reject,
         IReadOnlyDictionary<string, ParsedSourceDocument>? sourceDocuments = null,
-        string? semanticProfileId = null)
+        string? semanticProfileId = null,
+        PowerShellSourceSnapshot? snapshot = null)
     {
         var primarySource = Path.GetFullPath(sourcePath);
         var sourceRoot = Path.GetFullPath(Path.GetDirectoryName(sourcePath) ?? Directory.GetCurrentDirectory());
@@ -126,6 +131,7 @@ internal static class PowerShellHybridDependencyResolver
             ScriptBlockAst ast;
             ParsedSourceDocument? document = null;
             sourceDocuments?.TryGetValue(current, out document);
+            document ??= snapshot?.Get(current);
             if (document is null && semanticProfileId is not null)
                 document = PowerShellSourceParser.ParseFile(current, sourceRoot, semanticProfileId);
             if (document is not null)

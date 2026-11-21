@@ -59,7 +59,10 @@ internal static partial class PowerShellBinaryCmdletSourceGenerator
         string[]? exportedFunctions,
         string? targetFramework,
         string semanticProfileId = PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId,
-        PowerShellCompilationCapability capabilities = PowerShellCompilationCapabilities.BinaryModule)
+        PowerShellCompilationCapability capabilities = PowerShellCompilationCapabilities.BinaryModule,
+        IReadOnlyList<ParsedSourceDocument>? sourceDocuments = null,
+        PowerShellCompilationPlan? plan = null,
+        PowerShellTypedCompilationTranspiler? transpiler = null)
     {
         var selected = exportedFunctions?.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var invalid = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -111,7 +114,8 @@ internal static partial class PowerShellBinaryCmdletSourceGenerator
 
         if (invalid.Count == 0)
             return typed;
-        var filtered = new PowerShellTypedCompilationTranspiler(Array.Empty<PowerShellCompilationCommandProviderContract>(), semanticProfileId).TranspileExcluding(
+        transpiler ??= new PowerShellTypedCompilationTranspiler(Array.Empty<PowerShellCompilationCommandProviderContract>(), semanticProfileId);
+        var filtered = transpiler.TranspileExcluding(
             typed.SourcePaths,
             typed.NamespaceName,
             typed.TypeName,
@@ -119,7 +123,8 @@ internal static partial class PowerShellBinaryCmdletSourceGenerator
             invalid,
             capabilities,
             nativeDeclarationTimingSourcePaths: typed.NativeDeclarationTimingSourcePaths,
-            guardedExecutableEntryPath: typed.GuardedExecutableEntryPath);
+            guardedExecutableEntryPath: typed.GuardedExecutableEntryPath,
+            analyzedDocuments: sourceDocuments, analysisPlan: plan);
         var result = new PowerShellTypedCompilationResult(
             filtered.SourcePath,
             filtered.NamespaceName,

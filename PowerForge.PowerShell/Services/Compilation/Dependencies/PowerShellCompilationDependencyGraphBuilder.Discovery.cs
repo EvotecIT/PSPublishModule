@@ -16,9 +16,10 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
         string? runtimeIdentifier)
     {
         if (!File.Exists(sourcePath)) return;
-        var text = File.ReadAllText(sourcePath);
-        var ast = Parser.ParseFile(sourcePath, out _, out var errors);
-        if (errors.Length > 0) return;
+        var document = _snapshot.Get(sourcePath);
+        if (document.Errors.Length > 0) return;
+        var text = document.Text;
+        var ast = document.SyntaxRoot;
         var directory = Path.GetDirectoryName(sourcePath) ?? _moduleRoot;
 
         foreach (var usingStatement in ast.FindAll(static node => node is UsingStatementAst, searchNestedScriptBlocks: false)

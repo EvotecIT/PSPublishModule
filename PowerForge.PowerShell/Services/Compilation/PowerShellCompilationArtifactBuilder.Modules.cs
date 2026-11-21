@@ -10,7 +10,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         string compiledAssembly,
         PowerShellTypedCompilationResult typed,
         string outputDirectory,
-        Action<string, string> verifyCopiedInput)
+        Action<string, string> verifyCopiedInput,
+        PowerShellSourceSnapshot snapshot)
     {
         var moduleDirectory = Path.Combine(outputDirectory, artifactName);
         Directory.CreateDirectory(moduleDirectory);
@@ -20,7 +21,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         var files = new List<PowerShellCompilationArtifactFile>();
         var sourceRoot = Path.GetDirectoryName(Path.GetFullPath(spec.SourcePath)) ?? Directory.GetCurrentDirectory();
         var conventionalDiscovery = PowerShellConventionalModuleSourceDiscovery.Analyze(spec.SourcePath,
-            rejectChangingFileLists: spec.ResourceMode != PowerShellCompilationResourceMode.CompleteModule);
+            rejectChangingFileLists: spec.ResourceMode != PowerShellCompilationResourceMode.CompleteModule, snapshot: snapshot);
         var runtimeHooks = PowerShellCompiledModuleManifest.GetContainedRuntimeScriptFiles(spec.SourcePath, spec.ModuleManifestPath)
             .Select(reference => Path.GetFullPath(Path.Combine(
                 sourceRoot,
@@ -28,7 +29,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             .ToArray();
         var retainedSourcePaths = PowerShellHybridDependencyResolver.DiscoverModuleScopeDependencies(
             spec.SourcePath, runtimeHooks.Concat(typed.SourcePaths), conventionalDiscovery.Loaders,
-            PowerShellModuleRuntimeAlternatives.Stage);
+            PowerShellModuleRuntimeAlternatives.Stage, snapshot);
         File.WriteAllText(
             modulePath,
             PowerShellHybridModuleComposer.ComposeRoot(
@@ -36,7 +37,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 Path.GetFileName(assemblyPath),
                 typed,
                 manifestControlsExports: !string.IsNullOrWhiteSpace(spec.ModuleManifestPath) || HasSiblingModuleManifest(spec.SourcePath),
-                retainedSourcePaths: retainedSourcePaths),
+                retainedSourcePaths: retainedSourcePaths, snapshot: snapshot),
             new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
         files.Add(CreateArtifactFile(modulePath, "PrimaryModule"));
         files.Add(CreateArtifactFile(assemblyPath, "TypedAssembly"));
@@ -68,14 +69,14 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 $"Conventional module source directory '{sourceDirectory}' escapes the generated module root.");
             Directory.CreateDirectory(targetDirectory);
         }
-        var wrappedCompiledMethods = PowerShellHybridModuleComposer.GetWrappedCompiledMethodKeys(spec.SourcePath, typed);
+        var wrappedCompiledMethods = PowerShellHybridModuleComposer.GetWrappedCompiledMethodKeys(spec.SourcePath, typed, snapshot.Get(spec.SourcePath));
         foreach (var dependency in PowerShellHybridDependencyResolver.CopyDependencies(
                      spec.SourcePath,
                      moduleDirectory,
                      runtimeHooks,
-                     path => PowerShellHybridModuleComposer.ComposeDependency(path, typed, wrappedCompiledMethods),
+                     path => PowerShellHybridModuleComposer.ComposeDependency(path, typed, wrappedCompiledMethods, document: snapshot.Get(path)),
                      typed.SourcePaths.Where(path => !PowerShellCompilationPathSafety.PathEquals(path, spec.SourcePath)),
-                     conventionalLoaders: conventionalDiscovery.Loaders, verifyCopiedInput: verifyCopiedInput))
+                     conventionalLoaders: conventionalDiscovery.Loaders, verifyCopiedInput: verifyCopiedInput, snapshot: snapshot))
             files.Add(CreateArtifactFile(
                 dependency.Path,
                 dependency.IsGenerated ? "GeneratedModuleDependency" : "ModuleDependency"));

@@ -1,4 +1,3 @@
-using System.Management.Automation.Language;
 using System.Text;
 
 namespace PowerForge;
@@ -8,6 +7,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
     private static string GeneratePackagedScript(
         string sourcePath,
         PackagedSourceSet packagedSources,
+        ParsedSourceDocument document,
         PowerShellTypedCompilationResult? hybrid = null,
         PowerShellPackagedSourceMapping? sourceMapping = null)
     {
@@ -25,7 +25,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 ? "$([System.IO.Path]::GetDirectoryName([PowerForge.Compiled.PowerForgePackagedEntryPoint]::Path))"
                 : null,
             guardDotSources: true,
-            sourceMapping: sourceMapping);
+            sourceMapping: sourceMapping,
+            document: document);
         return hybrid is null ? rewritten : PowerShellHybridModuleComposer.ComposeExecutableRoot(rewritten, sourcePath, hybrid, sourceMapping);
     }
 
@@ -35,6 +36,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         IEnumerable<string> compilationSourcePaths,
         IEnumerable<PowerShellCompilationDependency> dependencyPlan,
         IReadOnlyDictionary<string, string> inputHashes,
+        PowerShellSourceSnapshot snapshot,
         PowerShellTypedCompilationResult? hybrid = null,
         bool nativeScriptEntry = false)
     {
@@ -99,16 +101,17 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             var dependencyHash = ComputeSha256(target);
             VerifyStagedPayload(dependency, relativePath, dependencyHash, inputHashes);
 
-            var ast = Parser.ParseFile(target, out var tokens, out var parseErrors);
-            if (parseErrors.Length != 0)
+            var document = snapshot.Get(dependency);
+            if (document.Errors.Length != 0)
                 throw new InvalidOperationException($"Packaged dependency '{dependency}' could not be parsed while validating package semantics.");
-            PowerShellPackagedScriptRewriter.ValidateDependency(ast, dependency, embeddedPaths, allowDerivedPaths: true);
+            PowerShellPackagedScriptRewriter.ValidateDependency(document.SyntaxRoot, dependency, embeddedPaths, allowDerivedPaths: true);
             var composed = hybrid is null ? null : PowerShellHybridModuleComposer.ComposeDependency(
-                dependency, hybrid, hybridCompiledMethods!, executable: true, stagedSource: (ast, tokens));
-            var retained = composed ?? ast.Extent.Text;
+                dependency, hybrid, hybridCompiledMethods!, executable: true, document: document);
+            var retained = composed ?? document.Text;
             var guarded = PowerShellPackagedScriptRewriter.RewriteDependencyDotSources(
                 retained, dependency, sourceRoot, embeddedPaths);
-            if (composed is not null || !guarded.Equals(retained, StringComparison.Ordinal))
+            if (composed is not null || !guarded.Equals(retained, StringComparison.Ordinal) ||
+                !File.ReadAllText(target).Equals(document.Text, StringComparison.Ordinal))
             {
                 File.WriteAllText(target, guarded, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
                 dependencyHash = ComputeSha256(target);

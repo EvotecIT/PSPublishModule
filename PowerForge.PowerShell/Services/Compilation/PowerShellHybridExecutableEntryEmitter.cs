@@ -68,12 +68,12 @@ internal static class PowerShellHybridExecutableEntryEmitter
         return source.ToString();
     }
 
-    internal static string ComposeScript(string packagedSource, string authoredSourcePath, PowerShellTypedExecutableCompilation compiled,
+    internal static string ComposeScript(string packagedSource, ParsedSourceDocument document, PowerShellTypedExecutableCompilation compiled,
         PowerShellPackagedSourceMapping? sourceMapping = null)
     {
-        var authored = Parser.ParseFile(authoredSourcePath, out _, out var authoredErrors);
+        var authored = document.SyntaxRoot;
         var packaged = Parser.ParseInput(packagedSource, out _, out var packagedErrors);
-        if (authoredErrors.Length != 0 || packagedErrors.Length != 0 ||
+        if (document.Errors.Length != 0 || packagedErrors.Length != 0 ||
             authored.EndBlock?.Statements is not { Count: > 0 } authoredStatements ||
             packaged.EndBlock is null || packaged.EndBlock.Statements.Count < authoredStatements.Count)
             throw new InvalidOperationException("The compiled Hybrid entry no longer has a valid authored statement sequence.");
