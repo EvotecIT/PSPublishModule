@@ -185,7 +185,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Equal(0, implicitUnsafe.ExitCode); Assert.Contains("guarded-refusal", implicitUnsafe.StandardOutput);
         Assert.DoesNotContain("implicit:", implicitUnsafe.StandardOutput);
         Assert.All(result.Manifest!.Dependencies, static dependency =>
-            Assert.DoesNotContain("Native script-root reads", dependency.Note));
+            Assert.DoesNotContain("Source-layout reads", dependency.Note));
     }
 
     [WindowsX64Fact]

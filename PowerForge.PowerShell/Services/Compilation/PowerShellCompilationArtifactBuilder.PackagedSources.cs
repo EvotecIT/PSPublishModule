@@ -50,6 +50,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             .Select(static dependency => Path.GetFullPath(dependency.SourcePath!))
             .Where(path => !compiled.Contains(path))
             .ToArray();
+        var mirrorSourceResources = nativeScriptEntry || retainedScripts.Length > 0;
         var scriptDependencies = compiled.Concat(retainedScripts)
             .Select(Path.GetFullPath)
             .Where(path => !PowerShellCompilationPathSafety.PathEquals(path, fullSourcePath))
@@ -60,7 +61,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             .Where(dependency => dependency.Exists &&
                 dependency.SourcePath is not null &&
                 (dependency.Disposition == PowerShellCompilationDependencyDisposition.EmbeddedAndExtracted ||
-                 nativeScriptEntry && dependency.Disposition == PowerShellCompilationDependencyDisposition.CopiedAdjacent) &&
+                 mirrorSourceResources && dependency.Disposition == PowerShellCompilationDependencyDisposition.CopiedAdjacent) &&
                 (dependency.Selection is PowerShellCompilationDependencySelection.Required or
                     PowerShellCompilationDependencySelection.ExplicitInclude or
                     PowerShellCompilationDependencySelection.Inferred or
@@ -131,7 +132,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         {
             var dependency = resourceDependencies[index];
             PowerShellCompilationPathSafety.EnsureContained(sourceRoot, dependency.Path, $"Packaged resource '{dependency.RelativePath}' escapes the executable entrypoint root.");
-            if (nativeScriptEntry)
+            if (mirrorSourceResources)
                 PowerShellCompilationPathSafety.EnsureNoLinks(sourceRoot, dependency.Path,
                     $"Native source-layout resource '{dependency.RelativePath}' cannot traverse a link.");
             var fileName = $"Resource{index:D4}.bin";
@@ -160,7 +161,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             scriptDependencies,
             resourcePaths,
             usesExtractedRoot,
-            nativeMirroredResources: nativeScriptEntry
+            nativeMirroredResources: mirrorSourceResources
                 ? resourceDependencies.Where(static dependency => dependency.Metadata.Disposition == PowerShellCompilationDependencyDisposition.CopiedAdjacent)
                     .Select(static dependency => dependency.Metadata).ToArray()
                 : Array.Empty<PowerShellCompilationDependency>(),

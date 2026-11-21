@@ -14,7 +14,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         return dependencies.Select(dependency => !mirrored.Contains(dependency) ? dependency :
             new PowerShellCompilationDependency(dependency.Name, dependency.SourcePath, dependency.RelativePath,
                 dependency.Kind, dependency.Discovery, dependency.Disposition, dependency.Exists, dependency.SizeBytes,
-                dependency.Note + " Native script-root reads use an immutable embedded/extracted source-layout snapshot of this resource. " +
+                dependency.Note + " Source-layout reads use an immutable embedded/extracted snapshot of this resource. " +
                 "The adjacent resource remains delivered; editing it does not update that bundled snapshot.", dependency.Selection))
             .ToArray();
     }

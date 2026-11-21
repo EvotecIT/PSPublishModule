@@ -57,10 +57,10 @@ internal static partial class PowerShellPackagedScriptRewriter
         var invocationPaths = FindInvocationPaths(ast).ToArray();
         ValidateHostInteraction(ast, scriptCalls.Keys);
         ValidateReadHostDefaults(ast, sourcePath, embeddedScriptPaths ?? Array.Empty<string>());
-        var parameterBindingPaths = FindParameterBindingPaths(ast).ToArray();
+        var parameterBindingPaths = FindParameterBindingPaths(ast).ToHashSet();
         var dependencyLoadPaths = string.IsNullOrWhiteSpace(dependencyCommandPathExpression)
             ? Array.Empty<VariableExpressionAst>()
-            : FindDependencyLoadPaths(ast).ToArray();
+            : FindDependencyLoadPaths(ast).Where(path => !parameterBindingPaths.Contains(path)).Distinct().ToArray();
         var embeddedResourcePaths = string.IsNullOrWhiteSpace(dependencyCommandPathExpression)
             ? Array.Empty<VariableExpressionAst>()
             : FindEmbeddedResourcePaths(ast, embeddedResourceRelativePaths ?? Array.Empty<string>()).ToArray();
@@ -81,9 +81,7 @@ internal static partial class PowerShellPackagedScriptRewriter
                     ? "$([System.IO.Path]::GetDirectoryName(" + dependencyCommandPathExpression + "))"
                     : dependencyCommandPathExpression!)))
             .Concat(embeddedResourcePaths
-                .Where(path => !dependencyLoadPaths.Any(dependency =>
-                    dependency.Extent.StartOffset == path.Extent.StartOffset &&
-                    dependency.Extent.EndOffset == path.Extent.EndOffset))
+                .Where(path => !parameterBindingPaths.Contains(path) && !dependencyLoadPaths.Contains(path))
                 .Select(path => new SourceReplacement(
                 path.Extent.StartOffset,
                 path.Extent.EndOffset,

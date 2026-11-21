@@ -235,8 +235,7 @@ public sealed partial class PowerShellCompilationDependencyPlanner
 
         var packagedExecutable = kind == PowerShellCompilationArtifactKind.Executable &&
             mode is PowerShellCompilationMode.Package or PowerShellCompilationMode.Hybrid;
-        var extractResourcesWithSource = packagedExecutable &&
-            (mode == PowerShellCompilationMode.Package || runtimeGraph.Except(compilationGraph, PowerShellCompilationPathSafety.PathComparer).Any());
+        var extractResourcesWithSource = packagedExecutable && mode == PowerShellCompilationMode.Package;
         CollectConfiguredPayload(
             root,
             source,

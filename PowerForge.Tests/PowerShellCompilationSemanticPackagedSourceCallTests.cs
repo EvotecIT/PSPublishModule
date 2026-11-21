@@ -7,7 +7,7 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
     public async Task PackagedSourceCallsPreserveChildScopeAndReceiveArgumentsOnBothHosts()
     {
         using var fixture = OracleFixture.Create("""
-            param([string] $Label, [switch] $Each, [string] $OverridePath)
+            param([string] $Label, [switch] $Each, [string] $OverridePath, [string] $ResourcePath = "$PSScriptRoot/label.txt")
             $ErrorActionPreference = 'Stop'
             $directory = Split-Path -Parent $MyInvocation.MyCommand.Path
             $value = 'outer'
@@ -23,8 +23,9 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
                 $results = & $scriptPath -Label $Label 3>$null 4>$null 5>$null
             }
             function Get-Tag { return 'parent' }
+            $defaultResource = Get-Content -LiteralPath $ResourcePath -Raw
             foreach ($result in $results) {
-                "$result|$value|$(Get-Tag)"
+                "$result|$value|$(Get-Tag)|$defaultResource"
             }
             Write-Warning 'visible warning'
             Write-Verbose 'visible verbose' -Verbose
@@ -73,9 +74,9 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
                 Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe");
             foreach (var (arguments, expected) in new[]
             {
-                (new[] { "-Label", "Ada" }, new[] { "False|child:Ada:bundled|outer|parent",
+                (new[] { "-Label", "Ada" }, new[] { "False|child:Ada:bundled|outer|parent|bundled",
                     "WARNING: visible warning", "VERBOSE: visible verbose", "DEBUG: visible debug" }),
-                (new[] { "-Label", "Ada", "-Each" }, new[] { "False|child:Ada1:bundled|outer|parent", "False|child:Ada2:bundled|outer|parent",
+                (new[] { "-Label", "Ada", "-Each" }, new[] { "False|child:Ada1:bundled|outer|parent|bundled", "False|child:Ada2:bundled|outer|parent|bundled",
                     "WARNING: visible warning", "VERBOSE: visible verbose", "DEBUG: visible debug" })
             })
             {
@@ -97,5 +98,59 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
         Assert.Equal(1, rejected.Code);
         Assert.Empty(rejected.Output);
         Assert.Contains("selected staged source file", rejected.Error, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [PinnedSemanticHostFact]
+    [Trait("Category", "PowerShellCompilerGate")]
+    public async Task PackagedChildCallsFromDotSourcedFilesPreserveCallerDeclarationTiming()
+    {
+        using var fixture = OracleFixture.Create("""
+            . "$PSScriptRoot/Loader.ps1"
+            function Get-EntryTag { return 'entry' }
+            # Both have executed after their declaration.
+            "$(Get-LoaderTag)|$(Get-EntryTag)"
+            """);
+        File.WriteAllText(Path.Combine(fixture.RootPath, "Loader.ps1"), """
+            & "$PSScriptRoot/Child.ps1"
+            function Get-LoaderTag { return 'loader' }
+            """);
+        File.WriteAllText(Path.Combine(fixture.RootPath, "Child.ps1"), """
+            $entryVisible = [bool](Get-Command Get-EntryTag -ErrorAction SilentlyContinue)
+            $loaderVisible = [bool](Get-Command Get-LoaderTag -ErrorAction SilentlyContinue)
+            "$entryVisible|$loaderVisible"
+            """);
+        var input = new PowerShellCompilationInputResolver().Resolve(fixture.ScriptPath,
+            PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Hybrid);
+        var output = Path.Combine(fixture.RootPath, "hybrid");
+        var service = new PowerShellCompilationHostService();
+        var check = service.Check(new PowerShellCompilationCheckRequest(fixture.ScriptPath)
+        {
+            Mode = input.Mode,
+            OutputDirectory = output
+        });
+        Assert.True(check.CanProceed, string.Join(Environment.NewLine, check.Diagnostics.Select(issue => issue.Message)));
+        var build = service.Compile(new PowerShellCompilationBuildSpec(fixture.ScriptPath, output, "LoaderChildCall", input.Kind, input.Mode)
+        {
+            CompilationSourcePaths = input.CompilationSourceFiles,
+            RuntimeSourcePaths = input.SourceFiles
+        }, check.ProposedReview!);
+        Assert.True(build.Succeeded, build.Error + Environment.NewLine + build.BuildOutput);
+        Assert.Equal(2, build.Manifest!.UnitDispositionLedger!.Entries.Count(entry =>
+            entry.EmittedClrMethod && entry.Name is "Get-EntryTag" or "Get-LoaderTag"));
+
+        var packaged = await ObserveExitedConsole(build.ArtifactPath!, fixture.RootPath, Array.Empty<string>(), string.Empty);
+        foreach (var pin in PowerShellCompilationSemanticHostArtifactPinCatalog.Pins)
+        {
+            var host = StrictStreamingHostPath(pin) ??
+                Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe");
+            var original = await ObserveExitedConsole(host, fixture.RootPath,
+                new[] { "-NoProfile", "-NonInteractive", "-File", fixture.ScriptPath }, string.Empty);
+            Assert.Equal(0, original.Code);
+            Assert.Empty(original.Error);
+            Assert.Equal("False|False\r\nloader|entry", original.Output.TrimEnd());
+            Assert.Equal(original.Code, packaged.Code);
+            Assert.Equal(original.Error, packaged.Error);
+            Assert.Equal(original.Output, packaged.Output);
+        }
     }
 }

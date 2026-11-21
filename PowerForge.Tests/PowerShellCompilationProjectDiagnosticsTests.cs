@@ -195,6 +195,29 @@ public sealed class PowerShellCompilationProjectDiagnosticsTests
     }
 
     [Fact]
+    public void Check_LocatesMixedScopeRejectionInCalledScript()
+    {
+        using var fixture = Fixture.Create("""
+            . "$PSScriptRoot/Shared.ps1"
+            & "$PSScriptRoot/Child.ps1"
+            """, PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Hybrid);
+        File.WriteAllText(Path.Combine(fixture.Root, "Shared.ps1"), "function Get-Number { return 7 }");
+        var child = Path.Combine(fixture.Root, "Child.ps1");
+        File.WriteAllText(child, "# Dedicated child scope\n. \"$PSScriptRoot/Shared.ps1\"\n");
+
+        var result = new PowerShellCompilationHostService().Check(new PowerShellCompilationCheckRequest(fixture.Source)
+        {
+            Mode = PowerShellCompilationMode.Hybrid
+        });
+        Assert.False(result.CanProceed);
+        var issue = Assert.Single(result.Diagnostics);
+        Assert.Equal(child, issue.FilePath);
+        Assert.Equal(2, issue.Line);
+        Assert.Equal(3, issue.Column);
+        Assert.Contains("also in the caller's compilation set", issue.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ProjectExplain_ReportsMissingAssemblyWithoutRejectingTypedUnitSemantics()
     {
         using var fixture = Fixture.Create("function Get-Number { return 42 }",

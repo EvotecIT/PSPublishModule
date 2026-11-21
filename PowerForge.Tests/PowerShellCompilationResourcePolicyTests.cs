@@ -281,7 +281,7 @@ public sealed class PowerShellCompilationResourcePolicyTests
         Assert.Contains(plan.Dependencies, dependency =>
             dependency.RelativePath == "Private/settings.json" &&
             dependency.Selection == PowerShellCompilationDependencySelection.Inferred &&
-            dependency.Disposition == PowerShellCompilationDependencyDisposition.EmbeddedAndExtracted);
+            dependency.Disposition == PowerShellCompilationDependencyDisposition.CopiedAdjacent);
         var graph = plan.DependencyGraph!;
         var module = Assert.Single(graph.Nodes, node => node.Identity.Name == "Microsoft.PowerShell.Utility");
         var edge = Assert.Single(graph.Edges, edge =>

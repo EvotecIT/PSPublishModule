@@ -53,13 +53,16 @@ public sealed partial class PowerShellTypedCompilationTranspiler
         if (capabilities != PowerShellCompilationCapabilities.HybridExecutable) declarationPaths.Clear();
         else if (!string.IsNullOrWhiteSpace(guardedExecutableEntryPath))
         {
-            var entry = Path.GetFullPath(guardedExecutableEntryPath!);
-            if (parsedFiles.FirstOrDefault(file => PowerShellCompilationPathSafety.PathEquals(file.Path, entry)) is { } entryFile &&
-                (nativeScriptEntry || entryFile.Ast.Find(static node =>
+            // Any caller-scope source can invoke a child before another file has declared its functions.
+            if (parsedFiles.Any(file => file.Ast.Find(static node =>
                     node is CommandAst command && PowerShellCompilationSourcePathPlanner.PlanScriptCall(command) is not null,
                     searchNestedScriptBlocks: false) is not null))
-                // A retained child can discover caller functions before the entry declares them.
-                declarationPaths.Add(entry);
+                declarationPaths.UnionWith(parsedFiles.Select(static file => file.Path));
+            else if (nativeScriptEntry)
+            {
+                var entry = Path.GetFullPath(guardedExecutableEntryPath!);
+                if (parsedFiles.Any(file => PowerShellCompilationPathSafety.PathEquals(file.Path, entry))) declarationPaths.Add(entry);
+            }
         }
         // Runtime-selected files share the authored export scope. Method-backed
         // commands must be declared as functions so PowerShell resolves those exports.
