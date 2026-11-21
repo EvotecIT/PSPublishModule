@@ -189,6 +189,35 @@ public sealed class PowerForgeCliModuleRestoreTests
         Assert.True(File.Exists(lockPath));
     }
 
+    [Fact]
+    public async Task InstallFromFeedPlansAndInstallsWithoutARequirementsFile()
+    {
+        using var temp = new TemporaryDirectory();
+        var feed = Path.Combine(temp.Path, "feed");
+        var destination = Path.Combine(temp.Path, "modules");
+        WritePackage(feed, "App", "1.0.0", new TestDependency("Leaf", "[1.0.0]", null));
+        WritePackage(feed, "App", "2.0.0");
+        WritePackage(feed, "Leaf", "1.0.0");
+        var arguments = new[] { "App", "--destination", destination, "--source", feed, "--version", "1.0.0" };
+
+        using var plan = await RunCliAsync(temp.Path, 0, [.. arguments, "--plan"], "install");
+        Assert.Equal("module.install", plan.RootElement.GetProperty("command").GetString());
+        Assert.Equal("1.0.0", plan.RootElement.GetProperty("result").GetProperty("version").GetString());
+        Assert.False(Directory.Exists(destination));
+
+        using var install = await RunCliAsync(temp.Path, 0, arguments, "install");
+        var result = install.RootElement.GetProperty("result");
+        Assert.Equal("Installed", result.GetProperty("status").GetString());
+        Assert.Equal("Leaf", Assert.Single(result.GetProperty("dependencyResults").EnumerateArray()).GetProperty("name").GetString());
+        Assert.Equal("# App 1.0.0", File.ReadAllText(Path.Combine(destination, "App", "1.0.0", "App.psm1")));
+        Assert.True(File.Exists(Path.Combine(destination, "Leaf", "1.0.0", "Leaf.psd1")));
+        Assert.False(Directory.Exists(Path.Combine(destination, "App", "2.0.0")));
+
+        using var latest = await RunCliAsync(temp.Path, 0, ["App", "--destination", destination, "--source", feed], "install");
+        Assert.Equal("2.0.0", latest.RootElement.GetProperty("result").GetProperty("version").GetString());
+        Assert.True(File.Exists(Path.Combine(destination, "App", "2.0.0", "App.psd1")));
+    }
+
     private static string WritePackage(string feed, string name, string version,
         TestDependency? dependency = null, string? content = null, string? manifestExports = null)
     {
@@ -203,7 +232,7 @@ public sealed class PowerForgeCliModuleRestoreTests
         return path;
     }
 
-    private static async Task<JsonDocument> RunCliAsync(string currentDirectory, int expectedExitCode, string[] args)
+    private static async Task<JsonDocument> RunCliAsync(string currentDirectory, int expectedExitCode, string[] args, string action = "restore")
     {
         var root = PowerForgeCliTestHost.FindRepositoryRoot();
         var assembly = PowerForgeCliTestHost.ResolveAssemblyPath(root,
@@ -215,7 +244,7 @@ public sealed class PowerForgeCliModuleRestoreTests
             RedirectStandardOutput = true,
             RedirectStandardError = true
         };
-        foreach (var argument in new[] { assembly, "module", "restore", "--output", "json" }.Concat(args))
+        foreach (var argument in new[] { assembly, "module", action, "--output", "json" }.Concat(args))
             startInfo.ArgumentList.Add(argument);
         using var process = Process.Start(startInfo)!;
         var stdout = process.StandardOutput.ReadToEndAsync();

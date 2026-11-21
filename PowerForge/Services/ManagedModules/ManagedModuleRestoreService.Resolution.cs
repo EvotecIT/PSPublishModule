@@ -103,7 +103,7 @@ internal sealed partial class ManagedModuleRestoreService
                 .FirstOrDefault(static version => version is not null);
             if (exact is not null && repository.Kind != ManagedModuleRepositoryKind.LocalFolder)
                 return constraints.All(constraint => constraint.Range.IsSatisfiedBy(exact))
-                    ? new[] { ValidateVersion(name, exact) }
+                    ? new[] { ManagedModuleStandaloneInput.ValidateVersion(name, exact) }
                     : Array.Empty<string>();
 
             if (!listings.TryGetValue(name, out var versions))

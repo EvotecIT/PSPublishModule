@@ -21,7 +21,7 @@ internal sealed partial class ManagedModuleRestoreService(ILogger logger)
             throw new ArgumentException("The module destination must be a directory.");
 
         var requirements = ReadRequirements(requirementsPath);
-        var repository = ResolveRepository(request.Source);
+        var repository = ManagedModuleStandaloneInput.ResolveRepository(request.Source, "Restore");
         var restoreLock = request.WriteLock ? null : ReadLock(lockPath, requirements, repository.Source);
         if (request.WriteLock && !request.Plan && !Directory.Exists(Path.GetDirectoryName(lockPath)))
             throw new DirectoryNotFoundException($"Create the parent directory of '{lockPath}' before writing a lock.");
@@ -111,7 +111,7 @@ internal sealed partial class ManagedModuleRestoreService(ILogger logger)
             throw new InvalidOperationException($"Package metadata is missing for '{download.Name}' version '{download.Version}'.");
         return new PreparedPackage(
             new ManagedModuleRestorePackage(
-                ValidateName(metadata.Id), download.Version,
+                ManagedModuleStandaloneInput.ValidateName(metadata.Id), download.Version,
                 ManagedModulePackageIntegrity.NormalizeSha256(download.PackageSha256) ??
                     throw new InvalidOperationException($"Package hash is missing for '{download.Name}'.")),
             metadata);
