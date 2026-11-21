@@ -352,6 +352,7 @@ public sealed partial class PowerShellCompilationInputResolverTests
 
     [Theory]
     [InlineData("-Exclude $Excluded", "Exclude")]
+    [InlineData("-Exclude @(Get-Variable Excluded)", "Exclude")]
     [InlineData("-Recurse:$false", "Recurse")]
     public void Resolve_RejectsUnmodeledConventionalLoaderOptions(string option, string expectedOption)
     {

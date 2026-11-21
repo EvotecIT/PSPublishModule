@@ -351,6 +351,11 @@ internal static class PowerShellConventionalModuleSourceDiscovery
                 var argument = parameter.Argument;
                 if (argument is null && index + 1 < command.CommandElements.Count)
                     argument = command.CommandElements[++index] as ExpressionAst;
+                if (argument is ArrayExpressionAst collection &&
+                    (collection.SubExpression.Traps is null || collection.SubExpression.Traps.Count == 0) &&
+                    collection.SubExpression.Statements.Count == 1 &&
+                    collection.SubExpression.Statements[0] is PipelineAst pipeline)
+                    argument = pipeline.GetPureExpression();
                 IReadOnlyList<ExpressionAst>? values = argument is ArrayLiteralAst array
                     ? array.Elements
                     : argument is null ? null : new[] { argument };

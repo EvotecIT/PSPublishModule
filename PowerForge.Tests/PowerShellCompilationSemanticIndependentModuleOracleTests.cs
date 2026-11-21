@@ -39,7 +39,7 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
     public void ConventionalFileNameExportsPreserveTheAuthoredSurfaceOnBothHosts()
     {
         const string source = """
-            $public = @(Get-ChildItem -Path "$PSScriptRoot/Read-Public*.ps1" -ErrorAction SilentlyContinue)
+            $public = @(Get-ChildItem -Path "$PSScriptRoot/Read-Public*.ps1" -Exclude @('*.Tests.ps1', 'Read-PublicInternal*') -ErrorAction SilentlyContinue)
             foreach ($file in $public) {
                 . $file.FullName
             }
@@ -55,7 +55,15 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
             """;
         CompareScopedArtifacts(source, probe, new[] { "Read-PublicFlavor" }, value => Assert.Equal(
             "{\"functions\":[\"Read-PublicFlavor\"],\"value\":\"vanilla\",\"private\":false}", value),
-            additionalSources: new Dictionary<string, string> { ["Read-PublicFlavor.ps1"] = "function Read-PublicFlavor { [CmdletBinding()] param() begin {} end { 'vanilla' } }" });
+            assertArtifact: result => Assert.DoesNotContain(result.Manifest!.UnitDispositionLedger!.Entries,
+                entry => entry.Name == "Read-PublicInternalFlavor"),
+            additionalSources: new Dictionary<string, string>
+            {
+                ["Read-PublicFlavor.ps1"] = "function Read-PublicFlavor { [CmdletBinding()] param() begin {} end { 'vanilla' } }",
+                ["Read-PublicFlavor.Tests.ps1"] = "throw 'Excluded file executed'",
+                ["Read-PublicInternalFlavor.ps1"] = "function Read-PublicInternalFlavor { return 'internal' }"
+            },
+            resolveModuleSources: true);
     }
 
     [PinnedSemanticHostFact]
