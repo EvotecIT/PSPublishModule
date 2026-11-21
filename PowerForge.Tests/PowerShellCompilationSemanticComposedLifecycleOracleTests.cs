@@ -11,12 +11,14 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
         const string source = """
             param([switch] $Take, [switch] $EmitLeft, [switch] $EmitRight, [switch] $FailLeft,
                   [switch] $FailRight, [switch] $FailRecord, [switch] $Empty, [switch] $Direct, [switch] $Repeat,
-                  [switch] $Count, [switch] $CountDirect, [switch] $Helper)
+                  [switch] $Count, [switch] $CountDirect, [switch] $Helper, [switch] $HelperFinally,
+                  [switch] $HelperNull, [switch] $RightHelper, [switch] $FilterFinallyRecord)
 
             function Send-Pair {
                 [OutputType([int])]
-                param([int] $Value)
+                param([int] $Value, [switch] $EmitFinally, [switch] $EmitNull)
                 try {
+                    if ($EmitNull) { Write-Output $null }
                     $Value
                     if ($Value -eq 2) { 12 } else { 11 }
                     [IO.File]::AppendAllText('trace.txt', 'helper:resumed;')
@@ -24,13 +26,18 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
                     [IO.File]::AppendAllText('trace.txt', 'helper:caught;')
                 } finally {
                     [IO.File]::AppendAllText('trace.txt', 'helper:finally;')
+                    if ($EmitFinally) {
+                        Write-Output 99
+                        [IO.File]::AppendAllText('trace.txt', 'helper:finally-resumed;')
+                    }
                 }
             }
 
             function Send-Record {
                 [CmdletBinding()]
                 [OutputType([int])]
-                param([switch] $Emit, [Parameter(ValueFromPipeline)][int] $Record, [switch] $Fail, [switch] $Pair)
+                param([switch] $Emit, [Parameter(ValueFromPipeline)][int] $Record, [switch] $Fail, [switch] $Pair,
+                      [switch] $PairFinally, [switch] $PairNull)
                 begin {
                     [int] $seen = 0
                     [IO.File]::AppendAllText('trace.txt', 'left:begin;')
@@ -42,7 +49,7 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
                     $seen++
                     [IO.File]::AppendAllText('trace.txt', "left:before:${Record}:${seen};")
                     try {
-                        if ($Pair) { Send-Pair $Record } else { $Record }
+                        if ($Pair) { Send-Pair $Record -EmitFinally:$PairFinally -EmitNull:$PairNull } else { $Record }
                         [IO.File]::AppendAllText('trace.txt', 'left:resumed;')
                     } catch {
                         [IO.File]::AppendAllText('trace.txt', 'left:caught;')
@@ -61,7 +68,8 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
                 [CmdletBinding()]
                 [OutputType([int])]
                 param([Parameter(ValueFromPipeline)][int] $Record, [switch] $Emit,
-                      [switch] $FailBegin, [switch] $FailProcess)
+                      [switch] $FailBegin, [switch] $FailProcess, [switch] $Pair, [switch] $PairFinally,
+                      [switch] $FilterFinallyRecord)
                 begin {
                     [int] $seen = 0
                     [IO.File]::AppendAllText('trace.txt', 'right:begin;')
@@ -73,7 +81,8 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
                     $seen++
                     [IO.File]::AppendAllText('trace.txt', "right:before:${Record}:${seen};")
                     if ($FailProcess) { throw [InvalidOperationException]::new('right process failure') }
-                    $Record
+                    if ($Pair) { Send-Pair $Record -EmitFinally:$PairFinally }
+                    elseif (!$FilterFinallyRecord -or $Record -ne 99) { $Record }
                     [IO.File]::AppendAllText('trace.txt', 'right:resumed;')
                 }
                 end {
@@ -99,8 +108,9 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
             if ($Empty) { $records = @() }
             try {
                 if ($Take) {
-                    return $records | Send-Record -Emit:$EmitLeft -Fail:$FailLeft -Pair:$Helper |
-                        Receive-Record -Emit:$EmitRight -FailBegin:$FailRight | Select-Object -First 1
+                    return $records | Send-Record -Emit:$EmitLeft -Fail:$FailLeft -Pair:$Helper -PairFinally:$HelperFinally -PairNull:$HelperNull |
+                        Receive-Record -Emit:$EmitRight -FailBegin:$FailRight -Pair:$RightHelper -PairFinally:$HelperFinally -FilterFinallyRecord:$FilterFinallyRecord |
+                        Select-Object -First 1
                 }
                 if ($Direct) { return $records | Send-Record -Emit:$EmitLeft | Select-Object -First 1 }
                 if ($Repeat) { return $records | Send-Record | Send-Record }
@@ -130,6 +140,10 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
             (new[] { "CountDirect" }, 0, new[] { "2" }),
             (new[] { "Helper" }, 0, new[] { "1", "11", "2", "12", "30", "40" }),
             (new[] { "Take", "Helper" }, 0, new[] { "1" }),
+            (new[] { "Take", "Helper", "HelperFinally" }, 0, new[] { "1" }),
+            (new[] { "Take", "RightHelper", "HelperFinally" }, 0, new[] { "1" }),
+            (new[] { "Take", "Helper", "HelperFinally", "FilterFinallyRecord" }, 0, new[] { "1" }),
+            (new[] { "Take", "Helper", "HelperNull" }, 0, new[] { "0" }),
             (new[] { "Helper", "FailRecord" }, 7, Array.Empty<string>())
         };
         foreach (var pin in PowerShellCompilationSemanticHostArtifactPinCatalog.Pins)
@@ -247,9 +261,14 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
                 process { $null; $Value }
                 end {}
             }
-            [string[]] $values = @('record')
-            if ($Mode -eq 'first') { return $values | Send-Text | Receive-Text | Select-Object -First 1 }
-            return $values | Send-Text | Receive-Text
+            function Invoke-Composition {
+                [OutputType([string])]
+                param([string] $Selection)
+                [string[]] $values = @('record')
+                if ($Selection -eq 'first') { return $values | Send-Text | Receive-Text | Select-Object -First 1 }
+                return $values | Send-Text | Receive-Text
+            }
+            return Invoke-Composition $Mode
             """);
         foreach (var pin in PowerShellCompilationSemanticHostArtifactPinCatalog.Pins)
         {
@@ -303,6 +322,17 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
         using var mismatch = OracleFixture.Create(declarations.Replace("process { if ($Echo) { $Value } }", "process {}",
                 StringComparison.Ordinal).Replace("end { 7 }", "end { [long] 7 }", StringComparison.Ordinal) +
             Environment.NewLine + "return 1,2 | Send-Number | Receive-Number");
+        using var quiet = OracleFixture.Create(declarations.Replace("process { if ($Echo) { $Value } }",
+                "process { if ($false) { $Value } }", StringComparison.Ordinal).Replace("end { 7 }", "end {}", StringComparison.Ordinal) + """
+
+            if ($false) { 1,2 | Send-Number -Echo | Receive-Number }
+            return 1,2 | Send-Number -Echo | Select-Object -First 1
+            """);
+        using var collecting = OracleFixture.Create(declarations + """
+
+            1,2 | Send-Number -Echo | Receive-Number
+            return 3,4 | Send-Number -Echo
+            """);
         foreach (var pin in PowerShellCompilationSemanticHostArtifactPinCatalog.Pins)
         {
             var build = BuildStrictStreamingFixture(fixture, "StrictDeadComposition", pin.ProfileId);
@@ -316,6 +346,24 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
             var rejected = BuildStrictStreamingFixture(mismatch, "StrictMismatchedComposition", pin.ProfileId);
             Assert.False(rejected.Succeeded);
             Assert.Contains("homogeneous stable-scalar", rejected.Error, StringComparison.Ordinal);
+            var quietBuild = BuildStrictStreamingFixture(quiet, "StrictQuietComposition", pin.ProfileId);
+            Assert.True(quietBuild.Succeeded, quietBuild.Error + Environment.NewLine + quietBuild.BuildOutput);
+            var nativeQuiet = await ObserveExitedConsole(host, quiet.RootPath,
+                new[] { "-NoProfile", "-NonInteractive", "-File", quiet.ScriptPath }, string.Empty);
+            Assert.Equal((0, string.Empty, string.Empty), nativeQuiet);
+            Assert.Equal(nativeQuiet,
+                await ObserveExitedConsole(quietBuild.ArtifactPath!, quiet.RootPath, Array.Empty<string>(), string.Empty));
+            var collectingBuild = BuildStrictStreamingFixture(collecting, "StrictCollectingComposition", pin.ProfileId);
+            Assert.True(collectingBuild.Succeeded, collectingBuild.Error + Environment.NewLine + collectingBuild.BuildOutput);
+            var method = Assert.Single(collectingBuild.Manifest!.PublicAbi!.Methods,
+                static method => method.PowerShellName == "Send-Number");
+            Assert.Equal(typeof(int[]).FullName, method.ReturnType);
+            var originalCollecting = await ObserveExitedConsole(host, collecting.RootPath,
+                new[] { "-NoProfile", "-NonInteractive", "-File", collecting.ScriptPath }, string.Empty);
+            Assert.Equal(new[] { "1", "2", "7", "3", "4", "7" },
+                originalCollecting.Output.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries));
+            Assert.Equal(originalCollecting,
+                await ObserveExitedConsole(collectingBuild.ArtifactPath!, collecting.RootPath, Array.Empty<string>(), string.Empty));
         }
     }
 }

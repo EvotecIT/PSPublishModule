@@ -42,13 +42,13 @@ internal sealed class PowerShellStrictPipelineStage<T>
 internal static class PowerShellStrictPipelineComposition
 {
     internal static void Run<TInput, TIntermediate>(
-        TInput[]? input, bool processNull, TInput nullRecord,
+        TInput[]? input, bool processNull, TInput nullRecord, TIntermediate nullIntermediate,
         PowerShellStrictPipelineStage<TInput> upstream,
         PowerShellStrictPipelineStage<TIntermediate> downstream,
         int first, Action<object?> output)
     {
         var stop = new object();
-        upstream.Output = record => downstream.Process((TIntermediate)record!);
+        upstream.Output = record => downstream.Process(record is null ? nullIntermediate : (TIntermediate)record);
         downstream.Output = SelectOutput(first, output, stop);
         try
         {
@@ -95,6 +95,7 @@ internal static class PowerShellStrictPipelineComposition
     private static Action<object?> SelectOutput(int first, Action<object?> output, object stop)
         => first == 0 ? output : record =>
         {
+            if (first == 0) throw new PowerShellStrictPipelineStopSignal(stop);
             if (record is null) return;
             output(record);
             if (--first == 0) throw new PowerShellStrictPipelineStopSignal(stop);

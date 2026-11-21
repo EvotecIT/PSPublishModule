@@ -175,7 +175,8 @@ internal sealed partial class PowerShellSemanticBinder
         var limitParameter = supportsOutputLimit
             ? CreateLifecycleLimitParameter(document, function, symbols, pipelineParameter, sourceParameter) : null;
         PowerShellBoundBlock body;
-        var needsLiveOutput = composition || supportsOutputLimit || streamsSuccessOutput &&
+        var needsLiveOutput = supportsOutputLimit || composition && processOutputs.Any(static output => output.ValueState == PowerShellValueState.Null) ||
+            (streamsSuccessOutput || composition) &&
             (beginOutputs.Length != 0 || new[] { begin, process, end }.Any(LifecycleHasObservableFailure) ||
              clean is not null && LifecycleHasObservableFailure(clean));
         if (returnsCollection && needsLiveOutput)

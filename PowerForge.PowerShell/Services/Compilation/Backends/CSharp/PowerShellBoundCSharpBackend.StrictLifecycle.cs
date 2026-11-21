@@ -4,6 +4,8 @@ namespace PowerForge;
 
 internal sealed partial class PowerShellBoundCSharpBackend
 {
+    private PowerShellSymbolId? _strictStageCollector;
+
     private static void AppendDirectLifecycleOverload(StringBuilder builder, PowerShellLoweredFunction function,
         IReadOnlyList<string> parameterParts)
     {
@@ -43,6 +45,17 @@ internal sealed partial class PowerShellBoundCSharpBackend
             throw new InvalidOperationException("A composed lifecycle stage has no typed process iteration.");
         var process = (PowerShellLoweredForEachStatement)body[processIndex];
         var returnsValue = function.ReturnType != typeof(void);
+        // Retain the existing array-returning method for direct use. The attached
+        // path forwards each addition to its consumer at the same position.
+        var collector = function.ReturnType.IsArray &&
+            body[body.Length - 1] is PowerShellLoweredReturnStatement
+            {
+                Expression: PowerShellLoweredClrInvocationExpression
+                { MemberName: nameof(List<int>.ToArray), Receiver: PowerShellLoweredVariableExpression collected }
+            } && body[0] is PowerShellLoweredAssignmentStatement setup && setup.Target.Equals(collected.Symbol)
+            ? collected.Symbol : null;
+        var begin = collector is null ? body.Take(processIndex) : body.Skip(1).Take(processIndex - 1);
+        var end = collector is null ? body.Skip(processIndex + 1) : body.Skip(processIndex + 1).Take(body.Length - processIndex - 2);
         var prefix = new string(' ', indent * 4);
         var stage = allocate("pipelineStage");
         var record = allocate("pipelineRecord");
@@ -65,10 +78,18 @@ internal sealed partial class PowerShellBoundCSharpBackend
         }
         builder.Append(prefix).Append(stage).AppendLine(".Configure(");
 
-        EmitClause("()", body.Take(processIndex), stage + ".Output", ",");
-        EmitClause(record, process.Statements, stage + ".Output", ",", RenderStorage(process.Variable) + " = " + record + ";");
-        EmitClause("()", body.Skip(processIndex + 1), stage + ".Output", ",");
-        EmitClause("()", cleanup, stage + ".Output", ");");
+        _strictStageCollector = collector;
+        try
+        {
+            EmitClause("()", begin, stage + ".Output", ",");
+            EmitClause(record, process.Statements, stage + ".Output", ",", RenderStorage(process.Variable) + " = " + record + ";");
+            EmitClause("()", end, stage + ".Output", ",");
+            EmitClause("()", cleanup, stage + ".Output", ");");
+        }
+        finally
+        {
+            _strictStageCollector = null;
+        }
 
         if (returnsValue)
         {
@@ -85,7 +106,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
         builder.Append(prefix).Append("    global::PowerForge.Generated.Runtime.PowerShellStrictPipelineComposition.RunSingle(")
             .Append(EmitExpression(process.Collection)).Append(", ")
             .Append(process.NullCollectionElement is null ? "false, " : "true, ").Append(nullRecord).Append(", ")
-            .Append(stage).Append(", ").Append(limit).AppendLine(", __writeOutput);");
+            .Append(stage).Append(", ").Append(limit)
+            .AppendLine(function.RequiresPowerShellStreams ? ", __writeOutput);" : ", static _ => { });");
         return true;
 
         void EmitClause(string parameters, IEnumerable<PowerShellLoweredStatement> statements, string sink, string separator,

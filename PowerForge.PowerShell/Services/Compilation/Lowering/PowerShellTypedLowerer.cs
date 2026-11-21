@@ -13,6 +13,8 @@ internal sealed partial class PowerShellTypedLowerer
         var diagnostics = new List<PowerShellSemanticDiagnostic>(program.Diagnostics);
         var functions = new List<PowerShellLoweredFunction>();
         var boundFunctions = program.Functions.ToDictionary(static function => function.Symbol.StableKey, StringComparer.Ordinal);
+        var hasComposedStages = targetCapabilities == PowerShellCompilationCapabilities.TypedExecutable &&
+            program.Functions.Any(static function => function.Parameters.Any(static parameter => IsStrictStageType(parameter.Type.ClrType)));
         var boundParameterBindings = PropagateHostRequirement(program, function =>
             ContainsBoundParameterPresence(function.Body) ||
             function.NativeFunctionBinding is null && function.Parameters.Any(parameter =>
@@ -47,8 +49,7 @@ internal sealed partial class PowerShellTypedLowerer
             StringComparer.Ordinal);
         foreach (var function in program.Functions)
         {
-            if (targetCapabilities == PowerShellCompilationCapabilities.TypedExecutable &&
-                !ValidateComposedLifecycleRecords(function, boundFunctions, diagnostics)) continue;
+            if (hasComposedStages && !ValidateComposedLifecycleRecords(function, boundFunctions, diagnostics)) continue;
             if (function.Disposition.Kind != PowerShellExecutionDispositionKind.Typed)
             {
                 diagnostics.Add(new PowerShellSemanticDiagnostic(
@@ -246,7 +247,11 @@ internal sealed partial class PowerShellTypedLowerer
                 moduleStateReadBindings.Contains(function.Symbol.StableKey),
                 moduleStateWriteBindings.Contains(function.Symbol.StableKey),
                 function.OutputCardinality,
-                EnumerateOutputValueStates(function.Body)
+                (hasComposedStages
+                    ? PowerShellSuccessOutputTypePolicy.EnumerateValueStates(function, boundFunctions)
+                    : PowerShellSemanticAnalyzer.EnumerateStatements(function.Body, descendIntoCaptures: false)
+                        .Select(PowerShellSemanticAnalyzer.GetSuccessOutputExpression)
+                        .Where(static output => output is not null).Select(static output => output!.ValueState))
                     .Distinct()
                     .OrderBy(static state => state)
                     .ToArray(),
@@ -287,6 +292,15 @@ internal sealed partial class PowerShellTypedLowerer
             if (PowerShellSuccessOutputTypePolicy.GetStrictPipelineSink(statement) is not { } sink) continue;
             if (!Validate(sink.Upstream, sink.IntermediateType, sink.Span) ||
                 !Validate(sink.Downstream, sink.RecordType, sink.Span)) return false;
+            if (!sink.AcceptsNullIntermediate &&
+                PowerShellSuccessOutputTypePolicy.EnumerateValueStates(functions[sink.Upstream.StableKey], functions)
+                    .Contains(PowerShellValueState.Null))
+            {
+                diagnostics.Add(new PowerShellSemanticDiagnostic("PSL1019",
+                    $"Strict pipeline stage '{sink.Downstream.Name}' cannot bind a null '{sink.IntermediateType.Name}' record from '{sink.Upstream.Name}'.",
+                    sink.Span));
+                return false;
+            }
         }
         return true;
 
@@ -303,21 +317,6 @@ internal sealed partial class PowerShellTypedLowerer
         }
     }
 
-    private static IEnumerable<PowerShellValueState> EnumerateOutputValueStates(PowerShellBoundBlock body)
-    {
-        foreach (var statement in PowerShellSemanticAnalyzer.EnumerateStatements(body, descendIntoCaptures: false))
-        {
-            if (PowerShellSuccessOutputTypePolicy.GetStrictPipelineSink(statement) is { } sink)
-            {
-                yield return PowerShellValueState.Known;
-                if (sink.MayWriteNull) yield return PowerShellValueState.Null;
-            }
-            else if (PowerShellSemanticAnalyzer.GetSuccessOutputExpression(statement) is { } output)
-            {
-                yield return output.ValueState;
-            }
-        }
-    }
 
     private static void CloseLoweringDependencies(List<PowerShellLoweredFunction> functions,
         PowerShellBoundProgram program, ICollection<PowerShellSemanticDiagnostic> diagnostics)

@@ -77,15 +77,15 @@ internal sealed partial class PowerShellSemanticBinder
 
         var processesNull = PowerShellPipelineNullInputSemanticPolicy.TryBindElement(inputType, span, out var nullRecord) &&
             !composition.Upstream.PipelineLifecycleRequiresNonNullInput;
+        var acceptsNullIntermediate = PowerShellPipelineNullInputSemanticPolicy.TryBindElement(intermediate, span, out var nullIntermediate) &&
+            !composition.Downstream.PipelineLifecycleRequiresNonNullInput;
         var arguments = new PowerShellBoundExpression[]
         {
             source, new PowerShellBoundLiteralExpression(span, processesNull, StrictPipelineType(typeof(bool)), PowerShellValueState.Known),
-            nullRecord ?? new PowerShellBoundLiteralExpression(span,
-                inputType.IsValueType ? Activator.CreateInstance(inputType) : null,
-                StrictPipelineType(inputType), PowerShellValueState.Unknown),
+            nullRecord ?? DefaultRecord(inputType), nullIntermediate ?? DefaultRecord(intermediate),
             left, right, StrictIntLiteral(span, composition.First), new PowerShellBoundStrictSuccessSinkExpression(span,
                 composition.Upstream.Symbol, intermediate, composition.Downstream.Symbol, outputType,
-                composition.First == 0 && !PowerShellClrTypeSemantics.IsNonNullableValueType(outputType))
+                acceptsNullIntermediate, filtersNull: composition.First > 0)
         };
         var run = new PowerShellBoundClrInvocationExpression(span, typeof(PowerShellStrictPipelineComposition),
             nameof(PowerShellStrictPipelineComposition.Run), PowerShellClrInvocationKind.StaticMethod, null,
@@ -93,6 +93,10 @@ internal sealed partial class PowerShellSemanticBinder
             StrictPipelineType(typeof(void)));
         setup.Add(StrictSuccessOutput(run));
         return setup.ToArray();
+
+        PowerShellBoundExpression DefaultRecord(Type type)
+            => new PowerShellBoundLiteralExpression(span, type.IsValueType ? Activator.CreateInstance(type) : null,
+                StrictPipelineType(type), PowerShellValueState.Unknown);
 
         PowerShellBoundInvocationExpression? BindStage(CommandAst command, PowerShellLocalCallSignature signature,
             PowerShellBoundVariableExpression stage, Type element)

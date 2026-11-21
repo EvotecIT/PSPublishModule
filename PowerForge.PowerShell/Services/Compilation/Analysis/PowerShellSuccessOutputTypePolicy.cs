@@ -70,6 +70,43 @@ internal static class PowerShellSuccessOutputTypePolicy
             ? invocation.Arguments.OfType<PowerShellBoundStrictSuccessSinkExpression>().SingleOrDefault()
             : null;
 
+    internal static IEnumerable<PowerShellValueState> EnumerateValueStates(PowerShellBoundFunction function,
+        IReadOnlyDictionary<string, PowerShellBoundFunction> functions)
+        => EnumerateValueStates(function, functions, new HashSet<string>(StringComparer.Ordinal));
+
+    private static IEnumerable<PowerShellValueState> EnumerateValueStates(PowerShellBoundFunction function,
+        IReadOnlyDictionary<string, PowerShellBoundFunction> functions, HashSet<string> visiting)
+    {
+        if (!visiting.Add(function.Symbol.StableKey)) yield break;
+        try
+        {
+            foreach (var statement in PowerShellSemanticAnalyzer.EnumerateStatements(function.Body, descendIntoCaptures: false))
+            {
+                if (GetStrictPipelineSink(statement) is { } sink && functions.TryGetValue(sink.Downstream.StableKey, out var stage))
+                {
+                    foreach (var state in EnumerateValueStates(stage, functions, visiting))
+                        if (!sink.FiltersNull || state != PowerShellValueState.Null) yield return state;
+                    continue;
+                }
+                var output = PowerShellSemanticAnalyzer.GetSuccessOutputExpression(statement);
+                var invocation = output as PowerShellBoundInvocationExpression ??
+                    (statement as PowerShellBoundReturnStatement)?.Expression as PowerShellBoundInvocationExpression;
+                if (invocation is not null && functions.TryGetValue(invocation.Target.StableKey, out var helper))
+                {
+                    foreach (var state in EnumerateValueStates(helper, functions, visiting))
+                        yield return state;
+                    continue;
+                }
+                if (output is null) continue;
+                yield return output.ValueState;
+                if (output.ValueState == PowerShellValueState.Unknown && GetRecordType(output.Type.ClrType) is { } recordType &&
+                    !PowerShellClrTypeSemantics.IsNonNullableValueType(recordType))
+                    yield return PowerShellValueState.Null;
+            }
+        }
+        finally { visiting.Remove(function.Symbol.StableKey); }
+    }
+
     private static Type? GetRecordType(Type type)
     {
         if (type == typeof(void)) return null;
