@@ -11,11 +11,13 @@ public sealed partial class PowerShellCompilationAnalyzer
         string identityRoot,
         string? targetFramework,
         PowerShellCompilationCapability capabilities)
-        => ApplySemanticEvidence(structural, sourcePaths, identityRoot, targetFramework, capabilities, PowerShellCommandSemanticRegistry.Default, PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId);
+        => ApplySemanticEvidence(structural, sourcePaths.Select(path => PowerShellSourceParser.ParseFile(path, identityRoot)).ToArray(),
+            identityRoot, targetFramework, capabilities, PowerShellCommandSemanticRegistry.Default,
+            PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId);
 
     private static PowerShellCompilationFilePlan[] ApplySemanticEvidence(
         PowerShellCompilationFilePlan[] structural,
-        string[] sourcePaths,
+        IReadOnlyList<ParsedSourceDocument> sourceDocuments,
         string identityRoot,
         string? targetFramework,
         PowerShellCompilationCapability capabilities,
@@ -24,8 +26,8 @@ public sealed partial class PowerShellCompilationAnalyzer
         PowerShellNativeDependencyTypes? nativeDependencyTypes = null,
         CancellationToken cancellationToken = default)
     {
-        var documents = sourcePaths.Select(path => PowerShellSourceParser.ParseFile(path, identityRoot)
-            .WithNativeDependencyTypes(nativeDependencyTypes ?? PowerShellNativeDependencyTypes.Empty)).ToArray();
+        var documents = sourceDocuments.Select(document =>
+            document.WithNativeDependencyTypes(nativeDependencyTypes ?? PowerShellNativeDependencyTypes.Empty)).ToArray();
         var documentsByPath = documents.ToDictionary(static document => document.Path, PowerShellCompilationPathSafety.PathComparer);
         var sourceDiagnosticsByPath = documents.ToDictionary(
             static document => document.Path,

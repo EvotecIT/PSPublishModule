@@ -14,7 +14,7 @@ internal static class PowerShellParameterSemanticValidator
         var syntax = PowerShellParameterSyntax.Create(function.Body);
         return syntax.Attributes.OfType<AttributeAst>()
             .Concat(syntax.Parameters.SelectMany(static parameter => parameter.Attributes.OfType<AttributeAst>()))
-            .All(attribute => IsSupportedMetadata(document, attribute, capabilities, targetFramework));
+            .All(attribute => IsSupportedMetadata(attribute, capabilities, targetFramework, document.NativeDependencyTypes));
     }
 
     internal static bool Validate(
@@ -106,15 +106,15 @@ internal static class PowerShellParameterSemanticValidator
         string? targetFramework,
         ICollection<PowerShellSemanticDiagnostic> diagnostics)
     {
-        if (IsSupportedMetadata(document, attribute, capabilities, targetFramework)) return true;
+        if (IsSupportedMetadata(attribute, capabilities, targetFramework, document.NativeDependencyTypes)) return true;
         Add(diagnostics, PowerShellCompilationFeatureIds.ParameterMetadata,
             $"Parameter metadata syntax node 'AttributeAst' for '[{attribute.TypeName.Name}]' is not supported by this typed target.",
             PowerShellSourceParser.GetSpan(document, attribute.Extent));
         return false;
     }
 
-    private static bool IsSupportedMetadata(ParsedSourceDocument document, AttributeAst attribute,
-        PowerShellCompilationCapability capabilities, string? targetFramework)
+    internal static bool IsSupportedMetadata(AttributeAst attribute, PowerShellCompilationCapability capabilities,
+        string? targetFramework, PowerShellNativeDependencyTypes nativeDependencyTypes)
     {
         if (PowerShellCompileTimeMetadataSemanticPolicy.IsSupported(attribute))
             return true;
@@ -133,7 +133,7 @@ internal static class PowerShellParameterSemanticValidator
                 out _,
                 out _,
                 out _,
-                document.NativeDependencyTypes);
+                nativeDependencyTypes);
         if (PowerShellParameterContractBinder.IsAttributeNamed(attribute, "AllowNull") ||
             PowerShellParameterContractBinder.IsAttributeNamed(attribute, "AllowEmptyString") ||
             PowerShellParameterContractBinder.IsAttributeNamed(attribute, "AllowEmptyCollection") ||

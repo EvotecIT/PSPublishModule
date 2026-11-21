@@ -12,10 +12,34 @@ internal static class PowerShellSourceParser
     internal static ParsedSourceDocument ParseFile(string path)
         => ParseFile(path, Path.GetDirectoryName(Path.GetFullPath(path)));
 
-    internal static ParsedSourceDocument ParseFile(string path, string? identityRoot)
+    internal static ParsedSourceDocument ParseFile(string path, string? identityRoot,
+        string semanticProfileId = PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId)
     {
         var fullPath = Path.GetFullPath(path);
-        return Parse(File.ReadAllText(fullPath), fullPath, identityRoot);
+        var profile = PowerShellCompilationSemanticOracleCatalog.Get(semanticProfileId);
+        if (profile.Family != PowerShellCompilationSemanticHostFamily.WindowsPowerShell51)
+            return Parse(File.ReadAllText(fullPath), fullPath, identityRoot);
+
+#if NETFRAMEWORK
+        var encoding = Encoding.Default;
+#else
+        // The provider's code page 0 means the active Windows ANSI code page.
+        // Encoding.Default itself is UTF-8 on modern .NET.
+        var encoding = OperatingSystem.IsWindows()
+            ? CodePagesEncodingProvider.Instance.GetEncoding(0) ?? Encoding.UTF8
+            : Encoding.GetEncoding(20127, EncoderFallback.ExceptionFallback, DecoderFallback.ExceptionFallback);
+#endif
+        try
+        {
+            using var reader = new StreamReader(fullPath, encoding, detectEncodingFromByteOrderMarks: true);
+            return Parse(reader.ReadToEnd(), fullPath, identityRoot);
+        }
+        catch (DecoderFallbackException error)
+        {
+            throw new InvalidDataException(
+                $"Source '{fullPath}' uses non-ASCII bytes without a Unicode byte order mark. Add a UTF-8 BOM or compile the Windows PowerShell 5.1 profile on Windows.",
+                error);
+        }
     }
 
     internal static ParsedSourceDocument Parse(string source, string path)

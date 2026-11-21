@@ -80,7 +80,7 @@ internal static class PowerShellTypedExecutableCompiler
         ValidateSourceClosure(entryPoint, requestedSources, allowDerivedPaths: nativeScriptEntry);
 
         var identityRoot = Path.GetDirectoryName(entryPoint) ?? Directory.GetCurrentDirectory();
-        var parsed = requestedSources.Select(path => Parse(path, identityRoot))
+        var parsed = requestedSources.Select(path => Parse(path, identityRoot, semanticProfileId))
             .ToDictionary(static source => source.Path, PowerShellCompilationPathSafety.PathComparer);
         if (!parsed.TryGetValue(entryPoint, out var entrySource))
             throw new InvalidOperationException("The typed executable entrypoint is not present in its compilation source closure.");
@@ -404,10 +404,10 @@ internal static class PowerShellTypedExecutableCompiler
         return description;
     }
 
-    private static ParsedSource Parse(string path, string identityRoot)
+    private static ParsedSource Parse(string path, string identityRoot, string semanticProfileId)
     {
         var fullPath = Path.GetFullPath(path);
-        var document = PowerShellSourceParser.ParseFile(fullPath, identityRoot);
+        var document = PowerShellSourceParser.ParseFile(fullPath, identityRoot, semanticProfileId);
         if (document.Errors.Length > 0)
             throw new InvalidOperationException($"Typed executable source '{fullPath}' could not be parsed.");
         return new ParsedSource(fullPath, document);

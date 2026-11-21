@@ -186,6 +186,22 @@ public sealed partial class PowerShellCompilationAnalyzer
     {
         cancellationToken.ThrowIfCancellationRequested();
         var files = sourcePaths.Select(Path.GetFullPath).Distinct(PowerShellCompilationPathSafety.PathComparer).ToArray();
+        var documents = files.Select(file =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return PowerShellSourceParser.ParseFile(file, basePath, _semanticProfileId);
+        }).ToArray();
+        return AnalyzeDocuments(mode, documents, basePath, targetFramework, capabilities, cancellationToken);
+    }
+
+    internal PowerShellCompilationPlan AnalyzeDocuments(
+        PowerShellCompilationMode mode,
+        IReadOnlyList<ParsedSourceDocument> documents,
+        string basePath,
+        string? targetFramework,
+        PowerShellCompilationCapability capabilities,
+        CancellationToken cancellationToken = default)
+    {
         var analysisTargetFramework = mode == PowerShellCompilationMode.Package ? null : targetFramework;
         if (analysisTargetFramework is not null)
         {
@@ -193,16 +209,16 @@ public sealed partial class PowerShellCompilationAnalyzer
             PowerShellGeneratedReferenceAssemblyResolver.EnsureAvailable(analysisTargetFramework);
         }
         var localFunctionNames = capabilities.HasFlag(PowerShellCompilationCapability.LocalFunctionCalls)
-            ? PowerShellLocalFunctionDiscovery.DiscoverNames(files)
+            ? PowerShellLocalFunctionDiscovery.DiscoverNames(documents)
             : null;
-        var structural = files.Select(file =>
+        var structural = documents.Select(document =>
         {
             cancellationToken.ThrowIfCancellationRequested();
-            return AnalyzeFile(file, basePath, analysisTargetFramework, capabilities, localFunctionNames);
+            return AnalyzeFile(document, basePath, analysisTargetFramework, capabilities, localFunctionNames);
         }).ToArray();
         var analyzed = mode == PowerShellCompilationMode.Package
             ? structural
-            : ApplySemanticEvidence(structural, files, basePath, analysisTargetFramework, capabilities, _commandRegistry, _semanticProfileId,
+            : ApplySemanticEvidence(structural, documents, basePath, analysisTargetFramework, capabilities, _commandRegistry, _semanticProfileId,
                 _nativeDependencyTypes, cancellationToken);
         return new PowerShellCompilationPlan(mode, analyzed, targetFramework);
     }
