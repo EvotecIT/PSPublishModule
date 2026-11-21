@@ -76,7 +76,7 @@ public sealed partial class MissingFunctionsAnalyzer
 
             if (PowerShellAliasDefinitionPolicy.MayWriteOutsideLocalScope(command))
                 return "changes the donor alias scope, which cannot be preserved after merging.";
-            if (PowerShellAliasDefinitionPolicy.MayChooseWhetherToSetAlias(command))
+            if (PowerShellAliasDefinitionPolicy.MaySkipThroughShouldProcess(command))
                 return "conditionally creates a local alias with WhatIf or Confirm, whose binding cannot be proven after merging.";
             if (!PowerShellAliasDefinitionPolicy.TryGetLiteralDefinition(command, out string alias, out string target))
                 return "creates a local alias whose name or target cannot be resolved statically.";

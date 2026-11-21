@@ -226,11 +226,13 @@ param($module)
     }
 
     private static bool HasPriorAssignment(IEnumerable<StatementAst> statements, Ast before, string name)
-        => statements.OfType<AssignmentStatementAst>().Any(statement =>
-            statement.Operator == TokenKind.Equals &&
-            statement.Extent.EndOffset <= before.Extent.StartOffset &&
-            PowerShellAssignmentTargetPolicy.FindDirectVariable(statement.Left) is { } assigned &&
-            (assigned.VariablePath.IsUnqualified || assigned.VariablePath.IsLocal) &&
-            string.Equals(PowerShellAssignmentTargetPolicy.GetUnscopedVariableName(assigned.VariablePath.UserPath),
-                name, StringComparison.OrdinalIgnoreCase));
+        => statements.Any(statement => statement.Extent.EndOffset <= before.Extent.StartOffset &&
+            (statement is AssignmentStatementAst { Operator: TokenKind.Equals } assignment &&
+             PowerShellAssignmentTargetPolicy.FindDirectVariable(assignment.Left) is { } assigned &&
+             (assigned.VariablePath.IsUnqualified || assigned.VariablePath.IsLocal) &&
+             string.Equals(PowerShellAssignmentTargetPolicy.GetUnscopedVariableName(assigned.VariablePath.UserPath),
+                 name, StringComparison.OrdinalIgnoreCase) ||
+             statement is PipelineAst { PipelineElements.Count: 1 } pipeline &&
+             pipeline.PipelineElements[0] is CommandAst command &&
+             PowerShellVariableRemovalPolicy.EstablishesLocalBinding(command, name)));
 }

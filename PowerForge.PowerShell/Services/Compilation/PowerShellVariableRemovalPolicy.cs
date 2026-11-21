@@ -71,6 +71,30 @@ internal static class PowerShellVariableRemovalPolicy
         => scope is int and 0 || scope is string name &&
            (name.Equals("Local", StringComparison.OrdinalIgnoreCase) || name.Equals("0", StringComparison.Ordinal));
 
+    internal static bool EstablishesLocalBinding(CommandAst command, string name)
+    {
+        var commandName = command.GetCommandName();
+        if ((!string.Equals(commandName, "Microsoft.PowerShell.Utility\\Set-Variable", StringComparison.OrdinalIgnoreCase) &&
+             !string.Equals(commandName, "Microsoft.PowerShell.Utility\\New-Variable", StringComparison.OrdinalIgnoreCase)) ||
+            PowerShellAliasDefinitionPolicy.MaySkipThroughShouldProcess(command) ||
+            command.CommandElements.OfType<VariableExpressionAst>().Any(variable => variable.Splatted))
+            return false;
+
+        try
+        {
+            var binding = StaticParameterBinder.BindCommand(command);
+            return binding.BindingExceptions.Count == 0 &&
+                   binding.BoundParameters.TryGetValue("Scope", out var scope) && IsLocalScope(scope.ConstantValue) &&
+                   binding.BoundParameters.TryGetValue("Name", out var target) &&
+                   target.Value is StringConstantExpressionAst literal &&
+                   literal.Value.Equals(name, StringComparison.OrdinalIgnoreCase);
+        }
+        catch (RuntimeException)
+        {
+            return false;
+        }
+    }
+
     private static bool IsVariableCommand(string command)
         => new[] { "Set-Variable", "New-Variable", "Clear-Variable", "sv", "nv", "clv" }
             .Contains(command, StringComparer.OrdinalIgnoreCase);

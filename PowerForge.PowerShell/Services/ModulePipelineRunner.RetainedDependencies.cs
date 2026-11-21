@@ -95,12 +95,30 @@ public sealed partial class ModulePipelineRunner
                 var analysis = AnalyzeMissingFunctions(code is null ? path : null, code, plan, Array.Empty<string>());
                 if (analysis is null || analysis.Summary.Any(command => string.IsNullOrWhiteSpace(command.Source)))
                     return Array.Empty<string>();
-                candidates.IntersectWith(analysis.ApprovedModulesUnusedInInput ?? analysis.FullyInlinedApprovedModules);
+                // A retained script can inspect aliases, providers, and other runtime state through
+                // built-in commands whose source is unrelated to the approved donor.
+                candidates.IntersectWith(IsLiteralOnlyRetainedScript(path, code)
+                    ? analysis.ApprovedModulesUnusedInInput ?? analysis.FullyInlinedApprovedModules
+                    : analysis.FullyInlinedApprovedModules);
                 // Even inlineable donor functions remain external when this file itself is retained.
                 candidates.ExceptWith(analysis.Summary.Select(command => command.Source));
             }
         }
         return candidates.OrderBy(static name => name, StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+
+    private static bool IsLiteralOnlyRetainedScript(string path, string? code)
+    {
+        var syntax = code is null
+            ? Parser.ParseFile(path, out _, out var errors)
+            : Parser.ParseInput(code, out _, out errors);
+        return errors.Length == 0 && syntax.Find(static node =>
+            node is CommandAst or MemberExpressionAst or TypeExpressionAst or TypeConstraintAst ||
+            node is VariableExpressionAst variable &&
+            !variable.VariablePath.UserPath.Equals("null", StringComparison.OrdinalIgnoreCase) &&
+            !variable.VariablePath.UserPath.Equals("true", StringComparison.OrdinalIgnoreCase) &&
+            !variable.VariablePath.UserPath.Equals("false", StringComparison.OrdinalIgnoreCase),
+            searchNestedScriptBlocks: true) is null;
     }
 
     private static bool TryReadStaticManifestModuleReferences(string manifestText, string property, out string[] names)

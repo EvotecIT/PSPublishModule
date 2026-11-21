@@ -44,7 +44,7 @@ internal static class PowerShellAliasDefinitionPolicy
         return false;
     }
 
-    internal static bool MayChooseWhetherToSetAlias(CommandAst command)
+    internal static bool MaySkipThroughShouldProcess(CommandAst command)
         => command.CommandElements.OfType<CommandParameterAst>().Any(parameter =>
             (MatchesParameter(parameter.ParameterName, "WhatIf") || MatchesParameter(parameter.ParameterName, "Confirm") ||
              parameter.ParameterName.Equals("wi", StringComparison.OrdinalIgnoreCase) ||

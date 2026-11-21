@@ -48,7 +48,9 @@ donor module state and explicit variable commands that access an enclosing
 scope. The analysis includes retained root module code and scripts loaded by
 the generated bootstrapper. If the generated bootstrapper needs approved
 helpers, enable `MergeModuleOnBuild` so those helpers are part of its merged
-script payload.
+script payload. Manifest-loaded scripts that can inspect runtime state must
+also be safe to run without the donor. A literal-only hook can run without
+the donor even when the donor exports aliases or other runtime state.
 PowerForge also checks aliases created in the consumer's script scope and
 verifies that a dependency resolved inside a donor matches the selected
 approved module identity. Dynamic calls or alias declarations that prevent
