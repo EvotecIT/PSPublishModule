@@ -13,6 +13,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
     private PowerShellCompilationSemanticHostFamily _semanticHostFamily;
     private PowerShellCompilationCapability _targetCapabilities;
     private string? _strictCaughtException;
+    private bool _usesStrictPipelineComposition;
     private IReadOnlyDictionary<string, PowerShellLoweredFunction> _functions = new Dictionary<string, PowerShellLoweredFunction>();
     private PowerShellCSharpSourceDocumentPool _nativeSourceDocuments = new();
     internal PowerShellBoundCSharpResult Emit(PowerShellLoweredProgram program)
@@ -20,13 +21,16 @@ internal sealed partial class PowerShellBoundCSharpBackend
         if (program is null) throw new ArgumentNullException(nameof(program));
         // Each function owns its temporary names and generated helper registry.
         var functions = program.Functions.ToDictionary(static function => function.Symbol.StableKey, StringComparer.Ordinal);
+        var usesStrictPipelineComposition = program.Functions.Any(static function =>
+            function.Parameters.Any(static parameter => PowerShellTypedLowerer.IsStrictStageType(parameter.ClrType)));
         var sourceDocuments = new PowerShellCSharpSourceDocumentPool();
         var methods = program.Functions.Select(function => new PowerShellBoundCSharpBackend
         {
             _functions = functions,
             _nativeSourceDocuments = sourceDocuments,
             _semanticHostFamily = program.SemanticHostFamily,
-            _targetCapabilities = program.TargetCapabilities
+            _targetCapabilities = program.TargetCapabilities,
+            _usesStrictPipelineComposition = usesStrictPipelineComposition
         }.EmitFunction(function, program.TargetCapabilities)).ToArray();
         return new PowerShellBoundCSharpResult(methods, program.Diagnostics.ToArray());
     }
@@ -123,6 +127,14 @@ internal sealed partial class PowerShellBoundCSharpBackend
                 return;
             case PowerShellLoweredReturnStatement returned:
                 builder.Append(prefix).Append("return ").Append(EmitExpression(returned.Expression!)).AppendLine(";");
+                return;
+            case PowerShellLoweredExpressionStatement
+            {
+                Expression: PowerShellLoweredClrInvocationExpression
+                { MemberName: nameof(List<int>.Add), Receiver: PowerShellLoweredVariableExpression collector } addition
+            } when successOutputSink is not null && collector.Symbol.Equals(_strictStageCollector):
+                builder.Append(prefix).Append(successOutputSink).Append("((object?)")
+                    .Append(EmitExpression(addition.Arguments[0])).AppendLine(");");
                 return;
             case PowerShellLoweredExpressionStatement { DiscardValue: true } expression:
                 builder.Append(prefix).Append(discardHelper).Append('<')
@@ -250,6 +262,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
                     if (runtimeFreeExecutable)
                     {
                         var userException = $"{clause.ExceptionTemporary} is not global::PowerForge.Compiled.PowerShellScriptExit";
+                        if (_usesStrictPipelineComposition)
+                            userException += $" && {clause.ExceptionTemporary} is not global::PowerForge.Generated.Runtime.PowerShellStrictPipelineStopSignal";
                         filter = clause.ExceptionTypes.Length == 0 ? userException : $"{userException} && ({filter})";
                     }
                     builder.Append(prefix).Append("catch (global::System.Exception ")
@@ -295,6 +309,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
         {
             PowerShellLoweredNativeReferenceExpression reference => "__nativeFunction.GetVariableReference(" + PowerShellCSharpLiteral.QuoteString(reference.Name) + ", " + (reference.DirectLocal ? "true" : "false") + ")",
             PowerShellLoweredLiteralExpression literal => EmitLiteral(literal),
+            PowerShellLoweredStrictSuccessSinkExpression => "__writeOutput",
             PowerShellLoweredNativeVariableExpression variable => EmitNativeVariableRead(variable),
             PowerShellLoweredNativeScriptBlockExpression block => EmitNativeBlockValue(block),
             PowerShellLoweredTransportedScriptBlockExpression block => "__nativeFunction.CreateTransportedScriptBlock(" +

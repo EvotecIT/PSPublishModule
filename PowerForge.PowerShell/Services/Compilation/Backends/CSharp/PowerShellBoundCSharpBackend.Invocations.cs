@@ -2,7 +2,7 @@ namespace PowerForge;
 
 internal sealed partial class PowerShellBoundCSharpBackend
 {
-    private string EmitLocalInvocation(PowerShellLoweredInvocationExpression invocation)
+    private string EmitLocalInvocation(PowerShellLoweredInvocationExpression invocation, string? successOutputSink = null)
     {
         var arguments = invocation.Arguments.Select(EmitExpression).ToArray();
         var authored = invocation.AuthoredEvaluationOrder;
@@ -21,7 +21,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
         if (invocation.RequiresPowerShellStopping)
             callArguments.Add("__checkLoopInterrupts");
         if (invocation.RequiresPowerShellStreams)
-            callArguments.AddRange(new[] { invocation.CapturesSuccessOutput ? invocation.CapturedOutputTemporary : "__writeOutput",
+            callArguments.AddRange(new[] { invocation.CapturesSuccessOutput ? invocation.CapturedOutputTemporary : successOutputSink ?? "__writeOutput",
                 "__writeVerbose", "__writeDebug", "__writeWarning", "__writeInformation", "__writeHost", "__writeError" });
         if (invocation.RequiresProviderCancellation)
             callArguments.Add("__providerCancellationToken");

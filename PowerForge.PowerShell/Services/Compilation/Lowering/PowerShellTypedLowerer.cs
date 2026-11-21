@@ -13,6 +13,8 @@ internal sealed partial class PowerShellTypedLowerer
         var diagnostics = new List<PowerShellSemanticDiagnostic>(program.Diagnostics);
         var functions = new List<PowerShellLoweredFunction>();
         var boundFunctions = program.Functions.ToDictionary(static function => function.Symbol.StableKey, StringComparer.Ordinal);
+        var hasComposedStages = targetCapabilities == PowerShellCompilationCapabilities.TypedExecutable &&
+            program.Functions.Any(static function => function.Parameters.Any(static parameter => IsStrictStageType(parameter.Type.ClrType)));
         var boundParameterBindings = PropagateHostRequirement(program, function =>
             ContainsBoundParameterPresence(function.Body) ||
             function.NativeFunctionBinding is null && function.Parameters.Any(parameter =>
@@ -47,6 +49,7 @@ internal sealed partial class PowerShellTypedLowerer
             StringComparer.Ordinal);
         foreach (var function in program.Functions)
         {
+            if (hasComposedStages && !ValidateComposedLifecycleRecords(function, boundFunctions, diagnostics)) continue;
             if (function.Disposition.Kind != PowerShellExecutionDispositionKind.Typed)
             {
                 diagnostics.Add(new PowerShellSemanticDiagnostic(
@@ -197,8 +200,9 @@ internal sealed partial class PowerShellTypedLowerer
             if (function.NativeFunctionBinding is not null) localTypes.Clear();
             var symbolTypes = function.Parameters.ToDictionary(static parameter => parameter.Symbol.StableKey, static parameter => parameter.Type.ClrType, StringComparer.Ordinal);
             foreach (var local in function.Locals) symbolTypes[local.Symbol.StableKey] = local.Type.ClrType;
+            var sharesLifecycleLocals = function.Parameters.Any(static parameter => IsStrictStageType(parameter.Type.ClrType));
             var names = new LoweredFunctionScope(function.Parameters.Select(static parameter => parameter.Symbol.Name)
-                .Concat(function.Locals.Select(static local => local.Symbol.Name)), symbolTypes, localTypes, declared);
+                .Concat(function.Locals.Select(static local => local.Symbol.Name)), symbolTypes, localTypes, declared, sharesLifecycleLocals);
             var topLevelAssignments = function.Body.Statements.OfType<PowerShellBoundAssignmentStatement>()
                 .GroupBy(static assignment => assignment.Target.StableKey, StringComparer.Ordinal)
                 .ToDictionary(static group => group.Key, static group => group.Min(assignment => assignment.Span.StartOffset), StringComparer.Ordinal);
@@ -209,6 +213,8 @@ internal sealed partial class PowerShellTypedLowerer
                 .Distinct(StringComparer.Ordinal)
                 .OrderBy(static key => key, StringComparer.Ordinal)
                 .ToArray();
+            if (sharesLifecycleLocals)
+                predeclared = localTypes.Keys.OrderBy(static key => key, StringComparer.Ordinal).ToArray();
             foreach (var key in predeclared)
             {
                 var local = function.Locals.Single(candidate => candidate.Symbol.StableKey == key);
@@ -241,10 +247,11 @@ internal sealed partial class PowerShellTypedLowerer
                 moduleStateReadBindings.Contains(function.Symbol.StableKey),
                 moduleStateWriteBindings.Contains(function.Symbol.StableKey),
                 function.OutputCardinality,
-                PowerShellSemanticAnalyzer.EnumerateStatements(function.Body, descendIntoCaptures: false)
-                    .Select(PowerShellSemanticAnalyzer.GetSuccessOutputExpression)
-                    .Where(static expression => expression is not null)
-                    .Select(static expression => expression!.ValueState)
+                (hasComposedStages
+                    ? PowerShellSuccessOutputTypePolicy.EnumerateValueStates(function, boundFunctions)
+                    : PowerShellSemanticAnalyzer.EnumerateStatements(function.Body, descendIntoCaptures: false)
+                        .Select(PowerShellSemanticAnalyzer.GetSuccessOutputExpression)
+                        .Where(static output => output is not null).Select(static output => output!.ValueState))
                     .Distinct()
                     .OrderBy(static state => state)
                     .ToArray(),
@@ -273,6 +280,43 @@ internal sealed partial class PowerShellTypedLowerer
             targetCapabilities,
             program.SemanticHostFamily);
     }
+
+    internal static bool IsStrictStageType(Type type)
+        => type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Generated.Runtime.PowerShellStrictPipelineStage<>);
+
+    private static bool ValidateComposedLifecycleRecords(PowerShellBoundFunction owner,
+        IReadOnlyDictionary<string, PowerShellBoundFunction> functions, ICollection<PowerShellSemanticDiagnostic> diagnostics)
+    {
+        foreach (var statement in PowerShellSemanticAnalyzer.EnumerateStatements(owner.Body, descendIntoCaptures: false))
+        {
+            if (PowerShellSuccessOutputTypePolicy.GetStrictPipelineSink(statement) is not { } sink) continue;
+            if (!Validate(sink.Upstream, sink.IntermediateType, sink.Span) ||
+                !Validate(sink.Downstream, sink.RecordType, sink.Span)) return false;
+            if (!sink.AcceptsNullIntermediate &&
+                PowerShellSuccessOutputTypePolicy.EnumerateValueStates(functions[sink.Upstream.StableKey], functions)
+                    .Contains(PowerShellValueState.Null))
+            {
+                diagnostics.Add(new PowerShellSemanticDiagnostic("PSL1019",
+                    $"Strict pipeline stage '{sink.Downstream.Name}' cannot bind a null '{sink.IntermediateType.Name}' record from '{sink.Upstream.Name}'.",
+                    sink.Span));
+                return false;
+            }
+        }
+        return true;
+
+        bool Validate(PowerShellSymbolId stage, Type expected, SourceSpan span)
+        {
+            var types = functions.TryGetValue(stage.StableKey, out var function)
+                ? PowerShellSuccessOutputTypePolicy.ResolveTypes(function, functions)
+                : Type.EmptyTypes;
+            if (types.Length == 1 && types[0] == expected) return true;
+            var actual = types.Length == 0 ? "no concrete records" : string.Join(", ", types.Select(static type => type.Name));
+            diagnostics.Add(new PowerShellSemanticDiagnostic("PSL1018",
+                $"Strict pipeline stage '{stage.Name}' requires '{expected.Name}' records. Its bound output includes {actual}.", span));
+            return false;
+        }
+    }
+
 
     private static void CloseLoweringDependencies(List<PowerShellLoweredFunction> functions,
         PowerShellBoundProgram program, ICollection<PowerShellSemanticDiagnostic> diagnostics)
@@ -632,7 +676,7 @@ internal sealed partial class PowerShellTypedLowerer
             LowerExpression(loop.Collection, functions, names, targetCapabilities),
             loop.EnumerationKind,
             LowerStatements(loop.Body, functions, symbolTypes, localTypes, declared, names, targetCapabilities),
-            loop.DeclareVariable,
+            loop.DeclareVariable && !(names.SharesLifecycleLocals && localTypes.ContainsKey(loop.Variable.StableKey)),
             loop.NullCollectionElement is null
                 ? null
                 : LowerExpression(loop.NullCollectionElement, functions, names, targetCapabilities),
