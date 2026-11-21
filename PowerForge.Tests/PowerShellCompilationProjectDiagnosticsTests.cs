@@ -153,6 +153,27 @@ public sealed class PowerShellCompilationProjectDiagnosticsTests
     }
 
     [Fact]
+    public void ProjectExplain_PreservesRejectedResourceLocationWithoutAbsolutePath()
+    {
+        using var fixture = Fixture.Create("""
+            function Read-Record {
+                Get-Content "$PSScriptRoot/../record.txt"
+            }
+            """, PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Hybrid);
+
+        var result = new PowerShellCompilationProjectWorkflowService().Explain(fixture.Project);
+
+        Assert.False(result.Succeeded);
+        var report = Assert.Single(result.Targets).DiagnosticReport!;
+        var issue = Assert.Single(report.Issues);
+        Assert.Equal("Functions.psm1", issue.RelativePath);
+        Assert.Equal(2, issue.Line);
+        Assert.Equal(17, issue.Column);
+        Assert.Contains("escapes the source root", issue.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(fixture.Root, JsonSerializer.Serialize(report), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void ProjectExplain_ReportsMissingAssemblyWithoutRejectingTypedUnitSemantics()
     {
         using var fixture = Fixture.Create("function Get-Number { return 42 }",

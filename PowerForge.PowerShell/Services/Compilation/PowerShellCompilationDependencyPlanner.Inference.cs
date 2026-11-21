@@ -26,7 +26,10 @@ public sealed partial class PowerShellCompilationDependencyPlanner
                 if (relative.Length == 0 || relative.IndexOfAny(new[] { '$', '`', '*', '?' }) >= 0) continue;
                 var sourceDirectory = Path.GetDirectoryName(Path.GetFullPath(sourceFile)) ?? moduleRoot;
                 var fullPath = Path.GetFullPath(Path.Combine(sourceDirectory, relative));
-                PowerShellCompilationPathSafety.EnsureContained(moduleRoot, fullPath, $"Inferred resource literal '{literal.Extent.Text}' escapes the source root.");
+                if (!PowerShellCompilationPathSafety.IsContained(moduleRoot, fullPath))
+                    throw PowerShellCompilationSourceFailure.Create(
+                        $"Inferred resource literal '{literal.Extent.Text}' escapes the source root.",
+                        sourceFile, literal.Extent);
                 if (File.Exists(fullPath))
                     PowerShellCompilationPathSafety.EnsureNoLinks(moduleRoot, fullPath, $"Inferred resource literal '{literal.Extent.Text}' traverses a symbolic link or junction.");
                 var extension = Path.GetExtension(fullPath);

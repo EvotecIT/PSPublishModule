@@ -187,7 +187,9 @@ internal static class PowerShellHybridDependencyResolver
                 }
                 else
                 {
-                    throw new InvalidOperationException($"Dot-source expression at {current}:{command.Extent.StartLineNumber} must be a literal $PSScriptRoot path or a supported guarded script-root assignment for portable staging.");
+                    throw PowerShellCompilationSourceFailure.Create(
+                        $"Dot-source expression at {current}:{command.Extent.StartLineNumber} must be a literal $PSScriptRoot path or a supported guarded script-root assignment for portable staging.",
+                        current, expression.Extent);
                 }
 
                 foreach (var path in paths)

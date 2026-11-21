@@ -74,7 +74,7 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
                     report = PowerShellCompilationDiagnosticReportService.Create(plan,
                         PowerShellCompilationExplanationService.Create(plan), finalShapeAvailable: false);
                 if (!report.FinalShapeAvailable) report.CanProceed = false;
-                var issue = InspectionIssue(stage, "project." + stage.ToString().ToLowerInvariant(), exception);
+                var issue = InspectionIssue(stage, "project." + stage.ToString().ToLowerInvariant(), exception, context.Root);
                 report.Issues = report.Issues.Concat(new[] { issue }).ToArray();
                 result.Message = issue.Message;
                 result.Succeeded = false;
@@ -110,10 +110,23 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
     }
 
     private static PowerShellCompilationReportIssue InspectionIssue(
-        PowerShellCompilationDiagnosticStage stage, string code, Exception exception)
-        => new()
+        PowerShellCompilationDiagnosticStage stage, string code, Exception exception, string? projectRoot = null)
+    {
+        var issue = new PowerShellCompilationReportIssue
         {
-            Stage = stage, Code = code,
+            Stage = stage,
+            Code = code,
             Message = PowerShellCompilationDiagnosticsEvidenceBuilder.Redact(null, exception.Message)
         };
+        var diagnostic = PowerShellCompilationSourceFailure.GetDiagnostic(exception);
+        if (projectRoot is not null && diagnostic is not null &&
+            Path.IsPathRooted(diagnostic.FilePath) &&
+            PowerShellCompilationPathSafety.IsContained(projectRoot, diagnostic.FilePath))
+        {
+            issue.RelativePath = FrameworkCompatibility.GetRelativePath(projectRoot, diagnostic.FilePath).Replace('\\', '/');
+            issue.Line = diagnostic.Line;
+            issue.Column = diagnostic.Column;
+        }
+        return issue;
+    }
 }

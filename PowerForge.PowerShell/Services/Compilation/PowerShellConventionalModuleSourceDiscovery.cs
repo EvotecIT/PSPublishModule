@@ -371,8 +371,9 @@ internal static class PowerShellConventionalModuleSourceDiscovery
         CommandAst command,
         string sourcePath,
         CommandParameterAst parameter)
-        => new(
-            $"Conventional module source discovery does not support loader option '{parameter.Extent.Text}' at {sourcePath}:{command.Extent.StartLineNumber}; use -Path/-LiteralPath, bare -Recurse, literal -Exclude names, optional -File, and optional -ErrorAction SilentlyContinue only.");
+        => PowerShellCompilationSourceFailure.Create(
+            $"Conventional module source discovery does not support loader option '{parameter.Extent.Text}' at {sourcePath}:{command.Extent.StartLineNumber}; use -Path/-LiteralPath, bare -Recurse, literal -Exclude names, optional -File, and optional -ErrorAction SilentlyContinue only.",
+            sourcePath, parameter.Extent);
 
     private static bool IsTopLevel(Ast node, ScriptBlockAst root)
     {

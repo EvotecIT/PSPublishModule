@@ -39,9 +39,14 @@ internal static class PowerShellCompilationPathSafety
 
     internal static void EnsureContained(string root, string path, string error)
     {
-        var normalizedRoot = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
-        if (!PathStartsWith(Path.GetFullPath(path), normalizedRoot))
+        if (!IsContained(root, path))
             throw new InvalidOperationException(error);
+    }
+
+    internal static bool IsContained(string root, string path)
+    {
+        var normalizedRoot = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        return PathStartsWith(Path.GetFullPath(path), normalizedRoot);
     }
 
     internal static bool PathEquals(string? first, string? second)
