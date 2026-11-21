@@ -75,7 +75,7 @@ New-BenchmarkSuite 'managed-module-cli' -OutputRoot $outputRoot {
     $launch = {
         param($case, $run)
 
-        $arguments = $run.Arguments
+        [string[]] $arguments = @($run.Arguments)
         & /usr/bin/env 'PATH=/nonexistent' "DOTNET_BUNDLE_EXTRACT_BASE_DIR=$($run.BundleRoot)" $run.Executable @arguments > $run.Log 2>&1
         $run.ExitCode = $LASTEXITCODE
     }
