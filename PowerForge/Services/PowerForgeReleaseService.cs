@@ -543,6 +543,27 @@ internal sealed partial class PowerForgeReleaseService
                 $"Shared version {request.ResolvedReleaseVersion}");
         }
 
+        PowerForgeToolReleasePlan? preparedNativeToolPlan = null;
+        PowerForgeReleaseAssetEntry[] nativeArchives = Array.Empty<PowerForgeReleaseAssetEntry>();
+        if (!string.IsNullOrWhiteSpace(request.NativeArchiveRoot) || spec.Outputs?.NativePowerForgeArchivePaths?.Count > 0)
+        {
+            if (!willRunTools || !selectedToolOutputs.Contains(PowerForgeReleaseToolOutputKind.Tool) ||
+                UsesDotNetToolWorkflow(spec.Tools!) || (runPackages && !coordinateModuleAndPackageVersions))
+            {
+                throw new ArgumentException("Native archives require a standalone PowerForge tool plan with a shared release version.");
+            }
+
+            var legacyTargets = GetSectionSelectedTargets(selectedTargets, toolTargetMatches, runAppleApps, appleTargetMatches);
+            preparedNativeToolPlan = WithRequestTargets(request, legacyTargets, () => _planTools(spec.Tools!, configPath, request));
+            var powerForgeTarget = preparedNativeToolPlan.Targets.SingleOrDefault(target =>
+                target.Name.Equals("PowerForge", StringComparison.OrdinalIgnoreCase)) ??
+                throw new ArgumentException("Native archives require the PowerForge tool target.");
+            nativeArchives = ResolveNativePowerForgeArchives(spec, configDirectory, powerForgeTarget,
+                request.NativeArchiveRoot, temporaryReleaseDirectory);
+        }
+        var deferPackagePublishing = HasAfterStagingValidation(spec) ||
+                                    (nativeArchives.Length > 0 && result.PublishesFromSelectedLanes);
+
         if (runModule)
         {
             request.Progress?.PhaseStarted(
@@ -703,7 +724,7 @@ internal sealed partial class PowerForgeReleaseService
                 request,
                 configurationOverride,
                 publishUnifiedGitHub,
-                deferPublishing: HasAfterStagingValidation(spec));
+                deferPublishing: deferPackagePublishing);
             result.Packages = packages;
             if (!packages.Success)
             {
@@ -721,12 +742,6 @@ internal sealed partial class PowerForgeReleaseService
 
         var sharedReleaseVersion = request.ResolvedReleaseVersion ?? ResolveSharedReleaseVersion(spec, result);
         request.ResolvedReleaseVersion ??= sharedReleaseVersion;
-        var nativeArchives = runTools && selectedToolOutputs.Contains(PowerForgeReleaseToolOutputKind.Tool) &&
-                             (selectedTargets.Length == 0 || toolTargetMatches.Contains("PowerForge", StringComparer.OrdinalIgnoreCase))
-            ? ResolveNativePowerForgeArchives(spec, configDirectory, sharedReleaseVersion, request.NativeArchiveRoot)
-            : Array.Empty<PowerForgeReleaseAssetEntry>();
-        if (!string.IsNullOrWhiteSpace(request.NativeArchiveRoot) && nativeArchives.Length == 0)
-            throw new ArgumentException("NativeArchiveRoot requires the standalone PowerForge tool output.");
 
         PowerForgeAppleReleasePlan? applePlan = null;
         if (willRunAppleApps)
@@ -813,7 +828,7 @@ internal sealed partial class PowerForgeReleaseService
                 if (willRunTools)
                 {
                     var legacyToolTargets = GetSectionSelectedTargets(selectedTargets, toolTargetMatches, runAppleApps, appleTargetMatches);
-                    var toolPlan = WithRequestTargets(
+                    var toolPlan = preparedNativeToolPlan ?? WithRequestTargets(
                         request,
                         legacyToolTargets,
                         () => _planTools(spec.Tools!, configPath, request));
@@ -876,7 +891,7 @@ internal sealed partial class PowerForgeReleaseService
                 publishUnifiedGitHub,
                 request.ResolvedReleaseVersion,
                 spec.Module!.VersionPrimaryProject,
-                deferPublishing: HasAfterStagingValidation(spec));
+                deferPublishing: deferPackagePublishing);
             result.Packages = packages;
             if (!packages.Success)
             {
@@ -972,7 +987,7 @@ internal sealed partial class PowerForgeReleaseService
             }
         }
 
-        if (runPackages && HasAfterStagingValidation(spec) && !request.PlanOnly && !request.ValidateOnly)
+        if (runPackages && deferPackagePublishing && !request.PlanOnly && !request.ValidateOnly)
         {
             if (!ValidateReleaseValidationIntegrityBeforePublication(
                     request,

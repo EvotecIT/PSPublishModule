@@ -39,8 +39,12 @@ Build and smoke-test the native ZIP on each target OS. Place the verified
 `PowerForgeNative-<version>-win-x64.zip` and
 `PowerForgeNative-<version>-linux-x64.zip` together. Pass that directory to
 `Build/Build-Project.ps1 -NativeArchiveRoot <directory> -StageRoot <directory>`
-for the same version as the module and NuGet packages. Signed release builds
-sign the Windows launcher and managed companion before creating their ZIP.
+for the same version as the module and NuGet packages. Both directory
+arguments resolve relative to the current PowerShell location. For a signed
+release, build the Windows archive with `-EnableSigning:$true` and an
+effective native release configuration that specifies the same certificate
+as the unified PowerForge target. The build verifies the Windows launcher
+and managed companion against that publisher before accepting the archive.
 
 The unified release includes one standalone archive per runtime. Its tool
 manifest directs the installer to the native archive on Windows and Linux

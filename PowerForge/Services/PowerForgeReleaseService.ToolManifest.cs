@@ -23,31 +23,56 @@ internal sealed partial class PowerForgeReleaseService
     }
 
     private static PowerForgeReleaseAssetEntry[] ResolveNativePowerForgeArchives(
-        PowerForgeReleaseSpec spec, string configDirectory, string? version, string? archiveRoot)
+        PowerForgeReleaseSpec spec,
+        string configDirectory,
+        PowerForgeToolReleaseTargetPlan target,
+        string? archiveRoot,
+        TemporaryReleaseDirectory temporaryReleaseDirectory)
     {
-        var configured = spec.Outputs?.NativePowerForgeArchivePaths;
-        if ((configured is null || configured.Count == 0) && string.IsNullOrWhiteSpace(archiveRoot))
-            return Array.Empty<PowerForgeReleaseAssetEntry>();
-        if (string.IsNullOrWhiteSpace(spec.Outputs?.PowerForgeToolManifestPath) || string.IsNullOrWhiteSpace(version))
+        var version = target.Version;
+        if (string.IsNullOrWhiteSpace(spec.Outputs?.PowerForgeToolManifestPath) ||
+            !Regex.IsMatch(version, "^\\d+\\.\\d+\\.\\d+$", RegexOptions.CultureInvariant))
             throw new InvalidOperationException("Native PowerForge archives require a tool manifest and an exact release version.");
 
+        var eligibleRuntimes = target.Combinations.Where(combination =>
+                combination.Framework.Equals("net10.0", StringComparison.OrdinalIgnoreCase) &&
+                IsStandalonePowerForgeArtifactStyle(combination.Flavor.ToString()))
+            .Select(combination => combination.Runtime.ToLowerInvariant())
+            .Where(runtime => runtime is "win-x64" or "linux-x64").Distinct().ToArray();
         var inputs = string.IsNullOrWhiteSpace(archiveRoot)
-            ? configured!
-            : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-            {
-                ["win-x64"] = Path.Combine(archiveRoot!, $"PowerForgeNative-{version}-win-x64.zip"),
-                ["linux-x64"] = Path.Combine(archiveRoot!, $"PowerForgeNative-{version}-linux-x64.zip")
-            };
+            ? spec.Outputs!.NativePowerForgeArchivePaths.Where(pair => eligibleRuntimes.Contains(pair.Key, StringComparer.OrdinalIgnoreCase))
+            : eligibleRuntimes.Select(rid => new KeyValuePair<string, string>(rid,
+                Path.Combine(archiveRoot!, $"PowerForgeNative-{version}-{rid}.zip")));
 
-        return inputs.Select(pair =>
+        var archives = inputs.Select(pair =>
         {
-            if (pair.Key is not ("win-x64" or "linux-x64"))
-                throw new InvalidOperationException($"The native PowerForge release does not support '{pair.Key}'.");
+            var runtime = pair.Key.ToLowerInvariant();
             var path = ResolveOutputPath(configDirectory, pair.Value);
-            if (!Path.GetFileName(path).Equals($"PowerForgeNative-{version}-{pair.Key}.zip", StringComparison.Ordinal))
-                throw new InvalidOperationException($"The native PowerForge archive must match release {version} and runtime {pair.Key}: {path}");
+            if (!Path.GetFileName(path).Equals($"PowerForgeNative-{version}-{runtime}.zip", StringComparison.Ordinal))
+                throw new InvalidOperationException($"The native PowerForge archive must match release {version} and runtime {runtime}: {path}");
             if (!File.Exists(path))
                 throw new FileNotFoundException($"Native PowerForge archive was not found: {path}", path);
+            var suffix = runtime == "win-x64" ? ".exe" : string.Empty;
+            using var archive = ZipFile.OpenRead(path);
+            var entries = PowerForgeReleaseArtifactVerifier.ValidateArchiveEntries(archive);
+            PowerForgeReleaseArtifactVerifier.ValidateModuleArchiveBounds(entries);
+            var launcher = GetPowerForgeArchiveEntry(archive, "powerforge" + suffix);
+            var companion = GetPowerForgeArchiveEntry(archive, "full/powerforge-full" + suffix);
+            var implementation = GetPowerForgeArchiveEntry(archive, "full/PowerForge.Cli.dll");
+            if (launcher.Length == 0 || companion.Length == 0 || implementation.Length == 0)
+                throw new InvalidDataException($"Native PowerForge archive contains an empty executable or managed implementation: {path}");
+            foreach (var entry in entries.Values)
+            {
+                using var stream = entry.Open();
+                if (PowerForgeReleaseArtifactVerifier.CopyBounded(stream, Stream.Null, entry.Length, entry.FullName) != entry.Length)
+                    throw new InvalidDataException($"Native PowerForge archive entry '{entry.FullName}' is incomplete.");
+            }
+            if (suffix.Length > 0 && target.Sign?.Enabled == true)
+            {
+                var signatureRoot = temporaryReleaseDirectory.GetOrCreateSubdirectory("native-signatures");
+                VerifyNativePowerForgeSigner(launcher, signatureRoot, target.Sign);
+                VerifyNativePowerForgeSigner(companion, signatureRoot, target.Sign);
+            }
 
             return new PowerForgeReleaseAssetEntry
             {
@@ -56,12 +81,32 @@ internal sealed partial class PowerForgeReleaseService
                 Source = NativePowerForgeArchiveSource,
                 Target = "PowerForge",
                 Version = version,
-                Runtime = pair.Key,
+                Runtime = runtime,
                 Framework = "net10.0",
                 Style = nameof(PowerForgeToolReleaseFlavor.Portable),
-                IsFinalPackageOutput = true
+                IsFinalPackageOutput = true,
+                StagedSha256 = ComputeSha256(path)
             };
         }).ToArray();
+        if (archives.Length == 0)
+            throw new ArgumentException("The PowerForge tool plan has no matching native standalone archive combinations.");
+        return archives;
+    }
+
+    private static void VerifyNativePowerForgeSigner(ZipArchiveEntry entry, string directory, DotNetPublishSignOptions sign)
+    {
+        if (!DotNetPublishPipelineRunner.IsWindows())
+            throw new InvalidOperationException("Verify signed Windows native PowerForge archives on a Windows host.");
+        var path = Path.Combine(directory, entry.Name);
+        entry.ExtractToFile(path, overwrite: true);
+        var signature = DotNetPublishReleaseArtifactVerifier.VerifyAuthenticode(path);
+        var thumbprint = DotNetPublishReleaseArtifactVerifier.NormalizeThumbprint(sign.Thumbprint);
+        var matchesPublisher = thumbprint.Length > 0
+            ? signature.Thumbprint.Equals(thumbprint, StringComparison.OrdinalIgnoreCase)
+            : !string.IsNullOrWhiteSpace(sign.SubjectName) &&
+              DotNetPublishReleaseArtifactVerifier.CertificateSubjectsEqual(signature.Subject, sign.SubjectName!);
+        if (!signature.IsValid || !matchesPublisher)
+            throw new InvalidDataException($"Native PowerForge archive entry '{entry.FullName}' lacks a valid signature from the configured publisher.");
     }
 
     private static string[] ResolveAdditionalReleaseAssetPaths(
@@ -186,11 +231,14 @@ internal sealed partial class PowerForgeReleaseService
                 var native = artifact.Source == NativePowerForgeArchiveSource;
                 var suffix = artifact.Runtime!.StartsWith("win-", StringComparison.OrdinalIgnoreCase) ? ".exe" : string.Empty;
                 var executableName = (native ? "powerforge" : "PowerForge") + suffix;
+                var archiveSha256 = ComputeSha256(artifact.Path);
+                if (native && !string.Equals(archiveSha256, artifact.StagedSha256, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidDataException($"Native PowerForge archive changed after validation: {artifact.Path}");
                 using var archive = ZipFile.OpenRead(artifact.Path);
                 return new
                 {
                     name = assetName,
-                    sha256 = ComputeSha256(artifact.Path),
+                    sha256 = archiveSha256,
                     executableSha256 = ComputePowerForgeArchiveEntrySha256(archive, executableName),
                     executableName = native ? executableName : null,
                     companionSha256 = native
@@ -288,17 +336,22 @@ internal sealed partial class PowerForgeReleaseService
 
     private static string ComputePowerForgeArchiveEntrySha256(ZipArchive archive, string executableName)
     {
+        using var stream = GetPowerForgeArchiveEntry(archive, executableName).Open();
+        using var sha256 = SHA256.Create();
+        return BitConverter.ToString(sha256.ComputeHash(stream)).Replace("-", string.Empty).ToLowerInvariant();
+    }
+
+    private static ZipArchiveEntry GetPowerForgeArchiveEntry(ZipArchive archive, string executableName)
+    {
         var entries = archive.Entries
             .Where(entry => entry.FullName.Replace('\\', '/').Equals(executableName, StringComparison.Ordinal))
             .ToArray();
         if (entries.Length != 1)
         {
             throw new InvalidOperationException(
-                $"PowerForge tool archive must contain exactly one '{executableName}' executable.");
+                $"PowerForge tool archive must contain exactly one '{executableName}' entry.");
         }
 
-        using var stream = entries[0].Open();
-        using var sha256 = SHA256.Create();
-        return BitConverter.ToString(sha256.ComputeHash(stream)).Replace("-", string.Empty).ToLowerInvariant();
+        return entries[0];
     }
 }

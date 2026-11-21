@@ -137,6 +137,12 @@ function Test-ManagedCompanion {
         (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant() -ceq $companionSha256
 }
 
+function Test-PowerForgeForwarding {
+    param([string] $Tool)
+    $probe = & $Tool apple-release --help --output json 2>$null
+    return $LASTEXITCODE -eq 0 -and ($probe -join "`n") -match 'apple-release'
+}
+
 function Test-InstalledTool {
     if ([string]::IsNullOrWhiteSpace($trustedExecutableSha256)) {
         return $false
@@ -163,7 +169,8 @@ function Test-InstalledTool {
         $versionMatches = $observedVersion -ceq $version -or $observedVersion.StartsWith("$version+", [StringComparison]::Ordinal)
         $commitMatches = [string]::IsNullOrWhiteSpace($expectedCommit) -or
             $observedVersion.EndsWith("+$expectedCommit", [StringComparison]::OrdinalIgnoreCase)
-        return $toolExitCode -eq 0 -and $versionMatches -and $commitMatches
+        return $toolExitCode -eq 0 -and $versionMatches -and $commitMatches -and
+            (-not $companionRelativePath -or (Test-PowerForgeForwarding -Tool $toolPath))
     } catch {
         return $false
     }
@@ -238,8 +245,7 @@ if (-not $reused) {
         if ($toolExitCode -ne 0 -or -not $versionMatches -or -not $commitMatches) {
             throw "Verified PowerForge executable version '$observedVersion' does not match manifest version '$version'."
         }
-        $probe = & $stagedTool apple-release --help --output json
-        if ($LASTEXITCODE -ne 0 -or ($probe -join "`n") -notmatch 'apple-release') {
+        if (-not (Test-PowerForgeForwarding -Tool $stagedTool)) {
             throw 'The verified PowerForge executable does not expose the Apple release command.'
         }
         [ordered]@{

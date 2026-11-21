@@ -159,9 +159,10 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void Execute_WritesConsumerToolManifestForTheSelectedArchive(bool includeNativeArchive)
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void Execute_StagesOnlyValidPowerForgeArchives(bool includeNativeArchive, bool missingImplementation)
     {
         var root = CreateSandbox();
         try
@@ -187,6 +188,11 @@ public sealed partial class PowerForgeReleaseServiceTests
                     launcher.Write(nativeBytes);
                 using (var companion = archive.CreateEntry("full/powerforge-full").Open())
                     companion.Write(companionBytes);
+                if (!missingImplementation)
+                {
+                    using var implementation = archive.CreateEntry("full/PowerForge.Cli.dll").Open();
+                    implementation.Write(companionBytes);
+                }
             }
             File.WriteAllText(installer, "param()");
             var service = new PowerForgeReleaseService(
@@ -217,7 +223,9 @@ public sealed partial class PowerForgeReleaseServiceTests
                         }
                     ]
                 },
-                runTools: plan => new PowerForgeToolReleaseResult
+                runTools: plan => missingImplementation
+                    ? throw new InvalidOperationException("The malformed archive must be rejected before building.")
+                    : new PowerForgeToolReleaseResult
                 {
                     Success = true,
                     Artefacts =
@@ -238,29 +246,38 @@ public sealed partial class PowerForgeReleaseServiceTests
                 },
                 publishGitHubRelease: _ => throw new InvalidOperationException("GitHub must not run."));
 
-            var result = service.Execute(
-                new PowerForgeReleaseSpec
+            var spec = new PowerForgeReleaseSpec
+            {
+                Outputs = new PowerForgeReleaseOutputsOptions
                 {
-                    Outputs = new PowerForgeReleaseOutputsOptions
-                    {
-                        PowerForgeToolManifestPath = lockManifest,
-                        AdditionalAssetPaths = [installer],
-                        NativePowerForgeArchivePaths = includeNativeArchive ? new() { [runtime] = nativeZip } : new()
-                    },
-                    Tools = new PowerForgeToolReleaseSpec(),
-                    GitHub = new PowerForgeReleaseGitHubOptions
-                    {
-                        Owner = "EvotecIT",
-                        Repository = "PSPublishModule",
-                        TagTemplate = "v{Version}"
-                    }
+                    PowerForgeToolManifestPath = lockManifest,
+                    AdditionalAssetPaths = [installer],
+                    NativePowerForgeArchivePaths = includeNativeArchive ? new() { [runtime] = nativeZip } : new()
                 },
-                new PowerForgeReleaseRequest
+                Tools = new PowerForgeToolReleaseSpec(),
+                GitHub = new PowerForgeReleaseGitHubOptions
                 {
-                    ConfigPath = Path.Combine(root, "release.json"),
-                    ToolsOnly = true,
-                    ReleaseVersion = "3.0.110"
-                });
+                    Owner = "EvotecIT",
+                    Repository = "PSPublishModule",
+                    TagTemplate = "v{Version}"
+                }
+            };
+            var request = new PowerForgeReleaseRequest
+            {
+                ConfigPath = Path.Combine(root, "release.json"),
+                ToolsOnly = true,
+                ReleaseVersion = "3.0.110"
+            };
+
+            if (missingImplementation)
+            {
+                var error = Assert.Throws<InvalidOperationException>(() => service.Execute(spec, request));
+                Assert.Contains("full/PowerForge.Cli.dll", error.Message, StringComparison.Ordinal);
+                Assert.False(File.Exists(lockManifest));
+                return;
+            }
+
+            var result = service.Execute(spec, request);
 
             Assert.True(result.Success, result.ErrorMessage);
             Assert.Contains(lockManifest, result.ReleaseAssets);

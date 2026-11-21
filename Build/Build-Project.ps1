@@ -188,6 +188,9 @@ try {
         $invokeParams.Sign = $EnableSigning
     }
     $invokeParams.ConfigPath = $ConfigPath
+    if ($StageRoot) {
+        $invokeParams.StageRoot = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($StageRoot)
+    }
     $invokeParams.Configuration = $Configuration
     $invokeParams.ModuleRunMode = if ($publishRequested) { 'Publish' } else { $RunMode }
     $invokeParams.ErrorAction = 'Stop'
