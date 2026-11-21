@@ -143,9 +143,9 @@ public sealed partial class MissingFunctionsAnalyzer
                 function.Error = $"Cannot inspect the script body of '{function.Name}' from '{function.Source}'.";
                 continue;
             }
-            if (FindDonorContextVariable(body, source, consumerFunctions, consumer.DeclaredAliases) is { } variable)
+            if (FindDonorContextIssue(body, source, consumerFunctions, consumer.DeclaredAliases) is { } contextIssue)
             {
-                function.Error = $"Command '{function.Name}' from '{function.Source}' uses donor context variable '{variable}', which is unavailable after merging.";
+                function.Error = $"Command '{function.Name}' from '{function.Source}' {contextIssue}";
                 continue;
             }
             if (FindUnpreservableAlias(body, source, resolveInvocation, consumerFunctions, consumer.DeclaredAliases) is { } aliasError)

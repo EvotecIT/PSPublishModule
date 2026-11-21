@@ -256,12 +256,13 @@ public sealed class ModuleBuildPipeline
             throw new FileNotFoundException($"Manifest not found after build: {psd1}");
 
         var exports = ModuleManifestExportReader.ReadExports(psd1);
+        string? generatedRootBootstrapper = null;
 
         // Ensure the staged module has a clean, deterministic bootstrapper and (when binaries exist) a Libraries.ps1 file.
         // This keeps artefacts and installs aligned with historical PSPublishModule behavior for binary/mixed modules.
         if (!spec.RefreshManifestOnly && !(spec.ReuseStaging && spec.PowerShellCompilation?.Enabled == true))
         {
-            ModuleBootstrapperGenerator.Generate(
+            if (ModuleBootstrapperGenerator.Generate(
                 staging,
                 spec.Name,
                 exports,
@@ -276,7 +277,10 @@ public sealed class ModuleBuildPipeline
                 preloadSharedAssemblies: spec.PreloadSharedAssemblies,
                 targetFrameworks: spec.Frameworks,
                 forceBootstrapperWrite: forceBootstrapperWrite,
-                log: message => _logger.Info(message));
+                log: message => _logger.Info(message)))
+            {
+                generatedRootBootstrapper = File.ReadAllText(Path.Combine(staging, spec.Name + ".psm1"));
+            }
         }
         else
         {
@@ -288,7 +292,10 @@ public sealed class ModuleBuildPipeline
         var buildNotes = spec.AnalyzeInstalledBinaryConflictsDuringBuild
             ? builder.AnalyzeInstalledBinaryConflicts(buildOptions)
             : Array.Empty<ModuleOwnerNote>();
-        return new ModuleBuildResult(staging, psd1, exports, buildNotes);
+        return new ModuleBuildResult(staging, psd1, exports, buildNotes)
+        {
+            GeneratedRootBootstrapper = generatedRootBootstrapper
+        };
     }
 
     /// <summary>

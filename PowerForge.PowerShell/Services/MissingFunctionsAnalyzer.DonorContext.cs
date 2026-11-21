@@ -16,7 +16,7 @@ public sealed partial class MissingFunctionsAnalyzer
            observed.Guid == selected.Guid &&
            FrameworkCompatibility.PathComparer.Equals(observed.ModuleBase, selected.ModuleBase);
 
-    private string? FindDonorContextVariable(
+    private string? FindDonorContextIssue(
         ScriptBlockAst root,
         ApprovedModuleSource? source,
         HashSet<string> consumerFunctions,
@@ -24,7 +24,15 @@ public sealed partial class MissingFunctionsAnalyzer
     {
         HashSet<string>? moduleVariableNames = null;
         NestedFunctionVisibilityAnalyzer? visibility = null;
-        (CommandAst Command, Func<string, bool>? Affects)[]? removals = null;
+        var removals = new List<(CommandAst Command, Func<string, bool> Affects)>();
+        foreach (var command in root.FindAll(static node => node is CommandAst, searchNestedScriptBlocks: true).Cast<CommandAst>())
+        {
+            var affects = PowerShellVariableRemovalPolicy.ReadAffectedNames(command, out bool accessesEnclosingScope);
+            if (accessesEnclosingScope)
+                return $"accesses a variable outside the function's local scope using '{command.GetCommandName()}'.";
+            if (affects is not null)
+                removals.Add((command, affects));
+        }
         foreach (var variable in root.FindAll(static node => node is VariableExpressionAst, searchNestedScriptBlocks: true)
                      .Cast<VariableExpressionAst>())
         {
@@ -33,11 +41,11 @@ public sealed partial class MissingFunctionsAnalyzer
             if (path.IsScript ||
                 name.Equals("PSScriptRoot", StringComparison.OrdinalIgnoreCase) ||
                 name.Equals("PSCommandPath", StringComparison.OrdinalIgnoreCase))
-                return path.UserPath;
+                return DescribeContextVariable(path.UserPath);
             if (name.Equals("MyInvocation", StringComparison.OrdinalIgnoreCase))
             {
                 if (!ReadsCurrentFunctionName(variable))
-                    return path.UserPath;
+                    return DescribeContextVariable(path.UserPath);
                 continue;
             }
             if (source is null || !path.IsUnqualified || !IsPotentialModuleVariable(name))
@@ -46,22 +54,19 @@ public sealed partial class MissingFunctionsAnalyzer
             moduleVariableNames ??= GetModuleScriptVariableNames(source);
             if (!moduleVariableNames.Contains(name) || IsLocalDeclaration(variable))
                 continue;
-            removals ??= root.FindAll(static node => node is CommandAst, searchNestedScriptBlocks: true)
-                .Cast<CommandAst>()
-                .Select(command => (command, PowerShellVariableRemovalPolicy.ReadAffectedNames(command)))
-                .Where(removal => removal.Item2 is not null)
-                .ToArray();
-            if (removals.Any(removal => removal.Affects!(name) &&
+            if (removals.Any(removal => removal.Affects(name) &&
                     !FollowsReadInSameSingleRunBlock(removal.Command, variable)) ||
                 !HasLocalBinding(variable, root, CanReadEnclosingScope))
-                return path.UserPath;
+                return DescribeContextVariable(path.UserPath);
         }
         return null;
 
-        bool CanReadEnclosingScope(ScriptBlockExpressionAst callback)
+        bool CanReadEnclosingScope(ScriptBlockAst scope)
         {
             visibility ??= NestedFunctionVisibilityAnalyzer.Create(root);
-            if (!visibility.IsSynchronousScriptBlock(callback))
+            if (scope.Parent is FunctionDefinitionAst function)
+                return visibility.HasSynchronousEnclosingFunction(function);
+            if (scope.Parent is not ScriptBlockExpressionAst callback || !visibility.IsSynchronousScriptBlock(callback))
                 return false;
             if (callback.Parent is not CommandAst invocation)
                 return false;
@@ -83,6 +88,9 @@ public sealed partial class MissingFunctionsAnalyzer
                    cmdlet.Source.StartsWith("Microsoft.PowerShell.", StringComparison.OrdinalIgnoreCase);
         }
     }
+
+    private static string DescribeContextVariable(string name)
+        => $"uses donor context variable '{name}', which is unavailable after merging.";
 
     private HashSet<string> GetModuleScriptVariableNames(ApprovedModuleSource source)
     {
@@ -156,7 +164,7 @@ param($module)
     private static bool HasLocalBinding(
         VariableExpressionAst variable,
         ScriptBlockAst root,
-        Func<ScriptBlockExpressionAst, bool> canReadEnclosingScope)
+        Func<ScriptBlockAst, bool> canReadEnclosingScope)
     {
         string name = variable.VariablePath.UserPath;
         var comparer = StringComparer.OrdinalIgnoreCase;
@@ -181,8 +189,7 @@ param($module)
                 if (defaultParameter is null && scope.BeginBlock is { } begin &&
                     begin.Extent.EndOffset <= variable.Extent.StartOffset && HasPriorAssignment(begin.Statements, variable, name))
                     return true;
-                if (ReferenceEquals(scope, root) || scope.Parent is not ScriptBlockExpressionAst callback ||
-                    !canReadEnclosingScope(callback))
+                if (ReferenceEquals(scope, root) || !canReadEnclosingScope(scope))
                     return false;
             }
             if (node.Parent is ForEachStatementAst loop && ReferenceEquals(loop.Body, node) &&

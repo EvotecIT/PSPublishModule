@@ -6,6 +6,30 @@ namespace PowerForge;
 
 internal sealed partial class NestedFunctionVisibilityAnalyzer
 {
+    internal bool HasSynchronousEnclosingFunction(FunctionDefinitionAst declaration)
+    {
+        if (declaration.Name.IndexOf(':') >= 0 ||
+            FindContainingScriptBlock(declaration) is not { } scope ||
+            DoesDeferredFunctionBodyEscape(declaration, scope))
+            return false;
+
+        var graph = GetExecutionGraph(scope);
+        if (!graph.FunctionsByName.TryGetValue(declaration.Name, out var definitions) ||
+            definitions.Length != 1 || !ReferenceEquals(definitions[0], declaration))
+            return false;
+
+        var calls = graph.RootInvocations.Where(site =>
+            string.Equals(site.Command.GetCommandName(), declaration.Name, StringComparison.OrdinalIgnoreCase)).ToArray();
+        return calls.Length > 0 && calls.All(site => ReferenceEquals(FindContainingScriptBlock(site.Command), scope) &&
+            !IsPotentiallyShadowedByAlias(site.Command, declaration.Name) &&
+            IsDeclaredInVisibleScope(site.Command, declaration.Name));
+    }
+
+    private bool IsPotentiallyShadowedByAlias(CommandAst command, string name)
+        => (_aliasDeclarationsByName.TryGetValue(name, out var aliases) &&
+            aliases.Any(alias => AliasCanShadowInvocation(alias, command))) ||
+           _dynamicAliasDeclarations.Any(alias => AliasCanShadowInvocation(alias, command));
+
     private bool DoesDeferredFunctionBodyEscape(
         FunctionDefinitionAst function,
         ScriptBlockAst declarationScope)

@@ -5,14 +5,16 @@ namespace PowerForge;
 
 internal static class PowerShellVariableRemovalPolicy
 {
-    internal static Func<string, bool>? ReadAffectedNames(CommandAst command)
+    internal static Func<string, bool>? ReadAffectedNames(CommandAst command, out bool accessesEnclosingScope)
     {
+        accessesEnclosingScope = false;
         var name = command.GetCommandName()?.Split('\\').Last();
         if (name is null)
             return null;
         bool removesVariables = name.Equals("Remove-Variable", StringComparison.OrdinalIgnoreCase) ||
                                 name.Equals("rv", StringComparison.OrdinalIgnoreCase);
-        if (!removesVariables && !RemovesProviderItems(name))
+        bool variableCommand = removesVariables || IsVariableCommand(name);
+        if (!variableCommand && !RemovesProviderItems(name))
             return null;
 
         StaticBindingResult binding;
@@ -22,13 +24,19 @@ internal static class PowerShellVariableRemovalPolicy
         }
         catch (RuntimeException)
         {
-            return _ => true;
+            accessesEnclosingScope = variableCommand;
+            return removesVariables || !variableCommand ? _ => true : null;
         }
 
-        if (removesVariables && binding.BoundParameters.TryGetValue("Scope", out var scope) &&
-            scope.ConstantValue is string scopeName &&
-            (scopeName.Equals("Global", StringComparison.OrdinalIgnoreCase) ||
-             scopeName.Equals("Script", StringComparison.OrdinalIgnoreCase)))
+        if (variableCommand && binding.BoundParameters.TryGetValue("Scope", out var scope) &&
+            !IsLocalScope(scope.ConstantValue))
+        {
+            accessesEnclosingScope = true;
+            return null;
+        }
+        if (variableCommand && command.CommandElements.OfType<VariableExpressionAst>().Any(variable => variable.Splatted))
+            accessesEnclosingScope = true;
+        if (variableCommand && !removesVariables)
             return null;
 
         var key = removesVariables ? "Name" : binding.BoundParameters.ContainsKey("LiteralPath") ? "LiteralPath" : "Path";
@@ -53,6 +61,14 @@ internal static class PowerShellVariableRemovalPolicy
         var patterns = targets.Select(target => new WildcardPattern(target, WildcardOptions.IgnoreCase)).ToArray();
         return variable => patterns.Any(pattern => pattern.IsMatch(variable));
     }
+
+    private static bool IsLocalScope(object? scope)
+        => scope is int and 0 || scope is string name &&
+           (name.Equals("Local", StringComparison.OrdinalIgnoreCase) || name.Equals("0", StringComparison.Ordinal));
+
+    private static bool IsVariableCommand(string command)
+        => new[] { "Get-Variable", "Set-Variable", "New-Variable", "Clear-Variable", "gv", "sv", "nv", "clv" }
+            .Contains(command, StringComparer.OrdinalIgnoreCase);
 
     private static bool RemovesProviderItems(string command)
         => command.Equals("Remove-Item", StringComparison.OrdinalIgnoreCase) ||

@@ -37,13 +37,16 @@ detected call unresolved or change its binding. Examples include colliding
 helper names, a binary cmdlet, a module-qualified call, and a function that
 relies on the donor's private module variables or files relative to its module
 path. A helper may use its own parameters and local variables, including in
-parameter defaults and synchronous callbacks where those bindings are available.
+parameter defaults, synchronous callbacks and nested functions that run in
+the enclosing function's scope.
 PowerForge follows literal function-local alias targets through the same
 dependency checks as direct calls. A function can shadow an ordinary consumer
 alias during its invocation. The build stops if the consumer alias is shared
 with child scopes or if `WhatIf` or `Confirm` can skip the alias assignment.
 PowerForge also checks variable removals that could make a read fall back to
-donor module state.
+donor module state and explicit variable commands that access an enclosing
+scope. The analysis includes retained root module code and scripts loaded by
+the generated bootstrapper.
 PowerForge also checks aliases created in the consumer's script scope and
 verifies that a dependency resolved inside a donor matches the selected
 approved module identity. Dynamic calls or alias declarations that prevent
