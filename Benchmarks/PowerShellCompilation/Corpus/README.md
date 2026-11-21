@@ -244,6 +244,12 @@ revision metadata. The rest of the report contributes directly to the
 comparison hash. The raw byte hash and invocation window remain in each
 affected case's `.effect-bytes.json` receipt.
 
+The PScribo observation canonicalizes its contiguous block of distinct
+single-class stylesheet rules. It first verifies that each class attribute
+contains one class and that the document has one inline stylesheet and no
+script elements. The comparison preserves the contents of every rule and
+the rest of the document. The case receipt records the raw file hash.
+
 Use the built CLI for the revision being assessed and a scratch directory
 outside the source tree. The runner verifies packet hashes before executing
 any source. It requires explicit opt-in to run the pinned third-party inputs

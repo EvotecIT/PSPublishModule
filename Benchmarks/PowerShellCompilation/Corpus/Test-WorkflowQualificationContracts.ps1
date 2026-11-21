@@ -549,6 +549,35 @@ Assert-RejectedContract 'reject duplicate HTML revision metadata' {
     ConvertTo-UnfamiliarReportEffectHash $reportPath $started $completed
 } 'one viewport and one revision'
 
+$cssStart = '<style>' + [Environment]::NewLine
+$cssEnd = '</style><div class="a">Fixture</div>'
+$ruleA = '.a { color: red; }' + [Environment]::NewLine
+$ruleB = '.b { color: blue; }' + [Environment]::NewLine
+[IO.File]::WriteAllText($reportPath, $cssStart + $ruleA + $ruleB + $cssEnd)
+$cssBaseline = ConvertTo-SingleClassReportEffectHash $reportPath
+[IO.File]::WriteAllText($reportPath, $cssStart + $ruleB + $ruleA + $cssEnd)
+if ((ConvertTo-SingleClassReportEffectHash $reportPath) -cne $cssBaseline) {
+    throw 'Reordering two disjoint single-class CSS rules changed the report comparison.'
+}
+$checked.Add('CSS report comparison preserves independently applied class rules across ordering')
+[IO.File]::WriteAllText($reportPath, $cssStart + $ruleB + $ruleA.Replace('red', 'black') + $cssEnd)
+if ((ConvertTo-SingleClassReportEffectHash $reportPath) -ceq $cssBaseline) {
+    throw 'The CSS report comparison ignored a changed style.'
+}
+$checked.Add('CSS report comparison detects changed rules')
+[IO.File]::WriteAllText($reportPath, $cssStart + $ruleA + $ruleB + $cssEnd.Replace('"a"', '"a b"'))
+Assert-RejectedContract 'reject CSS report with potentially overlapping class selectors' {
+    ConvertTo-SingleClassReportEffectHash $reportPath
+} 'single-class elements'
+[IO.File]::WriteAllText($reportPath, $cssStart + $ruleA + $ruleA.Replace('red', 'black') + $cssEnd)
+Assert-RejectedContract 'reject duplicate CSS selectors' {
+    ConvertTo-SingleClassReportEffectHash $reportPath
+} 'distinct single-class CSS rules'
+[IO.File]::WriteAllText($reportPath, $cssStart + $ruleA + ('p { color: green; }' + [Environment]::NewLine) + $ruleB + $cssEnd)
+Assert-RejectedContract 'reject noncontiguous CSS rule block' {
+    ConvertTo-SingleClassReportEffectHash $reportPath
+} 'contiguous block'
+
 $result=[ordered]@{schemaVersion=1;passed=$true;checks=@($checked);checkCount=$checked.Count
     scope='Standalone qualification assertions only; no compiler, SDK, third-party source, lifecycle process, or benchmark executed'
     retainedFixtureRoot=$source}

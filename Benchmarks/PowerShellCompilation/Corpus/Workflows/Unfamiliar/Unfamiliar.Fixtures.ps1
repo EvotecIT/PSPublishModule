@@ -285,6 +285,9 @@ function ConvertTo-UnfamiliarScenarioEffectHash {
     if ($WorkloadId -ceq 'PSWriteHTML' -and $RelativePath -ceq 'report.html') {
         return ConvertTo-UnfamiliarReportEffectHash (Join-Path $Root $RelativePath) $Started $Completed
     }
+    if ($WorkloadId -ceq 'PScribo' -and $RelativePath -ceq 'fixture.html') {
+        return ConvertTo-SingleClassReportEffectHash (Join-Path $Root $RelativePath)
+    }
     return $RawHash
 }
 
@@ -312,4 +315,40 @@ function ConvertTo-UnfamiliarReportEffectHash {
         '<meta name="{0}" content="{1}">' -f $name, $value
     })
     return [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($utf8.GetBytes($content))).ToLowerInvariant()
+}
+
+function ConvertTo-SingleClassReportEffectHash {
+    param([string] $Path)
+
+    $utf8 = [Text.UTF8Encoding]::new($false, $true)
+    $html = $utf8.GetString([IO.File]::ReadAllBytes($Path))
+    $styles = [regex]::Matches($html, '(?is)<style(?:\s+[^>]*)?>(?<css>.*?)</style>')
+    $attributes = [regex]::Matches($html, '(?i)\bclass\s*=')
+    $classes = [regex]::Matches($html, '(?i)\bclass\s*=\s*"(?<value>[-A-Za-z0-9_]+)"')
+    if ($styles.Count -ne 1 -or $attributes.Count -ne $classes.Count -or
+        [regex]::IsMatch($html, '(?i)<script\b')) {
+        throw 'The report comparison requires one inline stylesheet and single-class elements with no scripts.'
+    }
+
+    $css = $styles[0].Groups['css']
+    $rules = [regex]::Matches($css.Value, '(?m)^[\t ]*\.(?<name>[-A-Za-z0-9_]+)[\t ]*\{[^\r\n{}]*\}[\t ]*\r?\n')
+    $names = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    $lines = [Collections.Generic.List[string]]::new()
+    $end = if ($rules.Count) { $rules[0].Index } else { 0 }
+    foreach ($rule in $rules) {
+        if ($rule.Index -ne $end -or -not $names.Add($rule.Groups['name'].Value)) {
+            throw 'The report comparison requires a contiguous block of distinct single-class CSS rules.'
+        }
+        $lines.Add($rule.Value)
+        $end += $rule.Length
+    }
+    if ($rules.Count -lt 2) {
+        throw 'The report comparison could not identify its generated CSS rule block.'
+    }
+
+    $first = $css.Index + $rules[0].Index
+    $sorted = $lines.ToArray()
+    [Array]::Sort($sorted, [StringComparer]::Ordinal)
+    $observed = $html.Substring(0, $first) + ($sorted -join '') + $html.Substring($css.Index + $end)
+    return [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($utf8.GetBytes($observed))).ToLowerInvariant()
 }
