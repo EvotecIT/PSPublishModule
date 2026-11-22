@@ -67,6 +67,7 @@ internal sealed partial class PowerShellSemanticBinder
 
         var semanticOutputType = declaredOutputType == typeof(void) ? null : declaredOutputType;
         var strict = capabilities == PowerShellCompilationCapabilities.TypedExecutable;
+        var composition = functions[function.Name].PipelineLifecycleSupportsComposition;
         var cleanSyntax = GetCleanBlock(function.Body);
         if (cleanSyntax is not null && _semanticProfile.Family != PowerShellCompilationSemanticHostFamily.PowerShell7)
         {
@@ -112,12 +113,20 @@ internal sealed partial class PowerShellSemanticBinder
                 rawRecord.Span, sourceParameter.Symbol, PowerShellConversionSemanticBinder.BindClosedStringConversion(rawRecord)!);
             process = new PowerShellBoundBlock(process.Span, new PowerShellBoundStatement[] { normalize }.Concat(process.Statements).ToArray());
         }
-        if (supportsOutputLimit && new[] { begin, process, end }.Any(block =>
+        var signature = functions[function.Name];
+        var clauses = new[] { begin, process, end };
+        var writesFinallyRecords = clauses.Any(block =>
                 PowerShellSemanticAnalyzer.EnumerateStatements(block, descendIntoCaptures: false).OfType<PowerShellBoundTryStatement>()
-                    .Any(attempt => attempt.FinallyBlock is { } cleanup && GetSuccessOutputs(cleanup).Length != 0)))
+                    .Any(attempt => attempt.FinallyBlock is { } cleanup && GetSuccessOutputs(cleanup).Length != 0));
+        if ((supportsOutputLimit || signature.PipelineLifecycleCompositionMayStopEarly) && writesFinallyRecords)
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2928", "Strict lifecycle early stopping cannot transfer control from finally output.", begin.Span));
             return null;
+        }
+        if (composition)
+        {
+            signature.PipelineLifecycleWritesFinallyRecords = writesFinallyRecords;
+            signature.PipelineLifecycleProvesTotalTransfer = clauses.All(IsTotalCompositionClause);
         }
         var beginOutputs = GetSuccessOutputs(begin);
         var processOutputs = strict ? beginOutputs.Concat(GetSuccessOutputs(process)).ToArray() : GetSuccessOutputs(process);
@@ -134,8 +143,9 @@ internal sealed partial class PowerShellSemanticBinder
 
         var returnsCollection = processOutputs.Length > 0;
         Type? outputElementType = null;
-        if (returnsCollection != signatureReturnsCollection ||
-            returnsCollection && !TryGetLifecycleOutputElementType(processOutputs, end, semanticOutputType, out outputElementType))
+        if ((!composition && returnsCollection != signatureReturnsCollection) ||
+            (returnsCollection || composition) &&
+            !TryGetLifecycleOutputElementType(processOutputs, end, semanticOutputType, composition, out outputElementType))
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic(
                 "PSB2928",
@@ -170,15 +180,16 @@ internal sealed partial class PowerShellSemanticBinder
             declareVariable: true,
             nullCollectionElement,
             checkHostInterrupts: PowerShellLoopInterruptContract.IsAvailable(capabilities));
-        PowerShellBoundParameter? limitParameter = null;
+        var limitParameter = supportsOutputLimit
+            ? CreateLifecycleLimitParameter(document, function, symbols, pipelineParameter, sourceParameter) : null;
         PowerShellBoundBlock body;
-        var needsLiveOutput = supportsOutputLimit || streamsSuccessOutput &&
+        var needsLiveOutput = supportsOutputLimit || composition && processOutputs.Any(static output => output.ValueState == PowerShellValueState.Null) ||
+            (streamsSuccessOutput || composition) &&
             (beginOutputs.Length != 0 || new[] { begin, process, end }.Any(LifecycleHasObservableFailure) ||
              clean is not null && LifecycleHasObservableFailure(clean));
         if (returnsCollection && needsLiveOutput)
         {
-            limitParameter = supportsOutputLimit ? CreateLifecycleLimitParameter(document, function, symbols, pipelineParameter, sourceParameter) : null;
-            var limit = limitParameter is null ? null : new PowerShellBoundVariableExpression(
+            var limit = limitParameter is null || composition ? null : new PowerShellBoundVariableExpression(
                 limitParameter.Symbol.Declaration, limitParameter.Symbol, limitParameter.Type, PowerShellValueState.Known);
             var outputName = CreatePipelineOutputName(symbols, pipelineParameter.Extent.StartOffset);
             var outputSymbol = new PowerShellSymbolId(PowerShellSymbolKind.Local, document.DocumentId,
@@ -266,6 +277,15 @@ internal sealed partial class PowerShellSemanticBinder
         var lifecycleParameters = sourceParameters.Select(parameter => parameter.Symbol.Equals(sourceParameter.Symbol)
             ? collectionParameter : parameter).ToArray();
         if (limitParameter is not null) lifecycleParameters = lifecycleParameters.Append(limitParameter).ToArray();
+        if (composition)
+        {
+            var name = CreatePipelineCollectionName(symbols, pipelineParameter.Extent.EndOffset);
+            var symbol = new PowerShellSymbolId(PowerShellSymbolKind.Parameter, document.DocumentId, name,
+                sourceParameter.Symbol.Declaration, function.Name + "/pipeline-stage");
+            var type = typeof(Generated.Runtime.PowerShellStrictPipelineStage<>).MakeGenericType(sourceParameter.Type.ClrType);
+            lifecycleParameters = lifecycleParameters.Append(new PowerShellBoundParameter(symbol, StrictPipelineType(type),
+                new PowerShellCompilationParameter(name, type.FullName!, false, false, false, null, true, null))).ToArray();
+        }
         var scopeSymbols = lifecycleParameters.Select(static parameter => parameter.Symbol)
             .Concat(locals.Select(static local => local.Symbol))
             .OrderBy(static symbol => symbol.StableKey, StringComparer.Ordinal)
@@ -417,10 +437,17 @@ internal sealed partial class PowerShellSemanticBinder
             !signature.IsPipelineLifecycle)
             return false;
         if (pipeline.PipelineElements.Count == 2) return true;
-        if (capabilities != PowerShellCompilationCapabilities.TypedExecutable || !signature.PipelineLifecycleReturnsCollection ||
-            PowerShellCommandRegionSemanticBinder.IsBackground(pipeline) ||
-            pipeline.PipelineElements[2] is not CommandAst { InvocationOperator: TokenKind.Unknown, Redirections.Count: 0 } selection ||
-            ResolveCommand(selection, functions, capabilities) is not
+        return capabilities == PowerShellCompilationCapabilities.TypedExecutable && signature.PipelineLifecycleReturnsCollection &&
+            !PowerShellCommandRegionSemanticBinder.IsBackground(pipeline) &&
+            TryGetLifecycleLimit(pipeline.PipelineElements[2], functions, out limit);
+    }
+
+    private bool TryGetLifecycleLimit(CommandBaseAst stage, IReadOnlyDictionary<string, PowerShellLocalCallSignature> functions,
+        out int limit)
+    {
+        limit = 0;
+        if (stage is not CommandAst { InvocationOperator: TokenKind.Unknown, Redirections.Count: 0 } selection ||
+            ResolveCommand(selection, functions, PowerShellCompilationCapabilities.TypedExecutable) is not
                 { IsProvider: true, Contract.ProviderId: "powerforge.command.projection.select-object" } ||
             selection.CommandElements.Count != 3 ||
             selection.CommandElements[1] is not CommandParameterAst { Argument: null } first ||
@@ -478,12 +505,15 @@ internal sealed partial class PowerShellSemanticBinder
         PowerShellBoundExpression[] processOutputs,
         PowerShellBoundBlock end,
         Type? declaredOutputType,
+        bool allowsExplicitNull,
         out Type? outputElementType)
     {
         outputElementType = null;
         var endOutput = GetSuccessOutputs(end);
         if (endOutput.Length > 1 || endOutput.Length == 0 && end.Statements.Length != 0) return false;
-        var types = processOutputs.Concat(endOutput)
+        var outputs = processOutputs.Concat(endOutput).ToArray();
+        var hasExplicitNull = outputs.Any(static expression => expression.ValueState == PowerShellValueState.Null);
+        var types = outputs.Where(expression => !allowsExplicitNull || expression.ValueState != PowerShellValueState.Null)
             .Select(static expression => expression.Type.ClrType)
             .Distinct()
             .ToArray();
@@ -492,6 +522,7 @@ internal sealed partial class PowerShellSemanticBinder
             types[0] == typeof(void) ||
             types[0].IsArray ||
             !PowerShellStableScalarTypePolicy.IsSupported(types[0]) ||
+            allowsExplicitNull && hasExplicitNull && PowerShellClrTypeSemantics.IsNonNullableValueType(types[0]) ||
             declaredOutputType is not null && declaredOutputType != types[0])
             return false;
         outputElementType = types[0];

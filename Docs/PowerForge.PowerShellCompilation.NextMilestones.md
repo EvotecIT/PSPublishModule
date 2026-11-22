@@ -315,11 +315,11 @@ input, and local advanced-function records with early stopping. The pinned
 PowerShell 7 profile also covers `clean`. The [coverage report](PowerForge.PowerShellCompilation.Coverage.md#strict-nativeaot-data-processing-scripts)
 records the source pin and observed paths.
 
-Keep the next runtime-free expansion centered on composed pipelines. Qualify
-two local output-producing stages together, including records from `begin`
-and `end`, synchronous downstream delivery, an early stop, and cleanup
-for every started stage. Use both pinned hosts for the common syntax and
-PowerShell 7.6.6 for `clean`.
+Strict executables can compose two local advanced stages with exact typed
+binding. The pinned hosts cover synchronous delivery, stage-local state,
+early stop, and error propagation. PowerShell 7.6.6 also covers source-order
+cleanup of each started stage. Longer chains and typed capture of composed
+results remain open.
 
 ## Milestone 30 — Qualify distribution, providers, and platforms
 

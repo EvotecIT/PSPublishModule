@@ -32,8 +32,12 @@ local advanced function that emits homogeneous scalar records from its
 lifecycle. A terminal `Select-Object -First` can stop that producer before
 it resumes after its final selected record. On the PowerShell 7 profile the
 admitted `clean` clause runs once and discards its success output. Fallible
-cleanup requires an exhaustive local catch. Multiple effectful local stages
-still require native lifecycle interleaving.
+cleanup requires an exhaustive local catch. A Strict executable can pipe a
+typed array through two local advanced functions in a statement or
+explicit return. The first stage's stable scalar output type must match
+the second stage's exact by-value parameter type. The stages deliver records
+synchronously and clean up in source order. Composed result capture, longer
+chains, and general command binding still require the PowerShell host.
 
 Property expansion covers known scalar members such as string length,
 TimeSpan ticks and filesystem names. Terminal filesystem projection supports

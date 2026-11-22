@@ -15,6 +15,7 @@ internal sealed partial class PowerShellTypedLowerer
             PowerShellBoundTransportedScriptBlockExpression block => new PowerShellLoweredTransportedScriptBlockExpression(block.Span, block.SourceDocument),
             PowerShellBoundNativeLifecycleExpression lifecycle => new PowerShellLoweredNativeLifecycleExpression(lifecycle.Span, lifecycle.Clause),
             PowerShellBoundLiteralExpression literal => new PowerShellLoweredLiteralExpression(literal.Span, literal.Type.ClrType, literal.Value),
+            PowerShellBoundStrictSuccessSinkExpression sink => new PowerShellLoweredStrictSuccessSinkExpression(sink.Span),
             PowerShellBoundNativeVariableExpression variable => new PowerShellLoweredNativeVariableExpression(
                 variable.Span, variable.Name, variable.InExpandableString, variable.SourcePath, variable.SourceText, variable.DirectLocal),
             PowerShellBoundVariableExpression variable => new PowerShellLoweredVariableExpression(variable.Span, variable.Type.ClrType, variable.Symbol),

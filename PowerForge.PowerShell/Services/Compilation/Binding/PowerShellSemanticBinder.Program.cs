@@ -101,16 +101,27 @@ internal sealed partial class PowerShellSemanticBinder
                 signature.SetPipelineLifecycleReturnsCollection();
         }
         if (capabilities == PowerShellCompilationCapabilities.TypedExecutable &&
-            functionsByName.Values.Any(static signature => signature.PipelineLifecycleReturnsCollection))
+            functionsByName.Values.Any(static signature => signature.IsPipelineLifecycle))
         {
             var ownsExecutableEntry = orderedDocuments.Any(static document => document.AuthoredProjection is not null);
             if (ownsExecutableEntry)
                 foreach (var signature in functionsByName.Values.Where(static signature => signature.PipelineLifecycleReturnsCollection))
                     signature.PipelineLifecycleStreamsOutput = true;
             foreach (var pipeline in orderedDocuments.SelectMany(static document =>
-                         document.SyntaxRoot.FindAll(static node => node is PipelineAst { PipelineElements.Count: 3 }, searchNestedScriptBlocks: true))
+                         document.SyntaxRoot.FindAll(static node => node is PipelineAst { PipelineElements.Count: 3 or 4 }, searchNestedScriptBlocks: true))
                      .OfType<PipelineAst>())
             {
+                if (TryDescribeComposedLifecycle(pipeline, functionsByName, out var composition))
+                {
+                    composition.Upstream.PipelineLifecycleSupportsComposition = true;
+                    composition.Downstream.PipelineLifecycleSupportsComposition = true;
+                    if (composition.First > 0)
+                    {
+                        composition.Upstream.PipelineLifecycleCompositionMayStopEarly = true;
+                        composition.Downstream.PipelineLifecycleCompositionMayStopEarly = true;
+                    }
+                    continue;
+                }
                 if (TryGetRuntimeFreePipelineLifecycleSelection(pipeline, functionsByName, capabilities, out var limit) &&
                     limit > 0 && pipeline.PipelineElements[1] is CommandAst target &&
                     TryGetLocalFunction(target, functionsByName, out var signature))
@@ -119,6 +130,12 @@ internal sealed partial class PowerShellSemanticBinder
                     signature.PipelineLifecycleStreamsOutput = true;
                 }
             }
+            foreach (var declaration in declarations)
+                if (functionsByName.TryGetValue(declaration.Syntax.Name, out var signature) &&
+                    signature.PipelineLifecycleSupportsComposition && signature.DeclaredReturnType is null &&
+                    PowerShellLocalCallSemanticBinder.InferPipelineLifecycleRecordType(
+                        declaration.Syntax, signature, functionsByName) is { } recordType)
+                    signature.RefineReturnType(recordType);
         }
 
         var failedDiagnostics = new Dictionary<string, PowerShellSemanticDiagnostic[]>(StringComparer.OrdinalIgnoreCase);
@@ -205,6 +222,9 @@ internal sealed partial class PowerShellSemanticBinder
                 moduleStateOriginsChanged |= functionsByName[function.Symbol.Name].MarkReturnsModuleStateDerived();
             }
             if (moduleStateOriginsChanged) continue;
+
+            if (capabilities == PowerShellCompilationCapabilities.TypedExecutable)
+                ExcludeUnprovedFinallyCompositions(functions, functionsByName, failedDiagnostics);
 
             var boundNames = functions.Select(static function => function.Symbol.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
             if (boundNames.SetEquals(functionsByName.Keys))

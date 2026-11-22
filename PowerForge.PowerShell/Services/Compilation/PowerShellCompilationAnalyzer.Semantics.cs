@@ -184,7 +184,8 @@ public sealed partial class PowerShellCompilationAnalyzer
                 unit.Kind,
                 unit.StartLine,
                 lowered.ReturnType.FullName ?? lowered.ReturnType.Name,
-                lowered.Parameters.Select(static parameter => parameter.Contract).ToArray(),
+                lowered.Parameters.Where(static parameter => !PowerShellTypedLowerer.IsStrictStageType(parameter.ClrType))
+                    .Select(static parameter => parameter.Contract).ToArray(),
                 Array.Empty<PowerShellCompilationDiagnostic>());
         }
 

@@ -23,6 +23,11 @@ internal sealed class PowerShellLoweredLiteralExpression : PowerShellLoweredExpr
     internal object? Value { get; }
 }
 
+internal sealed class PowerShellLoweredStrictSuccessSinkExpression : PowerShellLoweredExpression
+{
+    internal PowerShellLoweredStrictSuccessSinkExpression(SourceSpan span) : base(span, typeof(Action<object>)) { }
+}
+
 internal sealed class PowerShellLoweredVariableExpression : PowerShellLoweredExpression
 {
     internal PowerShellLoweredVariableExpression(SourceSpan span, Type clrType, PowerShellSymbolId symbol) : base(span, clrType) => Symbol = symbol;

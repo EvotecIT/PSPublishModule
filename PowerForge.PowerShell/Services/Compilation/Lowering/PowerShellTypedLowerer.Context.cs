@@ -41,16 +41,18 @@ internal sealed partial class PowerShellTypedLowerer
     {
         private readonly LoweredNameAllocator _names;
         internal LoweredFunctionScope(IEnumerable<string> authoredNames, IReadOnlyDictionary<string, Type> symbolTypes,
-            IReadOnlyDictionary<string, Type> localTypes, ISet<string> declared)
+            IReadOnlyDictionary<string, Type> localTypes, ISet<string> declared, bool sharesLifecycleLocals = false)
         {
             _names = new LoweredNameAllocator(authoredNames);
             SymbolTypes = symbolTypes;
             LocalTypes = localTypes;
             Declared = declared;
+            SharesLifecycleLocals = sharesLifecycleLocals;
         }
         internal IReadOnlyDictionary<string, Type> SymbolTypes { get; }
         internal IReadOnlyDictionary<string, Type> LocalTypes { get; }
         internal ISet<string> Declared { get; }
+        internal bool SharesLifecycleLocals { get; }
         internal string Allocate(string prefix) => _names.Allocate(prefix);
     }
 

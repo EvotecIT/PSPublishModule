@@ -32,6 +32,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
         }
         if (stream.Provider is null)
         {
+            string RenderOutput() => _usesStrictPipelineComposition && stream.Message is PowerShellLoweredInvocationExpression local
+                ? EmitLocalInvocation(local, successSink) : EmitExpression(stream.Message);
             if (stream.Kind != PowerShellStreamCommandKind.Success)
                 throw new InvalidOperationException("Implicit stream output must target the success stream.");
             if (stream.Message is PowerShellLoweredNativeCommandExpression { PreserveReturnRecords: true } returnedPipeline)
@@ -41,7 +43,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
             }
             if (stream.Message.ClrType == typeof(void))
             {
-                builder.Append(prefix).Append(EmitExpression(stream.Message)).AppendLine(";");
+                builder.Append(prefix).Append(RenderOutput()).AppendLine(";");
                 return;
             }
             if (stream.UsesNativeInvocation)
@@ -60,7 +62,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
             if (stream.EnumerateAuthoredArray)
             {
                 var record = getTemporaryIdentifier("outputRecord");
-                var collection = EmitExpression(stream.Message);
+                var collection = RenderOutput();
                 if (stream.Message is not PowerShellLoweredArrayExpression)
                 {
                     var array = getTemporaryIdentifier("outputArray");
@@ -75,7 +77,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
                     .Append(prefix).Append("    ").Append(successSink).Append("((object?)").Append(record).AppendLine(");");
                 return;
             }
-            builder.Append(prefix).Append(successSink).Append("((object?)").Append(EmitExpression(stream.Message)).AppendLine(");");
+            builder.Append(prefix).Append(successSink).Append("((object?)").Append(RenderOutput()).AppendLine(");");
             return;
         }
         var sink = stream.Kind switch

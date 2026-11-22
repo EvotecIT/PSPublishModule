@@ -195,9 +195,14 @@ internal static class PowerShellTypedExecutableCompiler
             .Where(static type => type == typeof(Generated.Runtime.PowerShellStrictFileSystemReader) ||
                 type == typeof(Generated.Runtime.PowerShellStrictCsvReader) ||
                 type == typeof(Generated.Runtime.PowerShellStrictPipelineOperations) ||
+                type == typeof(Generated.Runtime.PowerShellStrictPipelineComposition) ||
                 type == typeof(Generated.Runtime.PowerShellStrictConsoleProgress) ||
                 type == typeof(Generated.Runtime.PowerShellStrictProjectionRecord))
             .Select(static type => type.Name).Distinct(StringComparer.Ordinal).ToArray();
+        if (semantic.Lowered.Functions.Any(static function =>
+                function.Parameters.Any(static parameter => PowerShellTypedLowerer.IsStrictStageType(parameter.ClrType))) &&
+            !runtimeSources.Contains(nameof(Generated.Runtime.PowerShellStrictPipelineComposition), StringComparer.Ordinal))
+            runtimeSources = runtimeSources.Append(nameof(Generated.Runtime.PowerShellStrictPipelineComposition)).ToArray();
         if (expressions.OfType<PowerShellLoweredRuntimeStateExpression>().Any(static expression =>
                 expression.Kind == PowerShellRuntimeStateIntrinsicKind.CaughtCommandErrorLine))
             runtimeSources = runtimeSources.Append(nameof(Generated.Runtime.PowerShellScriptCommandError)).ToArray();
