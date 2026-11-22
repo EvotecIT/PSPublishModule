@@ -639,7 +639,7 @@ public sealed partial class ManagedModuleInstallService
                 }
             }
 
-            var repositoryDependencyHintMetadata = CreateRepositoryDependencyHintMetadata(versionInfo);
+            var repositoryDependencyHintMetadata = CreateRepositoryDependencyHintMetadata(versionInfo, request);
             StartDependencyVersionSelectionPrewarm(
                 request,
                 repositoryDependencyHintMetadata,
@@ -1085,15 +1085,37 @@ public sealed partial class ManagedModuleInstallService
             Dependencies = metadata.Dependencies
         };
 
-    private static ManagedModulePackageMetadata? CreateRepositoryDependencyHintMetadata(ManagedModuleVersionInfo versionInfo)
-        => versionInfo.Dependencies is not { Count: > 0 }
-            ? null
-            : new ManagedModulePackageMetadata
-            {
-                Id = versionInfo.Name,
-                Version = versionInfo.Version,
-                Dependencies = versionInfo.Dependencies
-            };
+    private static ManagedModulePackageMetadata? CreateRepositoryDependencyHintMetadata(
+        ManagedModuleVersionInfo versionInfo,
+        ManagedModuleInstallRequest request)
+    {
+        var dependencies = versionInfo.Dependencies;
+        if (dependencies is not { Count: > 0 })
+            return null;
+
+#if !NET472
+        // PSGallery expands exact dependency hints to [version, version]. On the
+        // buffered path the downloaded metadata can start the exact dependency
+        // without speculative history requests or competing with the root download.
+        if (ShouldUseDependencyPackagePrefetch(request))
+            dependencies = dependencies.Where(static dependency => !IsClosedSingletonHint(dependency)).ToArray();
+#endif
+        return dependencies.Count == 0 ? null : new ManagedModulePackageMetadata
+        {
+            Id = versionInfo.Name,
+            Version = versionInfo.Version,
+            Dependencies = dependencies
+        };
+    }
+
+#if !NET472
+    private static bool IsClosedSingletonHint(ManagedModuleDependencyInfo dependency)
+    {
+        var range = ManagedModuleVersionRange.Parse(dependency.VersionRange);
+        return range is { IncludeMinimum: true, IncludeMaximum: true, MinimumVersion: { } version } &&
+               string.Equals(version, range.MaximumVersion, StringComparison.Ordinal);
+    }
+#endif
 
     private static bool RequiresExactVersionNormalization(string version)
     {

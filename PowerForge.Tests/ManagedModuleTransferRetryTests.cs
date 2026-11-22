@@ -20,7 +20,7 @@ public sealed class ManagedModuleTransferRetryTests
         var failedStream = new FailingBody(stall);
         using var http = new HttpClient(new Handler(() => new HttpResponseMessage(HttpStatusCode.OK)
         {
-            Content = ++calls == 1 ? new StreamContent(failedStream) : new ByteArrayContent(payload)
+            Content = new StreamContent(++calls == 1 ? failedStream : new PhasedBody(payload))
         }));
         var client = Client(http);
         ManagedModuleDownloadResult result;
@@ -40,6 +40,10 @@ public sealed class ManagedModuleTransferRetryTests
         Assert.Equal(2, calls);
         Assert.True(failedStream.Disposed);
         Assert.Equal(Convert.ToHexString(SHA256.HashData(payload)), result.PackageSha256, ignoreCase: true);
+        Assert.True(result.TimeToFirstByte >= TimeSpan.FromMilliseconds(20));
+        Assert.True(result.BodyTransferElapsed >= TimeSpan.FromMilliseconds(30));
+        var bodyElapsed = Assert.IsType<TimeSpan>(result.BodyTransferElapsed);
+        Assert.Equal((payload.Length - 1) / bodyElapsed.TotalSeconds, Assert.IsType<double>(result.BytesPerSecond));
     }
 
     [Fact]
@@ -153,6 +157,19 @@ public sealed class ManagedModuleTransferRetryTests
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
             => Task.FromResult(response());
+    }
+
+    private sealed class PhasedBody(byte[] payload) : MemoryStream(payload)
+    {
+        public override async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+        {
+            if (Position == 0)
+                await Task.Delay(35, cancellationToken);
+            else if (Position == 1)
+                await Task.Delay(50, cancellationToken);
+
+            return Read(buffer, offset, count);
+        }
     }
 
     // Models native HTTP streams whose pending read is released by disposal rather

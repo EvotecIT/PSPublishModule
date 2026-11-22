@@ -45,7 +45,7 @@ public sealed partial class ManagedModuleInstallService
                 }
             }
 
-            var repositoryDependencyHintMetadata = CreateRepositoryDependencyHintMetadata(versionInfo);
+            var repositoryDependencyHintMetadata = CreateRepositoryDependencyHintMetadata(versionInfo, request);
             StartDependencyVersionSelectionPrewarm(
                 request,
                 repositoryDependencyHintMetadata,
