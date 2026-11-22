@@ -285,7 +285,7 @@ artifact builder and atomic publication
 
 ## Ownership boundaries
 
-### `PowerForge.PowerShell`
+### `PowerForge.Compiler`
 
 Owns PowerShell-specific behavior:
 
@@ -777,7 +777,7 @@ Compilation is not a sandbox or obfuscation boundary. The compiler must not exec
 The final names may follow nearby repository conventions, but responsibilities should remain recognizable:
 
 ```text
-PowerForge.PowerShell/Services/Compilation/
+PowerForge.Compiler/Services/Compilation/
   FrontEnd/
     PowerShellSourceParser.cs
     ParsedSourceDocument.cs

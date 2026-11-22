@@ -70,8 +70,8 @@ Export-ModuleMember -Function Get-InfobloxDNSRecord,Set-OfflineDnsConfiguration 
                                    'originalSha256': hashlib.sha256(canonical).hexdigest(),
                                    'generatedSha256': hashlib.sha256(canonical).hexdigest()})
     summary['compilerSourceHashes'] = {name: digest(repo / name) for name in (
-        'PowerForge.PowerShell/Services/Compilation/Binding/PowerShellNativeFunctionBindingPolicy.cs',
-        'PowerForge.PowerShell/Services/Compilation/Binding/PowerShellSemanticBinder.Statements.cs')}
+        'PowerForge.Compiler/Services/Compilation/Binding/PowerShellNativeFunctionBindingPolicy.cs',
+        'PowerForge.Compiler/Services/Compilation/Binding/PowerShellSemanticBinder.Statements.cs')}
     summary['compilerBinaryHashes'] = {name: digest(cli.parent / name) for name in (
         'PowerForge.Cli.dll', 'PowerForge.PowerShell.dll', 'PowerForge.dll')}
     (output / 'summary.json').write_bytes((json.dumps(summary, indent=2) + '\n').encode('utf-8'))

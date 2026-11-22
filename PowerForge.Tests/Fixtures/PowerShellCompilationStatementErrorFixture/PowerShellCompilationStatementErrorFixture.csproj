@@ -16,11 +16,11 @@
     <PackageReference Include="System.Security.Cryptography.Xml" Version="10.0.13" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="..\..\..\PowerForge.PowerShell\Services\Compilation\Runtime\PowerShellNativeFunction*.cs" Link="Runtime\%(Filename)%(Extension)" />
-    <Compile Include="..\..\..\PowerForge.PowerShell\Services\Compilation\Runtime\PowerShellNativeOutput.cs" Link="Runtime\%(Filename)%(Extension)" />
-    <Compile Include="..\..\..\PowerForge.PowerShell\Services\Compilation\Runtime\PowerShellNativeLanguageOperations.cs" Link="Runtime\%(Filename)%(Extension)" />
-    <Compile Include="..\..\..\PowerForge.PowerShell\Services\Compilation\Runtime\PowerShellStatementErrorContext*.cs" Link="Runtime\%(Filename)%(Extension)" />
-    <Compile Include="..\..\..\PowerForge.PowerShell\Services\Compilation\Runtime\PowerShellModuleSessionState.cs" Link="Runtime\PowerShellModuleSessionState.cs" />
-    <Compile Include="..\..\..\PowerForge.PowerShell\Services\Compilation\Runtime\PowerShellSourceExtent.cs" Link="Runtime\PowerShellSourceExtent.cs" />
+    <Compile Include="..\..\..\PowerForge.Compiler\Services\Compilation\Runtime\PowerShellNativeFunction*.cs" Link="Runtime\%(Filename)%(Extension)" />
+    <Compile Include="..\..\..\PowerForge.Compiler\Services\Compilation\Runtime\PowerShellNativeOutput.cs" Link="Runtime\%(Filename)%(Extension)" />
+    <Compile Include="..\..\..\PowerForge.Compiler\Services\Compilation\Runtime\PowerShellNativeLanguageOperations.cs" Link="Runtime\%(Filename)%(Extension)" />
+    <Compile Include="..\..\..\PowerForge.Compiler\Services\Compilation\Runtime\PowerShellStatementErrorContext*.cs" Link="Runtime\%(Filename)%(Extension)" />
+    <Compile Include="..\..\..\PowerForge.Compiler\Services\Compilation\Runtime\PowerShellModuleSessionState.cs" Link="Runtime\PowerShellModuleSessionState.cs" />
+    <Compile Include="..\..\..\PowerForge.Compiler\Services\Compilation\Runtime\PowerShellSourceExtent.cs" Link="Runtime\PowerShellSourceExtent.cs" />
   </ItemGroup>
 </Project>

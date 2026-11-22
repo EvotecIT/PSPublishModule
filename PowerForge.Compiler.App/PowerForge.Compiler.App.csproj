@@ -20,7 +20,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\PowerForge.PowerShell\PowerForge.PowerShell.csproj" />
+    <ProjectReference Include="..\PowerForge.Compiler\PowerForge.Compiler.csproj" />
   </ItemGroup>
 
   <ItemGroup>

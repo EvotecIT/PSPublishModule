@@ -116,13 +116,7 @@ public static class BuildServices
 
     /// <summary>Sets FunctionsToExport/CmdletsToExport/AliasesToExport in a PSD1 manifest.</summary>
     public static bool SetManifestExports(string psd1Path, IEnumerable<string>? functions, IEnumerable<string>? cmdlets, IEnumerable<string>? aliases)
-    {
-        bool changed = false;
-        if (functions != null) changed |= ManifestMutator.TrySetTopLevelStringArray(psd1Path, "FunctionsToExport", functions.ToArray());
-        if (cmdlets != null) changed |= ManifestMutator.TrySetTopLevelStringArray(psd1Path, "CmdletsToExport", cmdlets.ToArray());
-        if (aliases != null) changed |= ManifestMutator.TrySetTopLevelStringArray(psd1Path, "AliasesToExport", aliases.ToArray());
-        return changed;
-    }
+        => AstModuleManifestMutator.SetManifestExports(psd1Path, functions, cmdlets, aliases);
 
     /// <summary>Computes exports from a Public scripts folder and a set of assemblies.</summary>
     public static ExportSet ComputeExports(string publicFolderPath, IEnumerable<string> assemblies)
@@ -157,14 +151,7 @@ public static class BuildServices
 
     /// <summary>Sets PrivateData.PSData.Repository.Branch and .Paths (string[]).</summary>
     public static bool SetRepository(string psd1Path, string? branch, IEnumerable<string>? paths)
-    {
-        bool changed = false;
-        if (!string.IsNullOrWhiteSpace(branch))
-            changed |= ManifestEditor.TrySetPsDataSubString(psd1Path, "Repository", "Branch", branch!);
-        if (paths != null)
-            changed |= ManifestEditor.TrySetPsDataSubStringArray(psd1Path, "Repository", "Paths", paths.ToArray());
-        return changed;
-    }
+        => AstModuleManifestMutator.SetRepository(psd1Path, branch, paths);
 
     /// <summary>Sets PrivateData.PSData.Delivery.IntroText/UpgradeText (string[]).</summary>
     public static bool SetDeliveryTexts(string psd1Path, IEnumerable<string>? introText, IEnumerable<string>? upgradeText)

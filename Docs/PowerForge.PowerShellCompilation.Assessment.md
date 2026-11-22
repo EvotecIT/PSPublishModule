@@ -235,7 +235,7 @@ The fresh pinned PSSharedGoods census remains **188/282 complete emitted functio
 
 ### R1 — P2: package cancellation and replacement — corrected
 
-Owner: [library package builder](../PowerForge.PowerShell/Services/Compilation/PowerShellCompilationLibraryPackageBuilder.cs) and its [I/O and publication boundary](../PowerForge.PowerShell/Services/Compilation/PowerShellCompilationLibraryPackageBuilder.IO.cs).
+Owner: [library package builder](../PowerForge.Compiler/Services/Compilation/PowerShellCompilationLibraryPackageBuilder.cs) and its [I/O and publication boundary](../PowerForge.Compiler/Services/Compilation/PowerShellCompilationLibraryPackageBuilder.IO.cs).
 
 At the baseline, the final token check preceded hashing and archive creation. Cancellation during those stages could replace an existing package and return success. Source control flow demonstrated the defect; the original test only canceled before entering `Build`.
 

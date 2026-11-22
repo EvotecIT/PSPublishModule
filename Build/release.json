@@ -28,6 +28,7 @@
         "AnchorProject": "PowerForge",
         "Projects": [
           "PowerForge.PowerShell",
+          "PowerForge.Compiler",
           "PowerForge.PowerShell.ProviderSdk",
           "PowerForge.PowerShell.Provider.Directory",
           "PowerForge.PowerShell.Provider.Directory.Runtime",
