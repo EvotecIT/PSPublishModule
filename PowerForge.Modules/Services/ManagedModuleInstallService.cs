@@ -670,6 +670,11 @@ public sealed partial class ManagedModuleInstallService
                     }
                 }
 
+                // Disk-backed extraction is synchronous and cannot be cancelled. Wait
+                // before falling back so an invalid root never starts that extraction.
+                if (bufferedPackage is null && context.ParentValidation is { } diskFallbackValidation)
+                    await diskFallbackValidation.WaitAsync(cancellationToken).ConfigureAwait(false);
+
                 if (bufferedPackage is not null)
                 {
                     download = bufferedPackage.Download;
@@ -745,10 +750,18 @@ public sealed partial class ManagedModuleInstallService
                 ? _authenticodeVerifier.VerifyDirectory(validationModulePath)
                 : null;
 #if !NET472
-            // A speculative dependency owns only its private stage until the parent
-            // has finished extraction and the clobber check.
+            // Until the parent validates, the dependency can write private staging
+            // data and install locks. Final paths, nested installs and receipts wait.
             if (context.ParentValidation is { } parentValidation)
+            {
+                var waiting = !parentValidation.IsCompletedSuccessfully;
                 await parentValidation.WaitAsync(cancellationToken).ConfigureAwait(false);
+                if (waiting)
+                {
+                    StartDependencyVersionSelectionPrewarm(request, download.Metadata, context, cancellationToken);
+                    StartDependencyPackagePrefetch(request, download.Metadata, context, cancellationToken);
+                }
+            }
 #endif
             var finalParent = Path.GetDirectoryName(modulePath) ?? moduleRoot;
             Directory.CreateDirectory(finalParent);

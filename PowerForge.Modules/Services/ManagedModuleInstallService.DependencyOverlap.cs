@@ -38,7 +38,7 @@ public sealed partial class ManagedModuleInstallService
     {
         private readonly CancellationTokenSource _cancellation;
         private readonly TaskCompletionSource<bool> _parentValidation = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        private readonly Stopwatch _elapsed = Stopwatch.StartNew();
+        private readonly Stopwatch _elapsed = new();
         private readonly Task<ManagedModuleInstallResult> _operation;
 
         internal DependencyOverlap(
@@ -53,6 +53,7 @@ public sealed partial class ManagedModuleInstallService
 
         internal async Task<IReadOnlyList<ManagedModuleInstallResult>> CompleteAsync()
         {
+            _elapsed.Start();
             _parentValidation.TrySetResult(true);
             var dependency = await _operation.ConfigureAwait(false);
             _elapsed.Stop();
