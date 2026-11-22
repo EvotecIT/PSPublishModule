@@ -92,12 +92,18 @@ executable and executes the emitted `Test-LocalLink` function.
 | BuildScriptVersions | `BuildScriptVersions.ps1:11` reads its parent repository directory | Run from the authored repository layout |
 | DirectoryDistributionChecker | `Common.ps1:282` uses `ShouldProcess` and its confirmation-capable host contract | Run in a PowerShell host that provides confirmation |
 | Build-MainSummaryFromZip | `AllSubHtmlSummary.Functions.ps1:631` invokes a computed script inside a function | Run the source with its required report extension present |
-| Format-SourceHygiene | `Format-SourceHygiene.ps1:44` and `:85` scan the script directory and observe a different extracted tree. The unknown-parameter error also differs | Run the source for its authored directory and native argument errors |
+| Format-SourceHygiene | `Format-SourceHygiene.ps1:44` and `:85` scan the script directory and observe a different extracted tree | Run the source for its authored directory layout |
 | convert-zip2dir | The malformed archive case at `Expand-Archive` produces the same exit code and displays a different loaded `WindowsBase.dll` path | Use the original PowerShell host when its runtime diagnostic is part of the contract |
 
 Project explain reports the source location of the first four boundaries.
 The last two are observed runtime differences after a successful build and
 installation. They are outside the matched workflow count.
+
+The `Format-SourceHygiene` unknown-switch case now returns the same message
+and exit code through the source, built, and installed entry points on
+PowerShell 7.6.6. The file-scan difference still keeps the workflow outside
+the matched count. Basic Hybrid entries also preserve bare unknown switches
+in `$args`, as verified against PowerShell 7.6.6 and Windows PowerShell 5.1.
 
 Separate delivery checks used private side-by-side installations. PSWriteColor
 1.0.6 and 1.0.7 each passed the same two cases on both pinned hosts. Adding
