@@ -553,16 +553,22 @@ public sealed partial class ManagedModuleUninstallService
         if (string.Equals(root, target, PathStringComparison))
             throw new InvalidOperationException($"Refusing to remove module root as a module target: {modulePath}");
 
-        if (!target.StartsWith(root + Path.DirectorySeparatorChar, PathStringComparison) &&
-            !target.StartsWith(root + Path.AltDirectorySeparatorChar, PathStringComparison))
+        var separator = Path.DirectorySeparatorChar.ToString();
+        var rootPrefix = root.EndsWith(separator, StringComparison.Ordinal) ? root : root + separator;
+        if (!target.StartsWith(rootPrefix, PathStringComparison))
         {
             throw new InvalidOperationException($"Refusing to remove module path outside module root: {modulePath}");
         }
 
         // Inspect parents first, before resolving a child under a linked directory.
         var paths = new Stack<string>();
-        for (var current = target; !string.Equals(current, root, PathStringComparison); current = Path.GetDirectoryName(current)!)
+        for (var current = target; !string.Equals(current, root, PathStringComparison);)
+        {
             paths.Push(current);
+            var parent = Path.GetDirectoryName(current) ??
+                throw new InvalidOperationException($"The module path has no parent under the selected root: {modulePath}");
+            current = NormalizePath(parent);
+        }
 
         foreach (var current in paths)
         {
@@ -661,8 +667,12 @@ public sealed partial class ManagedModuleUninstallService
     }
 
     private static string NormalizePath(string path)
-        => Path.GetFullPath(path)
-            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+    {
+        var fullPath = Path.GetFullPath(path);
+        var rootLength = Path.GetPathRoot(fullPath)?.Length ?? 0;
+        var trimmed = fullPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        return trimmed.Length < rootLength ? fullPath.Substring(0, rootLength) : trimmed;
+    }
 
     private static string GetFileSystemPath(string path)
     {

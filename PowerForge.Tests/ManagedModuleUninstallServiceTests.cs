@@ -24,6 +24,62 @@ public sealed class ManagedModuleUninstallServiceTests
     }
 
     [Fact]
+    public void ValidateUninstallPlan_accepts_a_target_below_a_filesystem_root()
+    {
+        using var temporary = new TemporaryDirectory();
+        var physical = FrameworkCompatibility.ResolvePhysicalPath(temporary.Path);
+        var root = Path.GetPathRoot(physical)!;
+        var target = Directory.CreateDirectory(Path.Combine(physical, "Company.Tools", "1.0.0")).FullName;
+        var plan = new ManagedModuleUninstallPlan
+        {
+            ModuleRoot = root,
+            SkipDependencyCheck = true,
+            Targets = [new ManagedModuleUninstallTarget { Name = "Company.Tools", Version = "1.0.0", ModulePath = target }]
+        };
+
+        new ManagedModuleUninstallService().ValidateUninstallPlan(plan);
+
+        Assert.True(Directory.Exists(target));
+    }
+
+    [Fact]
+    public void ValidateUninstallPlan_rejects_a_link_with_a_literal_trailing_space()
+    {
+        if (!OperatingSystem.IsLinux())
+            return;
+
+        using var moduleRoot = new TemporaryDirectory();
+        using var outside = new TemporaryDirectory();
+        Directory.CreateDirectory(Path.Combine(outside.Path, "1.0.0"));
+        Directory.CreateDirectory(Path.Combine(moduleRoot.Path, "Company.Tools"));
+        var link = Path.Combine(moduleRoot.Path, "Company.Tools ");
+        Directory.CreateSymbolicLink(link, outside.Path);
+        try
+        {
+            var plan = new ManagedModuleUninstallPlan
+            {
+                ModuleRoot = moduleRoot.Path,
+                SkipDependencyCheck = true,
+                Targets =
+                [
+                    new ManagedModuleUninstallTarget
+                    {
+                        ModulePath = Path.Combine(link, "1.0.0")
+                    }
+                ]
+            };
+
+            var error = Assert.Throws<InvalidOperationException>(() =>
+                new ManagedModuleUninstallService().ValidateUninstallPlan(plan));
+            Assert.Contains("symbolic link or junction", error.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(link);
+        }
+    }
+
+    [Fact]
     public void Uninstall_continues_when_a_flat_module_disappears_after_planning()
     {
         using var moduleRoot = new TemporaryDirectory();

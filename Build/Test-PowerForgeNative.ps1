@@ -12,6 +12,7 @@ $extension = if ($IsWindows) { '.exe' } else { '' }
 $sourceLauncher = Join-Path $packageRoot "powerforge$extension"
 $managed = Join-Path $packageRoot "full/powerforge-full$extension"
 $work = [IO.Directory]::CreateTempSubdirectory('powerforge-smoke-').FullName
+$dependencyRoot = Join-Path $work 'dependency modules'
 $previousPath = $env:PATH
 $previousProfilePath = $env:POWERFORGE_MODULE_REPOSITORY_PROFILE_PATH
 $previousMachineProfilePath = $env:POWERFORGE_MODULE_REPOSITORY_MACHINE_PROFILE_PATH
@@ -23,9 +24,16 @@ function Read-CommandResult {
         [int] $ExpectedExitCode = 0
     )
 
-    $output = & $Executable @Arguments
-    if ($LASTEXITCODE -ne $ExpectedExitCode) {
-        throw "Expected exit $ExpectedExitCode from $Executable, received $LASTEXITCODE. $output"
+    $previousModulePath = $env:PSModulePath
+    try {
+        $env:PSModulePath = $dependencyRoot
+        $output = & $Executable @Arguments
+        $actualExitCode = $LASTEXITCODE
+    } finally {
+        $env:PSModulePath = $previousModulePath
+    }
+    if ($actualExitCode -ne $ExpectedExitCode) {
+        throw "Expected exit $ExpectedExitCode from $Executable, received $actualExitCode. $output"
     }
     $json = ($output -join [Environment]::NewLine) | ConvertFrom-Json
     if ($json.schemaVersion -ne 1 -or $json.exitCode -ne $ExpectedExitCode -or
@@ -36,6 +44,7 @@ function Read-CommandResult {
 }
 
 try {
+    $null = [IO.Directory]::CreateDirectory($dependencyRoot)
     $env:POWERFORGE_MODULE_REPOSITORY_PROFILE_PATH = Join-Path $work 'user-profiles.json'
     $env:POWERFORGE_MODULE_REPOSITORY_MACHINE_PROFILE_PATH = Join-Path $work 'machine-profiles.json'
     $feed = New-Item -ItemType Directory -Path (Join-Path $work 'local feed') -Force
