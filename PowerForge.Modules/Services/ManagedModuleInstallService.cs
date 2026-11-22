@@ -611,6 +611,7 @@ public sealed partial class ManagedModuleInstallService
         ManagedModuleExtractedPackageLease? directPayloadLease = null;
 #if !NET472
         ManagedModuleBufferedPackage? bufferedPackage = null;
+        DependencyOverlap? dependencyOverlap = null;
 #endif
 
         try
@@ -718,6 +719,8 @@ public sealed partial class ManagedModuleInstallService
 #if !NET472
                 if (bufferedPackage is not null)
                 {
+                    dependencyOverlap = TryStartDependencyOverlap(
+                        request, download.Metadata, cacheDirectory, context, cancellationToken);
                     extraction = await ExtractBufferedPackageForInstallAsync(
                         bufferedPackage,
                         stageModulePath,
@@ -741,25 +744,37 @@ public sealed partial class ManagedModuleInstallService
             var authenticode = request.AuthenticodeCheck
                 ? _authenticodeVerifier.VerifyDirectory(validationModulePath)
                 : null;
+#if !NET472
+            // A speculative dependency owns only its private stage until the parent
+            // has finished extraction and the clobber check.
+            if (context.ParentValidation is { } parentValidation)
+                await parentValidation.WaitAsync(cancellationToken).ConfigureAwait(false);
+#endif
             var finalParent = Path.GetDirectoryName(modulePath) ?? moduleRoot;
             Directory.CreateDirectory(finalParent);
             if (!request.AllowClobber)
                 ManagedModuleClobberDetector.ThrowIfConflicts(moduleRoot, request.Name.Trim(), validationModulePath);
 
-            System.Diagnostics.Stopwatch dependencyStopwatch;
+            var dependencyElapsed = TimeSpan.Zero;
             IReadOnlyList<ManagedModuleInstallResult> dependencyResults;
+#if !NET472
+            if (dependencyOverlap is not null)
+            {
+                dependencyResults = await dependencyOverlap.CompleteAsync().ConfigureAwait(false);
+                dependencyElapsed = dependencyOverlap.Elapsed;
+            }
+            else
+#endif
             if (request.SkipDependencyCheck)
             {
-                dependencyStopwatch = System.Diagnostics.Stopwatch.StartNew();
                 dependencyResults = Array.Empty<ManagedModuleInstallResult>();
             }
             else
             {
-                dependencyStopwatch = System.Diagnostics.Stopwatch.StartNew();
+                var dependencyStopwatch = System.Diagnostics.Stopwatch.StartNew();
                 dependencyResults = await InstallDependenciesAsync(request, download.Metadata, cacheDirectory, context, cancellationToken).ConfigureAwait(false);
+                dependencyElapsed = dependencyStopwatch.Elapsed;
             }
-
-            dependencyStopwatch.Stop();
 
             var promotionStopwatch = System.Diagnostics.Stopwatch.StartNew();
             var promotionLockWaitElapsed = TimeSpan.Zero;
@@ -886,7 +901,7 @@ public sealed partial class ManagedModuleInstallService
                 ExtractionElapsed = materialization.Elapsed,
                 ExtractionFromCache = materialization.FromCache,
                 ExtractionCacheLockWaitElapsed = materialization.CacheLockWaitElapsed,
-                DependencyElapsed = dependencyStopwatch.Elapsed,
+                DependencyElapsed = dependencyElapsed,
                 PromotionElapsed = promotionStopwatch.Elapsed,
                 PromotionLockWaitElapsed = promotionLockWaitElapsed,
                 PromotionMoveElapsed = promotionMoveElapsed,
@@ -908,6 +923,8 @@ public sealed partial class ManagedModuleInstallService
         finally
         {
 #if !NET472
+            if (dependencyOverlap is not null)
+                await dependencyOverlap.DisposeAsync().ConfigureAwait(false);
             bufferedPackage?.Dispose();
 #endif
             directPayloadLease?.Dispose();

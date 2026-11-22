@@ -69,7 +69,9 @@ internal sealed class ManagedModuleInstallContext : IDisposable
 #endif
     }
 
-    public ManagedModuleInstallContext CreateBranch()
+    internal Task? ParentValidation { get; private set; }
+
+    public ManagedModuleInstallContext CreateBranch(Task? parentValidation = null)
         => new(
             new List<string>(_active),
             _waitGraph,
@@ -84,7 +86,10 @@ internal sealed class ManagedModuleInstallContext : IDisposable
             _bufferedPackagePrefetchGate,
             _bufferedPackagePrefetchCancellation
 #endif
-            );
+            )
+        {
+            ParentValidation = parentValidation ?? ParentValidation
+        };
 
     public IDisposable Enter(string moduleName)
     {
