@@ -96,17 +96,33 @@ try {
         throw "Native frozen restore did not reject changed package bytes before writing the destination. $($rejected.error)"
     }
 
-    $version = Read-CommandResult -Executable $sourceLauncher -Arguments @('--version', '--output', 'json')
+    $version = Read-CommandResult -Executable $launcher -Arguments @('--version', '--output', 'json')
     $direct = Read-CommandResult -Executable $managed -Arguments @('--version', '--output', 'json')
-    if ($version.command -ne 'version' -or $version.result.version -ne $direct.result.version) {
-        throw 'The native launcher did not forward the version command to the bundled managed CLI.'
+    if ($version.command -ne 'version' -or -not $version.result.version -or
+        $version.result.version -ne $direct.result.version) {
+        throw 'The standalone native launcher did not report the same version as the managed CLI.'
+    }
+
+    $inspectPath = Join-Path $work 'Sample.psd1'
+    [IO.File]::WriteAllText($inspectPath, "@{ RootModule = 'Implementation.psm1'; ModuleVersion = '2.3.4'; PrivateData = @{ PSData = @{ Prerelease = 'rc.1' } } }")
+    $inspectArgs = @('module', 'manifest', '--path', $inspectPath, '--output', 'json')
+    $inspected = Read-CommandResult -Executable $launcher -Arguments $inspectArgs
+    if ($inspected.command -ne 'module.manifest' -or $inspected.result.moduleName -ne 'Sample' -or
+        $inspected.result.moduleVersion -ne '2.3.4' -or $inspected.result.preRelease -ne 'rc.1') {
+        throw 'Standalone native manifest inspection did not report the expected static metadata.'
+    }
+
+    [IO.File]::WriteAllText($inspectPath, "@{ RootModule = 'Sample.psm1' }")
+    $invalid = Read-CommandResult -Executable $launcher -Arguments $inspectArgs -ExpectedExitCode 2
+    if ($invalid.error -notmatch 'ModuleVersion') {
+        throw 'Native manifest inspection did not explain the missing ModuleVersion.'
     }
     $routedHelp = (& $sourceLauncher --help) -join [Environment]::NewLine
     if ($LASTEXITCODE -ne 0 -or $routedHelp -notmatch 'powerforge build') {
         throw 'The bundled managed CLI did not expose the full command help.'
     }
 
-    Write-Output 'Native install, frozen restore, package integrity and managed forwarding passed.'
+    Write-Output 'Native install, frozen restore, package integrity, version, manifest inspection and managed forwarding passed.'
 } finally {
     $env:PATH = $previousPath
     if (Test-Path -LiteralPath $work) { Remove-Item -LiteralPath $work -Recurse -Force }

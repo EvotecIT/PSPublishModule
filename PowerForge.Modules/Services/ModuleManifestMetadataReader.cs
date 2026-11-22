@@ -11,29 +11,36 @@ public sealed class ModuleManifestMetadataReader
     /// <param name="manifestPath">Path to the module manifest.</param>
     /// <returns>Resolved module manifest metadata.</returns>
     public ModuleManifestMetadata Read(string manifestPath)
+        => ReadCore(manifestPath, inspect: false);
+
+    internal ModuleManifestMetadata Inspect(string manifestPath)
+        => ReadCore(manifestPath, inspect: true);
+
+    private static ModuleManifestMetadata ReadCore(string manifestPath, bool inspect)
     {
         if (string.IsNullOrWhiteSpace(manifestPath))
             throw new ArgumentException("Manifest path is required.", nameof(manifestPath));
 
         var fullPath = Path.GetFullPath(manifestPath.Trim().Trim('"'));
+        if (inspect && !string.Equals(Path.GetExtension(fullPath), ".psd1", StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException("Expected a PowerShell module manifest (.psd1).", nameof(manifestPath));
         if (!File.Exists(fullPath))
             throw new FileNotFoundException($"Manifest file was not found: {fullPath}", fullPath);
 
         var content = File.ReadAllText(fullPath);
         var moduleName = Path.GetFileNameWithoutExtension(fullPath) ?? string.Empty;
-        var moduleVersion = "0.0.0";
+        var hasVersion = ModuleManifestTextParser.TryGetQuotedStringValue(content, "ModuleVersion", out var version) &&
+                         !string.IsNullOrWhiteSpace(version);
+        if (inspect && (!hasVersion || !Version.TryParse(version, out _)))
+            throw new ArgumentException("The manifest must declare a numeric ModuleVersion.", nameof(manifestPath));
+
+        var moduleVersion = hasVersion ? version! : "0.0.0";
         string? preRelease = null;
 
-        if (ModuleManifestTextParser.TryGetQuotedStringValue(content, "RootModule", out var rootModule) &&
+        if (!inspect && ModuleManifestTextParser.TryGetQuotedStringValue(content, "RootModule", out var rootModule) &&
             !string.IsNullOrWhiteSpace(rootModule))
         {
             moduleName = Path.GetFileNameWithoutExtension(rootModule);
-        }
-
-        if (ModuleManifestTextParser.TryGetQuotedStringValue(content, "ModuleVersion", out var version) &&
-            !string.IsNullOrWhiteSpace(version))
-        {
-            moduleVersion = version!;
         }
 
         try

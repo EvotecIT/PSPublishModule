@@ -1,9 +1,7 @@
 using PowerForge;
 using PowerForge.Cli;
 using System.Diagnostics;
-using System.Reflection;
 using System.Runtime.CompilerServices;
-using System.Text.Json;
 
 internal static partial class Program
 {
@@ -36,26 +34,7 @@ internal static partial class Program
 
         var filteredArgs = StripGlobalArgs(args);
         if (IsVersionInvocation(args))
-        {
-            var version = typeof(Program).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
-                .InformationalVersion ?? typeof(Program).Assembly.GetName().Version?.ToString() ?? "unknown";
-            if (IsJsonOutput(args))
-            {
-                WriteJson(new CliJsonEnvelope
-                {
-                    SchemaVersion = OutputSchemaVersion,
-                    Command = "version",
-                    Success = true,
-                    ExitCode = 0,
-                    Result = JsonSerializer.SerializeToElement(new { version })
-                });
-            }
-            else
-            {
-                Console.WriteLine(version);
-            }
-            return 0;
-        }
+            return CommandVersion(args, typeof(Program).Assembly);
 
         if (filteredArgs.Length == 0 || filteredArgs[0].Equals("-h", StringComparison.OrdinalIgnoreCase) ||
             filteredArgs[0].Equals("--help", StringComparison.OrdinalIgnoreCase))
