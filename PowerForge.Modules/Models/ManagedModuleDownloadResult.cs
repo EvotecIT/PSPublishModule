@@ -36,6 +36,26 @@ public sealed class ManagedModuleDownloadResult
     public long BytesWritten { get; set; }
 
     /// <summary>
+    /// Time from the start of the successful HTTP attempt to the first package body bytes read.
+    /// Includes redirects in that attempt. Null for cache hits and local feeds.
+    /// </summary>
+    public TimeSpan? TimeToFirstByte { get; set; }
+
+    /// <summary>
+    /// Time from observing the first package body byte through the end of the response body.
+    /// Includes copying and hashing the bytes. Null for cache hits and local feeds.
+    /// </summary>
+    public TimeSpan? BodyTransferElapsed { get; set; }
+
+    /// <summary>
+    /// Average rate for the bytes after the first during <see cref="BodyTransferElapsed"/>.
+    /// Null when no HTTP body transfer was measured.
+    /// </summary>
+    public double? BytesPerSecond => BytesWritten > 1 && BodyTransferElapsed is { TotalSeconds: > 0 } elapsed
+        ? (BytesWritten - 1) / elapsed.TotalSeconds
+        : null;
+
+    /// <summary>
     /// Number of repository HTTP request attempts used while delivering this package.
     /// </summary>
     public long RequestCount { get; set; }

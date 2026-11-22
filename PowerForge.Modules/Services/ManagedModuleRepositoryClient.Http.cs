@@ -101,13 +101,13 @@ public sealed partial class ManagedModuleRepositoryClient
     private Task<HttpResponseMessage> SendWithPolicyAsync(
         Func<HttpRequestMessage> requestFactory,
         CancellationToken cancellationToken)
-        => SendWithPolicyAsync(requestFactory, (response, _) => Task.FromResult(response), cancellationToken, disposeResponse: false);
+        => SendWithPolicyAsync(requestFactory, (response, _, _) => Task.FromResult(response), cancellationToken, disposeResponse: false);
 
     // A package attempt includes headers and its complete body; readers receive the
     // remaining request budget and each retry starts with a fresh response and destination.
     private async Task<T> SendWithPolicyAsync<T>(
         Func<HttpRequestMessage> requestFactory,
-        Func<HttpResponseMessage, CancellationToken, Task<T>> readResponse,
+        Func<HttpResponseMessage, long, CancellationToken, Task<T>> readResponse,
         CancellationToken cancellationToken,
         bool disposeResponse = true)
     {
@@ -120,6 +120,7 @@ public sealed partial class ManagedModuleRepositoryClient
             var transferResponse = false;
             try
             {
+                var attemptStarted = Stopwatch.GetTimestamp();
                 response = await SendAttemptAsync(request, cancellationToken).ConfigureAwait(false);
                 var transient = RepositoryRetryTiming.IsTransientStatus(response.StatusCode,
                     includeNotFound: request.Method == HttpMethod.Get || request.Method == HttpMethod.Head);
@@ -137,7 +138,7 @@ public sealed partial class ManagedModuleRepositoryClient
                     // Disposing the response also aborts native streams which do not
                     // implement cancellation of an outstanding ReadAsync themselves.
                     using var abort = disposeResponse ? readToken.Register(response.Dispose) : default;
-                    var value = await readResponse(response, readToken).ConfigureAwait(false);
+                    var value = await readResponse(response, attemptStarted, readToken).ConfigureAwait(false);
                     if (readToken.IsCancellationRequested)
                     {
                         (value as IDisposable)?.Dispose();

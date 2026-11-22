@@ -168,7 +168,8 @@ public sealed partial class ManagedModuleInstallService
     private async Task<ManagedModuleInstallResult> InstallAsync(
         ManagedModuleInstallRequest request,
         ManagedModuleInstallContext context,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Lazy<Task<IReadOnlyDictionary<string, ManagedModuleVersionInfo>?>>? batch = null)
     {
         Validate(request);
         ManagedModuleTrustEvaluator.ThrowIfRepositoryRejected(request.Repository, request.TrustPolicy);
@@ -286,7 +287,8 @@ public sealed partial class ManagedModuleInstallService
             using var requestScope = _repositoryClient.BeginRequestScope();
 
             var versionResolutionStopwatch = System.Diagnostics.Stopwatch.StartNew();
-            var versionInfo = await ResolveSelectedVersionInfoAsync(request, cancellationToken).ConfigureAwait(false);
+            var versionInfo = batch is null ? null : await GetBatchVersionAsync(batch, request.Name).ConfigureAwait(false);
+            versionInfo ??= await ResolveSelectedVersionInfoAsync(request, cancellationToken).ConfigureAwait(false);
             var version = versionInfo.Version;
             versionResolutionStopwatch.Stop();
 
@@ -611,6 +613,7 @@ public sealed partial class ManagedModuleInstallService
         ManagedModuleExtractedPackageLease? directPayloadLease = null;
 #if !NET472
         ManagedModuleBufferedPackage? bufferedPackage = null;
+        DependencyOverlap? dependencyOverlap = null;
 #endif
 
         try
@@ -638,7 +641,7 @@ public sealed partial class ManagedModuleInstallService
                 }
             }
 
-            var repositoryDependencyHintMetadata = CreateRepositoryDependencyHintMetadata(versionInfo);
+            var repositoryDependencyHintMetadata = CreateRepositoryDependencyHintMetadata(versionInfo, request);
             StartDependencyVersionSelectionPrewarm(
                 request,
                 repositoryDependencyHintMetadata,
@@ -669,6 +672,11 @@ public sealed partial class ManagedModuleInstallService
                     }
                 }
 
+                // Disk-backed extraction is synchronous and cannot be cancelled. Wait
+                // before falling back so an invalid root never starts that extraction.
+                if (bufferedPackage is null && context.ParentValidation is { } diskFallbackValidation)
+                    await diskFallbackValidation.WaitAsync(cancellationToken).ConfigureAwait(false);
+
                 if (bufferedPackage is not null)
                 {
                     download = bufferedPackage.Download;
@@ -698,8 +706,12 @@ public sealed partial class ManagedModuleInstallService
             ManagedModulePackageIntegrity.VerifyDownload(download, request.ExpectedPackageSha256);
             ManagedModuleTrustEvaluator.ThrowIfPackageRejected(request.Repository, download.Metadata, request.TrustPolicy);
             ThrowIfLicenseAcceptanceRequired(download.Metadata, request);
-            StartDependencyVersionSelectionPrewarm(request, download.Metadata, context, cancellationToken);
-            StartDependencyPackagePrefetch(request, download.Metadata, context, cancellationToken);
+            var deferredDependencyPrefetch = context.ParentValidation is { Status: not TaskStatus.RanToCompletion };
+            if (!deferredDependencyPrefetch)
+            {
+                StartDependencyVersionSelectionPrewarm(request, download.Metadata, context, cancellationToken);
+                StartDependencyPackagePrefetch(request, download.Metadata, context, cancellationToken);
+            }
 
             var validationModulePath = stageModulePath;
             ManagedModuleArchiveExtractionResult? extraction = null;
@@ -718,6 +730,8 @@ public sealed partial class ManagedModuleInstallService
 #if !NET472
                 if (bufferedPackage is not null)
                 {
+                    dependencyOverlap = TryStartDependencyOverlap(
+                        request, download.Metadata, cacheDirectory, context, cancellationToken);
                     extraction = await ExtractBufferedPackageForInstallAsync(
                         bufferedPackage,
                         stageModulePath,
@@ -741,25 +755,44 @@ public sealed partial class ManagedModuleInstallService
             var authenticode = request.AuthenticodeCheck
                 ? _authenticodeVerifier.VerifyDirectory(validationModulePath)
                 : null;
+#if !NET472
+            // Until the parent validates, the dependency can write private staging
+            // data and install locks. Final paths, nested installs and receipts wait.
+            if (context.ParentValidation is { } parentValidation)
+            {
+                await parentValidation.WaitAsync(cancellationToken).ConfigureAwait(false);
+                if (deferredDependencyPrefetch)
+                {
+                    StartDependencyVersionSelectionPrewarm(request, download.Metadata, context, cancellationToken);
+                    StartDependencyPackagePrefetch(request, download.Metadata, context, cancellationToken);
+                }
+            }
+#endif
             var finalParent = Path.GetDirectoryName(modulePath) ?? moduleRoot;
             Directory.CreateDirectory(finalParent);
             if (!request.AllowClobber)
                 ManagedModuleClobberDetector.ThrowIfConflicts(moduleRoot, request.Name.Trim(), validationModulePath);
 
-            System.Diagnostics.Stopwatch dependencyStopwatch;
+            var dependencyElapsed = TimeSpan.Zero;
             IReadOnlyList<ManagedModuleInstallResult> dependencyResults;
+#if !NET472
+            if (dependencyOverlap is not null)
+            {
+                dependencyResults = await dependencyOverlap.CompleteAsync().ConfigureAwait(false);
+                dependencyElapsed = dependencyOverlap.Elapsed;
+            }
+            else
+#endif
             if (request.SkipDependencyCheck)
             {
-                dependencyStopwatch = System.Diagnostics.Stopwatch.StartNew();
                 dependencyResults = Array.Empty<ManagedModuleInstallResult>();
             }
             else
             {
-                dependencyStopwatch = System.Diagnostics.Stopwatch.StartNew();
+                var dependencyStopwatch = System.Diagnostics.Stopwatch.StartNew();
                 dependencyResults = await InstallDependenciesAsync(request, download.Metadata, cacheDirectory, context, cancellationToken).ConfigureAwait(false);
+                dependencyElapsed = dependencyStopwatch.Elapsed;
             }
-
-            dependencyStopwatch.Stop();
 
             var promotionStopwatch = System.Diagnostics.Stopwatch.StartNew();
             var promotionLockWaitElapsed = TimeSpan.Zero;
@@ -767,6 +800,7 @@ public sealed partial class ManagedModuleInstallService
             var promotionBackupMoveElapsed = TimeSpan.Zero;
             var promotionFinalMoveElapsed = TimeSpan.Zero;
             var promotionBackupCleanupElapsed = TimeSpan.Zero;
+            string? promotionBackupCleanupWarning = null;
             var promotionHadExistingTarget = false;
             var promotionMaterializedDirectly = false;
             var promotionDirectMaterializationElapsed = TimeSpan.Zero;
@@ -832,11 +866,12 @@ public sealed partial class ManagedModuleInstallService
                         {
                             MaterializeStageFromPackageCache();
 
-                            var promotionResult = PromoteStagedModule(stageModulePath, modulePath);
+                            var promotionResult = await PromoteStagedModuleAsync(stageModulePath, modulePath, cancellationToken).ConfigureAwait(false);
                             promotionMoveElapsed = promotionResult.Elapsed;
                             promotionBackupMoveElapsed = promotionResult.BackupMoveElapsed;
                             promotionFinalMoveElapsed = promotionResult.FinalMoveElapsed;
                             promotionBackupCleanupElapsed = promotionResult.BackupCleanupElapsed;
+                            promotionBackupCleanupWarning = promotionResult.BackupCleanupWarning;
                             promotionHadExistingTarget = promotionResult.HadExistingTarget;
                         }
                     }
@@ -845,11 +880,12 @@ public sealed partial class ManagedModuleInstallService
                         if (directPayloadLease is not null)
                             MaterializeStageFromPackageCache();
 
-                        var promotionResult = PromoteStagedModule(stageModulePath, modulePath);
+                        var promotionResult = await PromoteStagedModuleAsync(stageModulePath, modulePath, cancellationToken).ConfigureAwait(false);
                         promotionMoveElapsed = promotionResult.Elapsed;
                         promotionBackupMoveElapsed = promotionResult.BackupMoveElapsed;
                         promotionFinalMoveElapsed = promotionResult.FinalMoveElapsed;
                         promotionBackupCleanupElapsed = promotionResult.BackupCleanupElapsed;
+                        promotionBackupCleanupWarning = promotionResult.BackupCleanupWarning;
                         promotionHadExistingTarget = promotionResult.HadExistingTarget;
                     }
                 }
@@ -886,7 +922,7 @@ public sealed partial class ManagedModuleInstallService
                 ExtractionElapsed = materialization.Elapsed,
                 ExtractionFromCache = materialization.FromCache,
                 ExtractionCacheLockWaitElapsed = materialization.CacheLockWaitElapsed,
-                DependencyElapsed = dependencyStopwatch.Elapsed,
+                DependencyElapsed = dependencyElapsed,
                 PromotionElapsed = promotionStopwatch.Elapsed,
                 PromotionLockWaitElapsed = promotionLockWaitElapsed,
                 PromotionMoveElapsed = promotionMoveElapsed,
@@ -903,11 +939,15 @@ public sealed partial class ManagedModuleInstallService
             };
             context.RecordInstalledVersion(moduleRoot, request.Name, version);
             _receiptStore.WriteReceipt(request.Repository, result);
+            if (promotionBackupCleanupWarning is not null)
+                _logger.Warn(promotionBackupCleanupWarning);
             return result;
         }
         finally
         {
 #if !NET472
+            if (dependencyOverlap is not null)
+                await dependencyOverlap.DisposeAsync().ConfigureAwait(false);
             bufferedPackage?.Dispose();
 #endif
             directPayloadLease?.Dispose();
@@ -1052,15 +1092,37 @@ public sealed partial class ManagedModuleInstallService
             Dependencies = metadata.Dependencies
         };
 
-    private static ManagedModulePackageMetadata? CreateRepositoryDependencyHintMetadata(ManagedModuleVersionInfo versionInfo)
-        => versionInfo.Dependencies is not { Count: > 0 }
-            ? null
-            : new ManagedModulePackageMetadata
-            {
-                Id = versionInfo.Name,
-                Version = versionInfo.Version,
-                Dependencies = versionInfo.Dependencies
-            };
+    private static ManagedModulePackageMetadata? CreateRepositoryDependencyHintMetadata(
+        ManagedModuleVersionInfo versionInfo,
+        ManagedModuleInstallRequest request)
+    {
+        var dependencies = versionInfo.Dependencies;
+        if (dependencies is not { Count: > 0 })
+            return null;
+
+#if !NET472
+        // PSGallery expands exact dependency hints to [version, version]. On the
+        // buffered path the downloaded metadata can start the exact dependency
+        // without speculative history requests or competing with the root download.
+        if (ShouldUseDependencyPackagePrefetch(request))
+            dependencies = dependencies.Where(static dependency => !IsClosedSingletonHint(dependency)).ToArray();
+#endif
+        return dependencies.Count == 0 ? null : new ManagedModulePackageMetadata
+        {
+            Id = versionInfo.Name,
+            Version = versionInfo.Version,
+            Dependencies = dependencies
+        };
+    }
+
+#if !NET472
+    private static bool IsClosedSingletonHint(ManagedModuleDependencyInfo dependency)
+    {
+        var range = ManagedModuleVersionRange.Parse(dependency.VersionRange);
+        return range is { IncludeMinimum: true, IncludeMaximum: true, MinimumVersion: { } version } &&
+               string.Equals(version, range.MaximumVersion, StringComparison.Ordinal);
+    }
+#endif
 
     private static bool RequiresExactVersionNormalization(string version)
     {

@@ -11,7 +11,8 @@ public sealed partial class ManagedModuleInstallService
         ManagedModuleInstallContext context,
         CancellationToken cancellationToken)
     {
-        if (!ShouldUseDependencyPackagePrefetch(request) || cancellationToken.IsCancellationRequested)
+        if (!ShouldUseDependencyPackagePrefetch(request) || cancellationToken.IsCancellationRequested ||
+            context.ParentValidation is { Status: not TaskStatus.RanToCompletion })
             return;
 
         var dependencyTrustPolicy = ResolveDependencyTrustPolicy(request.TrustPolicy);

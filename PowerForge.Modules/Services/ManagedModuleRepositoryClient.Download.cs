@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net.Http;
 using System.Security.Cryptography;
 
@@ -12,21 +13,29 @@ public sealed partial class ManagedModuleRepositoryClient
         string destinationPath,
         long maxPackageBytes,
         CancellationToken cancellationToken,
-        bool networkResponse = false)
+        long? attemptStarted = null)
     {
-        using var sha256 = SHA256.Create();
         var buffer = new byte[PackageCopyBufferSize];
+        // Read only one byte here so a slow first chunk is reflected in the body rate.
+        int? firstRead = attemptStarted.HasValue
+            ? await ReadPackageBytesAsync(source, buffer, 1, cancellationToken).ConfigureAwait(false)
+            : null;
+        long? firstByte = firstRead > 0 ? Stopwatch.GetTimestamp() : null;
+
+        using var sha256 = SHA256.Create();
         long bytesWritten = 0;
 
+        long bodyEnd;
         using (var destination = CreatePackageFileStream(destinationPath, FileMode.Create, FileAccess.Write, FileShare.None))
         {
             try
             {
                 while (true)
                 {
-                    var bytesRead = networkResponse
-                        ? await ReadPackageBytesAsync(source, buffer, cancellationToken, networkResponse: true).ConfigureAwait(false)
-                        : await source.ReadAsync(buffer, 0, buffer.Length, cancellationToken).ConfigureAwait(false);
+                    var bytesRead = firstRead ?? (attemptStarted.HasValue
+                        ? await ReadPackageBytesAsync(source, buffer, buffer.Length, cancellationToken).ConfigureAwait(false)
+                        : await source.ReadAsync(buffer, 0, buffer.Length, cancellationToken).ConfigureAwait(false));
+                    firstRead = null;
                     if (bytesRead == 0) break;
                     if (maxPackageBytes > 0 && bytesWritten + bytesRead > maxPackageBytes)
                         throw new InvalidOperationException($"Package download exceeded the managed module package size limit of {maxPackageBytes} bytes.");
@@ -34,6 +43,7 @@ public sealed partial class ManagedModuleRepositoryClient
                     sha256.TransformBlock(buffer, 0, bytesRead, null, 0);
                     bytesWritten += bytesRead;
                 }
+                bodyEnd = firstByte.HasValue ? Stopwatch.GetTimestamp() : 0;
             }
             catch
             {
@@ -45,7 +55,7 @@ public sealed partial class ManagedModuleRepositoryClient
         }
 
         sha256.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
-        return new PackageCopyResult(bytesWritten, FormatSha256(sha256.Hash));
+        return new PackageCopyResult(bytesWritten, FormatSha256(sha256.Hash), attemptStarted, firstByte, bodyEnd);
     }
 
     private static async Task<Stream> OpenPackageResponseStreamAsync(HttpContent content, CancellationToken cancellationToken)
@@ -54,10 +64,10 @@ public sealed partial class ManagedModuleRepositoryClient
         catch (IOException ex) { throw new HttpRequestException("Unable to open the package response body.", ex); }
     }
 
-    private static async Task<int> ReadPackageBytesAsync(Stream source, byte[] buffer, CancellationToken cancellationToken, bool networkResponse)
+    private static async Task<int> ReadPackageBytesAsync(Stream source, byte[] buffer, int count, CancellationToken cancellationToken)
     {
-        try { return await source.ReadAsync(buffer, 0, buffer.Length, cancellationToken).ConfigureAwait(false); }
-        catch (IOException ex) when (networkResponse)
+        try { return await source.ReadAsync(buffer, 0, count, cancellationToken).ConfigureAwait(false); }
+        catch (IOException ex)
         {
             throw new HttpRequestException("Package response body transfer failed.", ex);
         }
@@ -76,7 +86,7 @@ public sealed partial class ManagedModuleRepositoryClient
         var destinationPath = BuildDestinationPath(destinationDirectory, repository, packageId, version);
         return SendWithPolicyAsync<ManagedModuleDownloadResult?>(
             () => CreateRequest(HttpMethod.Get, packageUri, credential, "application/octet-stream"),
-            async (response, readToken) =>
+            async (response, attemptStarted, readToken) =>
             {
                 if (!response.IsSuccessStatusCode)
                 {
@@ -85,7 +95,7 @@ public sealed partial class ManagedModuleRepositoryClient
                         $"Unable to download package '{packageId}' version '{version}'.");
                 }
                 using var source = await OpenPackageResponseStreamAsync(response.Content, readToken).ConfigureAwait(false);
-                var copy = await CopyPackageStreamWithHashAsync(source, destinationPath, _options.MaxPackageBytes, readToken, networkResponse: true).ConfigureAwait(false);
+                var copy = await CopyPackageStreamWithHashAsync(source, destinationPath, _options.MaxPackageBytes, readToken, attemptStarted).ConfigureAwait(false);
                 try
                 {
                     return new ManagedModuleDownloadResult
@@ -96,6 +106,8 @@ public sealed partial class ManagedModuleRepositoryClient
                         Source = packageUri.ToString(),
                         PackagePath = destinationPath,
                         BytesWritten = copy.BytesWritten,
+                        TimeToFirstByte = copy.TimeToFirstByte,
+                        BodyTransferElapsed = copy.BodyTransferElapsed,
                         PackageSha256 = copy.Sha256,
                         Metadata = ReadDownloadedPackageMetadata(packageId, version, destinationPath)
                     };
@@ -209,8 +221,8 @@ public sealed partial class ManagedModuleRepositoryClient
     {
         return await SendWithPolicyAsync<ManagedModuleBufferedPackage?>(
             () => CreateRequest(HttpMethod.Get, packageUri, credential, "application/octet-stream"),
-            async (response, readToken) => !response.IsSuccessStatusCode ? null :
-                await ReadHttpPackageToMemoryAsync(repository, packageUri, packageId, version, response, readToken).ConfigureAwait(false),
+            async (response, attemptStarted, readToken) => !response.IsSuccessStatusCode ? null :
+                await ReadHttpPackageToMemoryAsync(repository, packageUri, packageId, version, response, attemptStarted, readToken).ConfigureAwait(false),
             cancellationToken).ConfigureAwait(false);
     }
 
@@ -224,12 +236,12 @@ public sealed partial class ManagedModuleRepositoryClient
     {
         return await SendWithPolicyAsync(
             () => CreateRequest(HttpMethod.Get, packageUri, credential, "application/octet-stream"),
-            async (response, readToken) =>
+            async (response, attemptStarted, readToken) =>
             {
                 if (!response.IsSuccessStatusCode)
                     throw CreateRepositoryHttpException(repository, "Download", response.StatusCode,
                         $"Unable to download package '{packageId}' version '{version}'.");
-                return await ReadHttpPackageToMemoryAsync(repository, packageUri, packageId, version, response, readToken).ConfigureAwait(false);
+                return await ReadHttpPackageToMemoryAsync(repository, packageUri, packageId, version, response, attemptStarted, readToken).ConfigureAwait(false);
             }, cancellationToken).ConfigureAwait(false);
     }
 
@@ -239,6 +251,7 @@ public sealed partial class ManagedModuleRepositoryClient
         string packageId,
         string version,
         HttpResponseMessage response,
+        long attemptStarted,
         CancellationToken cancellationToken)
     {
         var contentLength = response.Content.Headers.ContentLength;
@@ -259,6 +272,7 @@ public sealed partial class ManagedModuleRepositoryClient
                     contentLength,
                     packageId,
                     version,
+                    attemptStarted,
                     cancellationToken)
                 .ConfigureAwait(false);
         }
@@ -271,8 +285,10 @@ public sealed partial class ManagedModuleRepositoryClient
             RepositoryName = repository.Name,
             Source = packageUri.ToString(),
             PackagePath = string.Empty,
-            BytesWritten = packageCopy.BytesWritten,
-            PackageSha256 = packageCopy.Sha256,
+            BytesWritten = packageCopy.Copy.BytesWritten,
+            TimeToFirstByte = packageCopy.Copy.TimeToFirstByte,
+            BodyTransferElapsed = packageCopy.Copy.BodyTransferElapsed,
+            PackageSha256 = packageCopy.Copy.Sha256,
             Metadata = metadata
         };
 
@@ -286,21 +302,21 @@ public sealed partial class ManagedModuleRepositoryClient
         long? expectedBytes,
         string packageId,
         string version,
+        long attemptStarted,
         CancellationToken cancellationToken)
     {
-        using var sha256 = SHA256.Create();
         var buffer = new byte[PackageCopyBufferSize];
+        var bytesRead = await ReadPackageBytesAsync(source, buffer, 1, cancellationToken).ConfigureAwait(false);
+        long? firstByte = bytesRead > 0 ? Stopwatch.GetTimestamp() : null;
+
+        using var sha256 = SHA256.Create();
         var destination = CreateBufferedPackageStream(expectedBytes, maxPackageBytes, maxBufferedBytes);
         long bytesWritten = 0;
 
         try
         {
-            while (true)
+            while (bytesRead > 0)
             {
-                var bytesRead = await ReadPackageBytesAsync(source, buffer, cancellationToken, networkResponse: true).ConfigureAwait(false);
-                if (bytesRead == 0)
-                    break;
-
                 var nextSize = bytesWritten + bytesRead;
                 if (maxPackageBytes > 0 && nextSize > maxPackageBytes)
                     throw new InvalidOperationException(
@@ -312,11 +328,14 @@ public sealed partial class ManagedModuleRepositoryClient
                 await destination.WriteAsync(buffer, 0, bytesRead, cancellationToken).ConfigureAwait(false);
                 sha256.TransformBlock(buffer, 0, bytesRead, null, 0);
                 bytesWritten += bytesRead;
+                bytesRead = await ReadPackageBytesAsync(source, buffer, buffer.Length, cancellationToken).ConfigureAwait(false);
             }
 
+            var bodyEnd = Stopwatch.GetTimestamp();
             sha256.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
             destination.Position = 0;
-            return new BufferedPackageCopyResult(destination, bytesWritten, FormatSha256(sha256.Hash));
+            var copy = new PackageCopyResult(bytesWritten, FormatSha256(sha256.Hash), attemptStarted, firstByte, bodyEnd);
+            return new BufferedPackageCopyResult(destination, copy);
         }
         catch
         {
@@ -367,32 +386,38 @@ public sealed partial class ManagedModuleRepositoryClient
 
     private readonly struct PackageCopyResult
     {
-        public PackageCopyResult(long bytesWritten, string sha256)
+        public PackageCopyResult(long bytesWritten, string sha256, long? attemptStarted, long? firstByte, long bodyEnd)
         {
             BytesWritten = bytesWritten;
             Sha256 = sha256;
+            TimeToFirstByte = firstByte.HasValue && attemptStarted.HasValue
+                ? GetElapsed(attemptStarted.Value, firstByte.Value)
+                : null;
+            BodyTransferElapsed = firstByte.HasValue ? GetElapsed(firstByte.Value, bodyEnd) : null;
         }
 
         public long BytesWritten { get; }
 
         public string Sha256 { get; }
+        public TimeSpan? TimeToFirstByte { get; }
+        public TimeSpan? BodyTransferElapsed { get; }
+
+        private static TimeSpan GetElapsed(long start, long end)
+            => TimeSpan.FromTicks((long)((end - start) * ((double)TimeSpan.TicksPerSecond / Stopwatch.Frequency)));
     }
 
 #if !NET472
     private readonly struct BufferedPackageCopyResult
     {
-        public BufferedPackageCopyResult(MemoryStream stream, long bytesWritten, string sha256)
+        public BufferedPackageCopyResult(MemoryStream stream, PackageCopyResult copy)
         {
             Stream = stream;
-            BytesWritten = bytesWritten;
-            Sha256 = sha256;
+            Copy = copy;
         }
 
         public MemoryStream Stream { get; }
 
-        public long BytesWritten { get; }
-
-        public string Sha256 { get; }
+        public PackageCopyResult Copy { get; }
     }
 #endif
 }

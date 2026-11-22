@@ -45,7 +45,7 @@ public sealed partial class ManagedModuleInstallService
                 }
             }
 
-            var repositoryDependencyHintMetadata = CreateRepositoryDependencyHintMetadata(versionInfo);
+            var repositoryDependencyHintMetadata = CreateRepositoryDependencyHintMetadata(versionInfo, request);
             StartDependencyVersionSelectionPrewarm(
                 request,
                 repositoryDependencyHintMetadata,
@@ -422,6 +422,8 @@ public sealed partial class ManagedModuleInstallService
             Source = download.Source,
             PackagePath = packagePath,
             BytesWritten = bytesWritten,
+            TimeToFirstByte = download.TimeToFirstByte,
+            BodyTransferElapsed = download.BodyTransferElapsed,
             RequestCount = download.RequestCount,
             RedirectCount = download.RedirectCount,
             FromCache = download.FromCache,

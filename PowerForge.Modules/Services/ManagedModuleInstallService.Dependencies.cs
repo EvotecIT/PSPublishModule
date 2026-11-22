@@ -12,7 +12,8 @@ public sealed partial class ManagedModuleInstallService
     {
         if (request.SkipDependencyCheck ||
             request.AuthenticodeCheck ||
-            request.Credential is not null)
+            request.Credential is not null ||
+            context.ParentValidation is { Status: not TaskStatus.RanToCompletion })
         {
             return;
         }
@@ -603,6 +604,12 @@ public sealed partial class ManagedModuleInstallService
         if (metadata is null)
             return result;
 
+#if !NET472
+        // An install that finished in another process while we staged the parent
+        // can require repair. Only begin that nested work after parent validation.
+        if (context.ParentValidation is { } parentValidation)
+            await parentValidation.WaitAsync(cancellationToken).ConfigureAwait(false);
+#endif
         var repairRequest = request.RepairInstalledManifestDependencies
             ? request
             : CopyForInstalledManifestDependencyRepair(request);

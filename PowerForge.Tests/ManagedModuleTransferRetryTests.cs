@@ -20,7 +20,7 @@ public sealed class ManagedModuleTransferRetryTests
         var failedStream = new FailingBody(stall);
         using var http = new HttpClient(new Handler(() => new HttpResponseMessage(HttpStatusCode.OK)
         {
-            Content = ++calls == 1 ? new StreamContent(failedStream) : new ByteArrayContent(payload)
+            Content = new StreamContent(++calls == 1 ? failedStream : new PhasedBody(payload))
         }));
         var client = Client(http);
         ManagedModuleDownloadResult result;
@@ -40,6 +40,40 @@ public sealed class ManagedModuleTransferRetryTests
         Assert.Equal(2, calls);
         Assert.True(failedStream.Disposed);
         Assert.Equal(Convert.ToHexString(SHA256.HashData(payload)), result.PackageSha256, ignoreCase: true);
+        Assert.True(result.TimeToFirstByte >= TimeSpan.FromMilliseconds(20));
+        Assert.True(result.BodyTransferElapsed >= TimeSpan.FromMilliseconds(30));
+        var bodyElapsed = Assert.IsType<TimeSpan>(result.BodyTransferElapsed);
+        Assert.Equal((payload.Length - 1) / bodyElapsed.TotalSeconds, Assert.IsType<double>(result.BytesPerSecond));
+    }
+
+    [Fact]
+    public async Task SaveAsNupkg_reports_http_timings_for_the_saved_package()
+    {
+        using var root = new DownloadDirectory();
+        var payload = Package();
+        using var http = new HttpClient(new Handler(() => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StreamContent(new PhasedBody(payload))
+        }));
+        var service = new ManagedModuleInstallService(new NullLogger(), Client(http));
+
+        var result = await service.InstallAsync(new ManagedModuleInstallRequest
+        {
+            Repository = Repository(),
+            Name = "Sample",
+            Version = "1.0.0",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = root.Path,
+            SaveAsNupkg = true
+        }).WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.True(result.SavedAsNupkg);
+        var download = Assert.IsType<ManagedModuleDownloadResult>(result.Download);
+        Assert.Equal(result.ModulePath, download.PackagePath);
+        Assert.Equal(payload, File.ReadAllBytes(download.PackagePath));
+        Assert.True(download.TimeToFirstByte >= TimeSpan.FromMilliseconds(20));
+        Assert.True(download.BodyTransferElapsed >= TimeSpan.FromMilliseconds(30));
+        Assert.True(download.BytesPerSecond > 0);
     }
 
     [Fact]
@@ -153,6 +187,19 @@ public sealed class ManagedModuleTransferRetryTests
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
             => Task.FromResult(response());
+    }
+
+    private sealed class PhasedBody(byte[] payload) : MemoryStream(payload)
+    {
+        public override async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+        {
+            if (Position == 0)
+                await Task.Delay(35, cancellationToken);
+            else if (Position == 1)
+                await Task.Delay(50, cancellationToken);
+
+            return Read(buffer, offset, count);
+        }
     }
 
     // Models native HTTP streams whose pending read is released by disposal rather

@@ -115,6 +115,46 @@ public sealed class ManagedModuleInstallDependencyFanoutTests
         Assert.Equal(ManagedModuleInstallStatus.Installed, Assert.Single(result.DependencyResults).Status);
     }
 
+    [Theory]
+    [InlineData("[1.0.0]", false, false)]
+    [InlineData("[1.0.0, 1.0.0]", false, true)]
+    [InlineData("[1.0.0, 1.0.0]", true, true)]
+    public async Task InstallAsync_uses_archive_metadata_for_exact_dependencies_and_preserves_disk_prewarm(
+        string packageRange, bool usePersistentCache, bool expectsHistoryRequest)
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        using var cache = new TemporaryDirectory();
+        using var handler = new RepositoryDependencyHintHandler
+        {
+            RepositoryDependencyRange = "[1.0.0, 1.0.0]",
+            PackageDependencyRange = packageRange
+        };
+        using var client = new HttpClient(handler);
+        var service = new ManagedModuleInstallService(new NullLogger(), new ManagedModuleRepositoryClient(new NullLogger(), client));
+
+        var result = await service.InstallAsync(new ManagedModuleInstallRequest
+        {
+            Repository = new ManagedModuleRepository("Feed", "https://example.test/api/v2"),
+            Name = "Company.Root",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = moduleRoot.Path,
+            PackageCacheDirectory = usePersistentCache ? cache.Path : null,
+            AllowClobber = true
+        });
+
+        var dependency = Assert.Single(result.DependencyResults);
+        Assert.Equal(ManagedModuleInstallStatus.Installed, dependency.Status);
+        Assert.Equal("1.0.0", dependency.Version);
+        Assert.True(File.Exists(Path.Combine(dependency.ModulePath, "Company.Core.psd1")));
+        var traffic = handler.Requests.ToList();
+        var history = traffic.FindIndex(static url => url.Contains("FindPackagesById", StringComparison.Ordinal));
+        var rootDownload = traffic.FindIndex(static url => url.Contains("/package/Company.Root/", StringComparison.Ordinal));
+        Assert.True(rootDownload >= 0);
+        Assert.Equal(expectsHistoryRequest, history >= 0);
+        if (expectsHistoryRequest)
+            Assert.Equal(usePersistentCache, history < rootDownload);
+    }
+
     [Fact]
     public async Task InstallAsync_prefetch_does_not_install_dependency_when_root_package_fails()
     {
@@ -235,6 +275,8 @@ public sealed class ManagedModuleInstallDependencyFanoutTests
         public bool CoreLatestRequestedBeforeRootDownload { get; private set; }
 
         public bool DelayRootPackageUntilCorePackageRequested { get; init; }
+        public string RepositoryDependencyRange { get; init; } = "[1.0.0, )";
+        public string PackageDependencyRange { get; init; } = "[1.0.0, )";
 
         public bool RootPackageHasUnsafeEntry { get; init; }
 
@@ -273,11 +315,12 @@ public sealed class ManagedModuleInstallDependencyFanoutTests
                 return CreateXmlResponse(
                     "<?xml version=\"1.0\" encoding=\"utf-8\"?>" +
                     "<feed xmlns=\"http://www.w3.org/2005/Atom\" xmlns:d=\"http://schemas.microsoft.com/ado/2007/08/dataservices\" xmlns:m=\"http://schemas.microsoft.com/ado/2007/08/dataservices/metadata\">" +
-                    "<entry><content><m:properties><d:Id>Company.Root</d:Id><d:Version>1.0.0</d:Version><d:Dependencies>Company.Core:[1.0.0, ):</d:Dependencies></m:properties></content></entry>" +
+                    $"<entry><content><m:properties><d:Id>Company.Root</d:Id><d:Version>1.0.0</d:Version><d:Dependencies>Company.Core:{RepositoryDependencyRange}:</d:Dependencies></m:properties></content></entry>" +
                     "</feed>");
             }
 
-            if (url.Equals("https://example.test/api/v2/Packages()?$filter=Id%20eq%20'Company.Core'%20and%20IsLatestVersion&$top=1&semVerLevel=2.0.0", StringComparison.OrdinalIgnoreCase))
+            if (url.Equals("https://example.test/api/v2/Packages()?$filter=Id%20eq%20'Company.Core'%20and%20IsLatestVersion&$top=1&semVerLevel=2.0.0", StringComparison.OrdinalIgnoreCase) ||
+                url.Equals("https://example.test/api/v2/FindPackagesById()?id='Company.Core'&semVerLevel=2.0.0", StringComparison.OrdinalIgnoreCase))
             {
                 return CreateXmlResponse(
                     "<?xml version=\"1.0\" encoding=\"utf-8\"?>" +
@@ -303,7 +346,7 @@ public sealed class ManagedModuleInstallDependencyFanoutTests
                         "Company.Root",
                         "1.0.0",
                         files: CreateModuleFiles("Company.Root", "1.0.0"),
-                        dependencies: new[] { new TestDependency("Company.Core", "[1.0.0, )", null) });
+                        dependencies: new[] { new TestDependency("Company.Core", PackageDependencyRange, null) });
                 return new HttpResponseMessage(HttpStatusCode.OK)
                 {
                     Content = new ByteArrayContent(bytes)
