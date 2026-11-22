@@ -47,6 +47,36 @@ public sealed class ManagedModuleTransferRetryTests
     }
 
     [Fact]
+    public async Task SaveAsNupkg_reports_http_timings_for_the_saved_package()
+    {
+        using var root = new DownloadDirectory();
+        var payload = Package();
+        using var http = new HttpClient(new Handler(() => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StreamContent(new PhasedBody(payload))
+        }));
+        var service = new ManagedModuleInstallService(new NullLogger(), Client(http));
+
+        var result = await service.InstallAsync(new ManagedModuleInstallRequest
+        {
+            Repository = Repository(),
+            Name = "Sample",
+            Version = "1.0.0",
+            Scope = ManagedModuleInstallScope.Custom,
+            ModuleRoot = root.Path,
+            SaveAsNupkg = true
+        }).WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.True(result.SavedAsNupkg);
+        var download = Assert.IsType<ManagedModuleDownloadResult>(result.Download);
+        Assert.Equal(result.ModulePath, download.PackagePath);
+        Assert.Equal(payload, File.ReadAllBytes(download.PackagePath));
+        Assert.True(download.TimeToFirstByte >= TimeSpan.FromMilliseconds(20));
+        Assert.True(download.BodyTransferElapsed >= TimeSpan.FromMilliseconds(30));
+        Assert.True(download.BytesPerSecond > 0);
+    }
+
+    [Fact]
     public async Task Permanent_body_failure_removes_partial_files_and_stops_at_the_retry_limit()
     {
         using var root = new DownloadDirectory();

@@ -3,6 +3,8 @@ using PowerForge;
 
 namespace PowerForge.Tests;
 
+// The parallel preflight assertion requires an uncontended process-wide extraction slot.
+[Collection(ProcessEnvironmentCollection.Name)]
 public sealed class ManagedModuleArchiveExtractorTests
 {
     [Fact]
