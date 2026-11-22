@@ -1,7 +1,8 @@
 # Native PowerForge CLI
 
 The standalone package exposes `powerforge`. The launcher handles
-`--version`, `module install`, `module restore`, and `module manifest` directly.
+`--version`, `module install`, `module restore`, `module find`, `module manifest`,
+`project versions`, and `nuget verify` directly.
 Other commands go to the self-contained managed executable under `full/`.
 Keep the package directory together when installing or moving it.
 
@@ -9,6 +10,20 @@ Use `powerforge module manifest --path ./Example.psd1 --output json` to read
 the module name from the filename, the manifest's quoted numeric `ModuleVersion`,
 and its optional prerelease label. The command reads the file without loading
 the module.
+
+Use `powerforge module find --name 'Pester*' --output json` for direct feed
+search. Pass `--source` to use an HTTP(S) feed or local folder and
+`--version` with an exact module name for an exact version lookup.
+The existing `powerforge find --repo …` uses PowerShell's registered repositories.
+
+`powerforge project versions --project-root . --output json` lists versions
+declared in project files, manifests, and supported build scripts. It reads
+source files without evaluating MSBuild imports or running PowerShell.
+Library consumers can reference `PowerForge.Versioning` on its own.
+
+`powerforge nuget verify` validates the release manifest, package hashes,
+and author signatures. It uses the installed .NET SDK's `dotnet nuget verify`
+for cryptographic verification. Staging and publishing still use the full CLI.
 
 The PowerForge.Build .NET tool continues to install the powerforge command
 with the full managed feature set. The native package can be built on the

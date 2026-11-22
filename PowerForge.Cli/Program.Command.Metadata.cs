@@ -22,7 +22,7 @@ internal static partial class Program
 
     private static int InspectModuleManifest(string[] args, bool outputJson, BufferedLogger? logBuffer)
     {
-        var (options, _) = ParseModuleCommandOptions(args, "manifest");
+        var (options, _) = ParseStandaloneCommandOptions(args, "manifest");
         var path = RequireModuleOption(options, "--path", ModuleManifestUsage);
         var metadata = new ModuleManifestMetadataReader().Inspect(path);
         if (outputJson)

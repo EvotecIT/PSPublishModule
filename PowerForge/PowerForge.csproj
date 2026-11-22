@@ -34,6 +34,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\PowerForge.Modules\PowerForge.Modules.csproj" />
+    <ProjectReference Include="..\PowerForge.Versioning\PowerForge.Versioning.csproj" />
   </ItemGroup>
 
   <ItemGroup>

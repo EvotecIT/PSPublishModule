@@ -10,6 +10,9 @@ internal static partial class Program
             Console.WriteLine(usage);
             return args.Length < 2 ? 2 : 0;
         }
+        if (IsNuGetVerifyInvocation(args))
+            return CommandNuGetVerify(args.Skip(2).ToArray(), logger);
+
         using var cancellation = new CancellationTokenSource();
         ConsoleCancelEventHandler handler = (_, value) => { value.Cancel = true; cancellation.Cancel(); };
         Console.CancelKeyPress += handler;
@@ -26,13 +29,12 @@ internal static partial class Program
                 if (!result.Success) throw new InvalidOperationException(result.ErrorMessage);
                 return 0;
             }
-            if (args[1] is not ("verify" or "publish")) throw new ArgumentException(usage);
+            if (args[1] != "publish") throw new ArgumentException(usage);
             var manifest = TryGetOptionValue(args, "--manifest") ?? throw new ArgumentException("--manifest is required.");
             var commit = TryGetOptionValue(args, "--source-commit") ?? throw new ArgumentException("--source-commit is required.");
             var fingerprints = (TryGetOptionValue(args, "--author-fingerprints") ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
             var service = new NuGetTrustedPublishingService(logger);
-            if (args[1] == "verify") service.VerifyAsync(manifest, commit, fingerprints, cancellation.Token).GetAwaiter().GetResult();
-            else service.PublishAsync(manifest, commit, fingerprints, TryGetOptionValue(args, "--api-key-env") ?? "NUGET_API_KEY", cancellation.Token).GetAwaiter().GetResult();
+            service.PublishAsync(manifest, commit, fingerprints, TryGetOptionValue(args, "--api-key-env") ?? "NUGET_API_KEY", cancellation.Token).GetAwaiter().GetResult();
             logger.Success("Signed NuGet release assets verified.");
             return 0;
         }

@@ -57,6 +57,47 @@ try {
     }
 
     $env:PATH = Join-Path $work 'empty path'
+    $found = Read-CommandResult -Executable $launcher -Arguments @(
+        'module', 'find', '--name', 'PowerForgeNative*', '--source', $feed.FullName, '--output', 'json'
+    )
+    if ($found.command -ne 'module.find' -or $found.result.Count -ne 1 -or
+        $found.result[0].name -ne 'PowerForgeNativeSmoke' -or $found.result[0].version -ne '1.0.0') {
+        throw 'Native feed search did not find the expected package.'
+    }
+
+    $projectRoot = New-Item -ItemType Directory -Path (Join-Path $work 'version project')
+    $project = Join-Path $projectRoot.FullName 'Example.csproj'
+    $projectText = '<Project><PropertyGroup><VersionPrefix>1.2.3</VersionPrefix></PropertyGroup></Project>'
+    [IO.File]::WriteAllText($project, $projectText)
+    [IO.File]::WriteAllText((Join-Path $projectRoot.FullName 'Example.psd1'), "@{ ModuleVersion = '2.3.4' }")
+    $versions = Read-CommandResult -Executable $launcher -Arguments @(
+        'project', 'versions', '--project-root', $projectRoot.FullName, '--output', 'json'
+    )
+    if ($versions.command -ne 'project.versions' -or $versions.result.Count -ne 2 -or
+        '1.2.3' -notin $versions.result.version -or '2.3.4' -notin $versions.result.version -or
+        [IO.File]::ReadAllText($project) -cne $projectText) {
+        throw 'Native version discovery did not report the two declared versions or modified the project.'
+    }
+
+    $commit = '0000000000000000000000000000000000000001'
+    $fingerprint = 'A' * 64
+    $releaseManifest = Join-Path $feed.FullName 'nuget-release-manifest.json'
+    @{
+        schemaVersion = 1
+        sourceCommitSha = $commit
+        assets = @(@{
+            fileName = [IO.Path]::GetFileName($nupkg)
+            id = 'PowerForgeNativeSmoke'
+            version = '1.0.0'
+            sha256 = 'B' * 64
+            authorCertificateFingerprint = $fingerprint
+        })
+    } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $releaseManifest
+    $verification = & $launcher nuget verify --manifest $releaseManifest --source-commit $commit --author-fingerprints $fingerprint 2>&1
+    if ($LASTEXITCODE -ne 1 -or ($verification -join "`n") -notmatch 'SHA256 mismatch') {
+        throw "Native NuGet verification accepted a mismatched package or missed the hash check. $verification"
+    }
+
     $install = Join-Path $work 'installed modules'
     $installed = Read-CommandResult -Executable $launcher -Arguments @(
         '--quiet', 'module', 'install', 'PowerForgeNativeSmoke', '--version', '1.0.0',

@@ -24,13 +24,14 @@ internal static partial class Program
                     Command = "project",
                     Success = true,
                     ExitCode = 0,
-                    Result = JsonSerializer.SerializeToElement(new { releaseUsage = ProjectReleaseUsage, scaffoldUsage = ProjectScaffoldUsage })
+                    Result = JsonSerializer.SerializeToElement(new { releaseUsage = ProjectReleaseUsage, scaffoldUsage = ProjectScaffoldUsage, versionsUsage = ProjectVersionsUsage })
                 });
             }
             else
             {
                 Console.WriteLine(ProjectReleaseUsage);
                 Console.WriteLine(ProjectScaffoldUsage);
+                Console.WriteLine(ProjectVersionsUsage);
             }
 
             return 0;
@@ -39,9 +40,10 @@ internal static partial class Program
         var sub = argv[0].ToLowerInvariant();
         return sub switch
         {
+            "versions" => CommandProjectVersions(argv.Skip(1).ToArray(), cli, logger),
             "release" => CommandProjectRelease(argv.Skip(1).ToArray(), outputJson, cli, logger),
             "scaffold" => CommandProjectScaffold(argv.Skip(1).ToArray(), outputJson, cli, logger),
-            _ => WriteReleaseError(outputJson, "project", 2, $"Unknown project subcommand '{sub}'. Expected 'release' or 'scaffold'.", logger)
+            _ => WriteReleaseError(outputJson, "project", 2, $"Unknown project subcommand '{sub}'. Expected 'release', 'scaffold', or 'versions'.", logger)
         };
     }
 

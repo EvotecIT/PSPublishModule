@@ -9,7 +9,7 @@ internal static partial class Program
     private static int InstallModuleFromFeed(string[] args, CliOptions cli, ILogger logger, BufferedLogger? logBuffer,
         bool outputJson, CancellationToken cancellationToken)
     {
-        var (options, moduleName) = ParseModuleCommandOptions(args, "install");
+        var (options, moduleName) = ParseStandaloneCommandOptions(args, "install");
         if (moduleName is null)
             throw new ArgumentException(ModuleInstallUsage);
         var name = ManagedModuleStandaloneInput.ValidateName(moduleName);

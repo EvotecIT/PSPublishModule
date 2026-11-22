@@ -7,7 +7,7 @@ internal static partial class Program
     private const string ModuleRestoreUsage =
         "Usage: powerforge module restore --requirements <modules.json> --lock-file <modules.lock.json> --destination <directory> [--source <feed-url-or-folder>] [--write-lock] [--plan] [--accept-license] [--allow-clobber] [--output json]";
 
-    private static bool IsModuleAction(string action) => action is "install" or "restore" or "manifest";
+    private static bool IsModuleAction(string action) => action is "install" or "restore" or "manifest" or "find";
 
     private static int CommandModule(string[] args, CliOptions cli, ILogger logger)
     {
@@ -18,7 +18,8 @@ internal static partial class Program
             "install" => ModuleInstallUsage,
             "restore" => ModuleRestoreUsage,
             "manifest" => ModuleManifestUsage,
-            _ => string.Join(Environment.NewLine, ModuleInstallUsage, ModuleRestoreUsage, ModuleManifestUsage)
+            "find" => ModuleFindUsage,
+            _ => string.Join(Environment.NewLine, ModuleInstallUsage, ModuleRestoreUsage, ModuleManifestUsage, ModuleFindUsage)
         };
 
         var outputJson = IsJsonOutput(args);
@@ -52,6 +53,8 @@ internal static partial class Program
             {
                 if (action == "install")
                     return InstallModuleFromFeed(commandArgs, cli, commandLogger, logBuffer, outputJson, cancellation.Token);
+                if (action == "find")
+                    return FindModules(commandArgs, commandLogger, logBuffer, outputJson, cancellation.Token);
                 return RestoreModules(commandArgs, cli, commandLogger, logBuffer, outputJson, cancellation.Token);
             }
             finally
@@ -74,7 +77,7 @@ internal static partial class Program
     private static int RestoreModules(string[] args, CliOptions cli, ILogger logger, BufferedLogger? logBuffer,
         bool outputJson, CancellationToken cancellationToken)
     {
-        var (options, _) = ParseModuleCommandOptions(args, "restore");
+        var (options, _) = ParseStandaloneCommandOptions(args, "restore");
         var request = new ManagedModuleRestoreRequest(
             RequireModuleOption(options, "--requirements", ModuleRestoreUsage),
             RequireModuleOption(options, "--lock-file", ModuleRestoreUsage),
@@ -107,7 +110,7 @@ internal static partial class Program
         return 0;
     }
 
-    private static (Dictionary<string, string?> Options, string? ModuleName) ParseModuleCommandOptions(string[] args, string action)
+    private static (Dictionary<string, string?> Options, string? ModuleName) ParseStandaloneCommandOptions(string[] args, string action)
     {
         var options = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
         string? moduleName = null;
@@ -126,20 +129,24 @@ internal static partial class Program
             switch (option)
             {
                 case "--write-lock" when action == "restore":
-                case "--prerelease" when action == "install":
-                case "--plan" when action != "manifest":
-                case "--accept-license" when action != "manifest":
-                case "--allow-clobber" when action != "manifest":
+                case "--prerelease" when action is "install" or "find":
+                case "--plan" when action is "install" or "restore":
+                case "--accept-license" when action is "install" or "restore":
+                case "--allow-clobber" when action is "install" or "restore":
                 case "--output-json":
                 case "--json":
                     options.Add(option, null);
                     break;
                 case "--requirements" when action == "restore":
                 case "--lock-file" when action == "restore":
-                case "--version" when action == "install":
-                case "--destination" when action != "manifest":
-                case "--source" when action != "manifest":
+                case "--version" when action is "install" or "find":
+                case "--destination" when action is "install" or "restore":
+                case "--source" when action is "install" or "restore" or "find":
                 case "--path" when action == "manifest":
+                case "--name" when action == "find":
+                case "--limit" when action == "find":
+                case "--project-root" when action == "project versions":
+                case "--module-name" when action == "project versions":
                 case "--output":
                     if (index + 1 >= args.Length || args[index + 1].StartsWith("--", StringComparison.Ordinal) ||
                         string.IsNullOrWhiteSpace(args[index + 1]))

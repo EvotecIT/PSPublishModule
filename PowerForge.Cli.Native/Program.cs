@@ -23,12 +23,17 @@ internal static partial class Program
         if (cli.Quiet)
             logger = new QuietLogger(logger);
 
-        return CommandModule(command, cli, logger);
+        if (IsNuGetVerifyInvocation(command))
+            return CommandNuGetVerify(command.Skip(2).ToArray(), logger);
+        return IsProjectVersionsInvocation(command)
+            ? CommandProjectVersions(command.Skip(2).ToArray(), cli, logger)
+            : CommandModule(command, cli, logger);
     }
 
     private static bool HandlesNativeCommand(string[] args)
-        => args.Length > 0 && string.Equals(args[0], "module", StringComparison.OrdinalIgnoreCase)
-           && (args.Length == 1 || IsModuleAction(args[1].ToLowerInvariant()));
+        => IsProjectVersionsInvocation(args) || IsNuGetVerifyInvocation(args)
+           || (args.Length > 0 && string.Equals(args[0], "module", StringComparison.OrdinalIgnoreCase)
+           && (args.Length == 1 || IsModuleAction(args[1].ToLowerInvariant())));
 
     // The native module commands share the terminal renderer and can stream progress messages directly.
     private static T RunWithStatus<T>(bool outputJson, CliOptions cli, string statusText, Func<T> action)
