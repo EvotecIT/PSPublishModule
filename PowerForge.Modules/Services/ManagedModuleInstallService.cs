@@ -704,8 +704,12 @@ public sealed partial class ManagedModuleInstallService
             ManagedModulePackageIntegrity.VerifyDownload(download, request.ExpectedPackageSha256);
             ManagedModuleTrustEvaluator.ThrowIfPackageRejected(request.Repository, download.Metadata, request.TrustPolicy);
             ThrowIfLicenseAcceptanceRequired(download.Metadata, request);
-            StartDependencyVersionSelectionPrewarm(request, download.Metadata, context, cancellationToken);
-            StartDependencyPackagePrefetch(request, download.Metadata, context, cancellationToken);
+            var deferredDependencyPrefetch = context.ParentValidation is { Status: not TaskStatus.RanToCompletion };
+            if (!deferredDependencyPrefetch)
+            {
+                StartDependencyVersionSelectionPrewarm(request, download.Metadata, context, cancellationToken);
+                StartDependencyPackagePrefetch(request, download.Metadata, context, cancellationToken);
+            }
 
             var validationModulePath = stageModulePath;
             ManagedModuleArchiveExtractionResult? extraction = null;
@@ -754,9 +758,8 @@ public sealed partial class ManagedModuleInstallService
             // data and install locks. Final paths, nested installs and receipts wait.
             if (context.ParentValidation is { } parentValidation)
             {
-                var waiting = !parentValidation.IsCompletedSuccessfully;
                 await parentValidation.WaitAsync(cancellationToken).ConfigureAwait(false);
-                if (waiting)
+                if (deferredDependencyPrefetch)
                 {
                     StartDependencyVersionSelectionPrewarm(request, download.Metadata, context, cancellationToken);
                     StartDependencyPackagePrefetch(request, download.Metadata, context, cancellationToken);
