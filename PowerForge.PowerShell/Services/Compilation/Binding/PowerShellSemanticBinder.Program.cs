@@ -115,6 +115,11 @@ internal sealed partial class PowerShellSemanticBinder
                 {
                     composition.Upstream.PipelineLifecycleSupportsComposition = true;
                     composition.Downstream.PipelineLifecycleSupportsComposition = true;
+                    if (composition.First > 0)
+                    {
+                        composition.Upstream.PipelineLifecycleCompositionMayStopEarly = true;
+                        composition.Downstream.PipelineLifecycleCompositionMayStopEarly = true;
+                    }
                     continue;
                 }
                 if (TryGetRuntimeFreePipelineLifecycleSelection(pipeline, functionsByName, capabilities, out var limit) &&
@@ -217,6 +222,9 @@ internal sealed partial class PowerShellSemanticBinder
                 moduleStateOriginsChanged |= functionsByName[function.Symbol.Name].MarkReturnsModuleStateDerived();
             }
             if (moduleStateOriginsChanged) continue;
+
+            if (capabilities == PowerShellCompilationCapabilities.TypedExecutable)
+                ExcludeUnprovedFinallyCompositions(functions, functionsByName, failedDiagnostics);
 
             var boundNames = functions.Select(static function => function.Symbol.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
             if (boundNames.SetEquals(functionsByName.Keys))

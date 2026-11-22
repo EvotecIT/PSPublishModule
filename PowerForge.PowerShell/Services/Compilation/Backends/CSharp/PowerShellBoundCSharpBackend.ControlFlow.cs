@@ -199,6 +199,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
             .Append(loop.DeclareVariable ? elementTypeName + " " : string.Empty)
             .Append(RenderStorage(loop.Variable)).Append(" = ")
             .Append(itemIdentifier).AppendLine(";");
+        if (_strictPipelineParameterBinding is { } binding && ReferenceEquals(loop, binding.Loop))
+            builder.Append(prefix).Append(nativeTransfers ? "    " : string.Empty).Append(binding.IsBound).AppendLine(" = true;");
         foreach (var nested in loop.Statements)
         {
             EmitStatement(builder, nested, indent + (nativeTransfers ? 2 : 1), getTemporaryIdentifier, discardHelper, sourceMap, successOutputSink);
