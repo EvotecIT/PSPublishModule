@@ -65,6 +65,13 @@ try {
         throw 'Native feed search did not find the expected package.'
     }
 
+    $exactFind = @('module', 'find', '--name', 'PowerForgeNativeSmoke', '--source', $feed.FullName, '--output', 'json')
+    $matching = Read-CommandResult -Executable $launcher -Arguments ($exactFind + @('--version', '1.0.0.0'))
+    $different = Read-CommandResult -Executable $launcher -Arguments ($exactFind + @('--version', '1.0.1'))
+    if ($matching.result.Count -ne 1 -or $matching.result[0].version -ne '1.0.0' -or $different.result.Count -ne 0) {
+        throw 'Native exact-version search did not match equivalent package versions.'
+    }
+
     $projectRoot = New-Item -ItemType Directory -Path (Join-Path $work 'version project')
     $project = Join-Path $projectRoot.FullName 'Example.csproj'
     $projectText = '<Project><PropertyGroup><VersionPrefix>1.2.3</VersionPrefix></PropertyGroup></Project>'

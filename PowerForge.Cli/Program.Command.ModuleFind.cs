@@ -28,7 +28,7 @@ internal static partial class Program
             var version = ManagedModuleStandaloneInput.ValidateVersion(name, requestedVersion);
             var versions = client.GetVersionsAsync(repository, name,
                 includePrerelease || version.Contains('-'), cancellationToken: cancellationToken).GetAwaiter().GetResult();
-            results = versions.Where(item => item.Version.Equals(version, StringComparison.OrdinalIgnoreCase)).Take(1).ToArray();
+            results = versions.Where(item => ManagedModuleVersionComparer.Instance.Compare(item.Version, version) == 0).Take(1).ToArray();
         }
         else
         {
