@@ -49,7 +49,8 @@ internal static class PowerShellCompiledModuleManifest
         }
     }
 
-    internal static string[] GetProtectedSourceFiles(string sourcePath, bool includeHybridDependencies, string? moduleManifestPath = null)
+    internal static string[] GetProtectedSourceFiles(string sourcePath, bool includeHybridDependencies, string? moduleManifestPath = null,
+        PowerShellSourceSnapshot? snapshot = null)
     {
         var protectedFiles = new List<string> { Path.GetFullPath(sourcePath) };
         var sourceManifest = ResolveSourceManifest(sourcePath, moduleManifestPath);
@@ -63,14 +64,14 @@ internal static class PowerShellCompiledModuleManifest
         if (includeHybridDependencies)
         {
             var sourceRoot = Path.GetDirectoryName(Path.GetFullPath(sourcePath)) ?? Directory.GetCurrentDirectory();
-            var conventionalSources = PowerShellConventionalModuleSourceDiscovery.Analyze(sourcePath).SourcePaths;
+            var conventionalSources = PowerShellConventionalModuleSourceDiscovery.Analyze(sourcePath, snapshot: snapshot).SourcePaths;
             var runtimeHooks = GetContainedRuntimeScriptFiles(sourcePath, sourceManifest)
                 .Select(reference => Path.GetFullPath(Path.Combine(sourceRoot, NormalizeManifestRelativePath(reference))));
             protectedFiles.AddRange(PowerShellHybridDependencyResolver.DiscoverModuleScopeDependencies(
-                sourcePath, null, null, PowerShellModuleRuntimeAlternatives.Stage));
+                sourcePath, null, null, PowerShellModuleRuntimeAlternatives.Stage, snapshot));
             protectedFiles.AddRange(runtimeHooks.Concat(conventionalSources)
                 .Distinct(PowerShellCompilationPathSafety.PathComparer)
-                .SelectMany(PowerShellHybridDependencyResolver.DiscoverModuleScopeDependencies));
+                .SelectMany(path => PowerShellHybridDependencyResolver.DiscoverModuleScopeDependencies(path, null, null, snapshot: snapshot)));
         }
         return protectedFiles.Distinct(PowerShellCompilationPathSafety.PathComparer).ToArray();
     }
@@ -103,7 +104,7 @@ internal static class PowerShellCompiledModuleManifest
             .ToArray();
     }
 
-    internal static string[]? Create(
+    internal static PowerShellStagedModuleFile[]? Create(
         string sourcePath,
         string? moduleManifestPath,
         string moduleDirectory,
@@ -111,7 +112,9 @@ internal static class PowerShellCompiledModuleManifest
         string rootModuleFileName,
         PowerShellTypedCompilationResult typed,
         string targetFramework,
-        Action<string, string> verifyCopiedInput)
+        Action<string, string> verifyCopiedInput,
+        PowerShellSourceSnapshot snapshot,
+        IEnumerable<string>? retainedSourcePaths = null)
     {
         var sourceManifest = ResolveSourceManifest(sourcePath, moduleManifestPath);
         if (!File.Exists(sourceManifest))
@@ -120,11 +123,11 @@ internal static class PowerShellCompiledModuleManifest
         var targetManifest = Path.Combine(moduleDirectory, artifactName + ".psd1");
         File.Copy(sourceManifest, targetManifest, overwrite: true);
         verifyCopiedInput(sourceManifest, targetManifest);
-        var allFunctions = ReadFunctionNames(typed.SourcePaths);
+        var allFunctions = ReadFunctionNames(typed.SourcePaths, snapshot);
         var compiled = typed.Methods.Where(static method => method.NativeFunctionBinding is null).Select(static method => method.SourceName).ToArray();
         var compiledSet = compiled.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var fallback = allFunctions.Where(name => !compiledSet.Contains(name)).ToArray();
-        var explicitExports = PowerShellModuleExportContract.TryRead(sourcePath);
+        var explicitExports = PowerShellModuleExportContract.TryRead(snapshot.Get(sourcePath).SyntaxRoot);
         var explicitCompiled = explicitExports?.SelectFunctions(compiled) ?? compiled;
         var explicitFallback = explicitExports?.SelectFunctions(fallback) ?? fallback;
 
@@ -176,8 +179,9 @@ internal static class PowerShellCompiledModuleManifest
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray();
         var hasRuntimeControlledExports = explicitExports is { Commands.Length: 0 };
-        var hasRetainedAlternatives = rootModuleFileName.EndsWith(".psm1", StringComparison.OrdinalIgnoreCase) &&
-            PowerShellHybridDependencyResolver.DiscoverRetainedModuleAlternatives(sourcePath, typed.SourcePaths).Length > 0;
+        var hybrid = rootModuleFileName.EndsWith(".psm1", StringComparison.OrdinalIgnoreCase);
+        var hasRetainedAlternatives = hybrid &&
+            PowerShellHybridDependencyResolver.DiscoverRetainedModuleAlternatives(sourcePath, typed.SourcePaths, snapshot).Length > 0;
         var functionExports = hasScriptNestedModules && manifestFunctions is null ? null : selectedFallback;
 
         var mutator = new AstModuleManifestMutator();
@@ -212,7 +216,8 @@ internal static class PowerShellCompiledModuleManifest
             mutator.TrySetTopLevelStringArray(targetManifest, "FileList", rewrittenFileList);
         }
 
-        var copied = new List<string> { targetManifest };
+        var runtimeSources = new HashSet<string>(retainedSourcePaths ?? Array.Empty<string>(), PowerShellCompilationPathSafety.PathComparer);
+        var copied = new List<PowerShellStagedModuleFile> { new(targetManifest, isGenerated: true) };
         foreach (var reference in ReadReferencedFileClosure(sourceManifest))
         {
             var sourceFile = reference.SourcePath;
@@ -236,7 +241,12 @@ internal static class PowerShellCompiledModuleManifest
             Directory.CreateDirectory(Path.GetDirectoryName(targetFile) ?? moduleDirectory);
             File.Copy(sourceFile, targetFile, overwrite: false);
             verifyCopiedInput(sourceFile, targetFile);
-            copied.Add(targetFile);
+            var portableText = hybrid && runtimeSources.Contains(sourceFile) && PowerShellCompilationInputResolver.IsPowerShellSource(sourceFile)
+                ? snapshot.GetDeliveryRewrite(sourceFile, PowerShellCompilationTargetContractService.GetDefaultSemanticProfileId(targetFramework), targetFile)
+                : null;
+            if (portableText is not null)
+                File.WriteAllText(targetFile, portableText, new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+            copied.Add(new PowerShellStagedModuleFile(targetFile, isGenerated: portableText is not null));
         }
         return copied.ToArray();
     }
@@ -338,16 +348,14 @@ internal static class PowerShellCompiledModuleManifest
         mutator.TrySetTopLevelStringArray(targetManifest, "CompatiblePSEditions", new[] { edition });
     }
 
-    private static string[] ReadFunctionNames(IEnumerable<string> sourcePaths)
+    private static string[] ReadFunctionNames(IEnumerable<string> sourcePaths, PowerShellSourceSnapshot snapshot)
     {
         return sourcePaths.SelectMany(sourcePath =>
             {
-                Token[] tokens;
-                ParseError[] errors;
-                var ast = Parser.ParseFile(sourcePath, out tokens, out errors);
-                if (errors.Length > 0)
+                var document = snapshot.Get(sourcePath);
+                if (document.Errors.Length > 0)
                     throw new InvalidOperationException($"Module functions in '{sourcePath}' could not be parsed while preserving manifest exports.");
-                return ast.FindAll(static node => node is FunctionDefinitionAst, searchNestedScriptBlocks: false)
+                return document.SyntaxRoot.FindAll(static node => node is FunctionDefinitionAst, searchNestedScriptBlocks: false)
                     .Cast<FunctionDefinitionAst>()
                     .Select(static function => function.Name);
             })

@@ -17,7 +17,14 @@ public sealed class PowerShellCompilationHostService
             if (selected is not null && (request.Kind is { } kind && kind != selected.ArtifactKind ||
                                         request.Mode is { } mode && mode != selected.Mode))
                 throw new ArgumentException("The explicit kind or mode conflicts with the selected target.");
-            var input = new PowerShellCompilationInputResolver().Resolve(
+            var profileId = selected?.SemanticProfileId ?? request.SemanticProfileId ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(profileId))
+            {
+                var defaultKind = request.Kind ?? PowerShellCompilationInputResolver.InferDefaultArtifactKind(request.Path);
+                var defaultMode = request.Mode ?? PowerShellCompilationBuildSpec.GetDefaultMode(defaultKind);
+                profileId = PowerShellCompilationArtifactBuilder.GetDefaultBuildSemanticProfileId(defaultMode, request.TargetFramework);
+            }
+            var input = new PowerShellCompilationInputResolver(profileId).Resolve(
                 request.Path, selected?.ArtifactKind ?? request.Kind, selected?.Mode ?? request.Mode,
                 allowDynamicModuleRuntimeSources: request.ResourceMode == PowerShellCompilationResourceMode.CompleteModule &&
                                                   (selected?.Mode ?? request.Mode) != PowerShellCompilationMode.Strict);
@@ -27,7 +34,7 @@ public sealed class PowerShellCompilationHostService
             {
                 ModuleManifestPath = input.ModuleManifestPath,
                 TargetFramework = request.TargetFramework,
-                SemanticProfileId = request.SemanticProfileId ?? string.Empty,
+                SemanticProfileId = profileId,
                 TargetContract = selected,
                 ResourceMode = request.ResourceMode,
                 IncludeResource = request.IncludeResource,
@@ -38,7 +45,7 @@ public sealed class PowerShellCompilationHostService
             var target = ResolveTarget(spec);
             PowerShellCompilationArtifactBuilder.ValidateSpec(spec);
             PowerShellCompilationArtifactBuilder.GetValidatedRuntimeManifestHooks(spec);
-            PowerShellCompilationOutputPolicy.EnsureDoesNotOverlapRecursiveLoaderRoot(spec.SourcePath, spec.OutputDirectory);
+            PowerShellCompilationOutputPolicy.EnsureDoesNotOverlapRecursiveLoaderRoot(spec.SourcePath, spec.OutputDirectory, input.SourceSnapshot);
             cancellationToken.ThrowIfCancellationRequested();
             var analyzer = new PowerShellCompilationAnalyzer(Array.Empty<PowerShellCompilationCommandProviderContract>(),
                 target.SemanticProfileId);

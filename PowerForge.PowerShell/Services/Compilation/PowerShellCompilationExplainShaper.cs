@@ -21,6 +21,7 @@ public static class PowerShellCompilationExplainShaper
         if (plan is null) throw new ArgumentNullException(nameof(plan));
         if (string.IsNullOrWhiteSpace(targetFramework)) throw new ArgumentException("A target framework is required.", nameof(targetFramework));
         if (commandProviders is null) throw new ArgumentNullException(nameof(commandProviders));
+        input = input.ResolveForProfile(GetProfile(input, plan));
         var shaped = Shape(input, plan, targetFramework, out var entry, commandProviders: commandProviders);
         var emittedMethods = GetEmittedMethods(shaped, entry);
         var ledger = PowerShellCompilationUnitDispositionLedgerBuilder.Create(
@@ -28,7 +29,8 @@ public static class PowerShellCompilationExplainShaper
             input.Kind,
             shaped,
             input.SourcePath,
-            emittedMethods: emittedMethods);
+            emittedMethods: emittedMethods,
+            snapshot: input.SourceSnapshot);
         return PowerShellCompilationExplanationService.CreateFinal(plan, ledger);
     }
 
@@ -54,15 +56,17 @@ public static class PowerShellCompilationExplainShaper
         IEnumerable<PowerShellCompilationCommandProviderContract>? commandProviders = null)
     {
         entry = null;
-        var profile = semanticProfileId ?? plan.TargetContract?.SemanticProfileId ??
-            PowerShellCompilationTargetContractService.GetDefaultSemanticProfileId(targetFramework);
+        var profile = semanticProfileId ?? GetProfile(input, plan);
         if (plan.Mode is PowerShellCompilationMode.Analyze or PowerShellCompilationMode.Package)
             return null;
         if (plan.Mode == PowerShellCompilationMode.Strict && !plan.CanProceed)
             return null;
+        input = input.ResolveForProfile(profile);
+        var snapshot = input.SourceSnapshot;
+        var documents = input.CompilationSourceFiles.Select(snapshot.Get).ToArray();
         if (input.Kind == PowerShellCompilationArtifactKind.Executable && plan.Mode == PowerShellCompilationMode.Strict)
         {
-            var executable = PowerShellTypedExecutableEmitter.Emit(input.SourcePath, input.CompilationSourceFiles, plan, targetFramework, profile, commandProviders);
+            var executable = PowerShellTypedExecutableEmitter.Emit(input.SourcePath, input.CompilationSourceFiles, plan, targetFramework, profile, commandProviders, documents);
             return new PowerShellTypedCompilationResult(
                 input.SourcePath,
                 "PowerForge.Compiled",
@@ -77,35 +81,36 @@ public static class PowerShellCompilationExplainShaper
         }
 
         var nativeDependencyTypes = plan.DependencyGraph is null ? PowerShellNativeDependencyTypes.Empty :
-            PowerShellNativeDependencyTypes.Create(input.ModuleManifestPath, plan.Dependencies, plan.DependencyGraph, input.ModuleRoot);
+            PowerShellNativeDependencyTypes.Create(input.ModuleManifestPath, plan.Dependencies, plan.DependencyGraph, input.ModuleRoot, snapshot);
         var transpiler = new PowerShellTypedCompilationTranspiler(commandProviders ?? Array.Empty<PowerShellCompilationCommandProviderContract>(), profile, nativeDependencyTypes);
         var typeName = PowerShellCSharpSymbolRenderer.Identifier(input.ArtifactName) + "Methods";
         var capabilities = PowerShellCompilationBuildSpec.GetCapabilities(input.Kind, plan.Mode);
         if (input.Kind == PowerShellCompilationArtifactKind.Executable && plan.Mode == PowerShellCompilationMode.Hybrid)
             entry = PowerShellHybridExecutableEntryPlanner.TryPlan(input.SourcePath, input.CompilationSourceFiles, plan,
-                targetFramework, profile, commandProviders ?? Array.Empty<PowerShellCompilationCommandProviderContract>());
-        var typed = input.Kind is PowerShellCompilationArtifactKind.BinaryModule or PowerShellCompilationArtifactKind.Executable
-            ? transpiler.TranspileForBinaryModule(input.CompilationSourceFiles, "PowerForge.Compiled", typeName, targetFramework, capabilities,
-                guardedExecutableEntryPath: input.Kind == PowerShellCompilationArtifactKind.Executable ? input.SourcePath : null,
-                nativeScriptEntry: entry?.EntryPointMethod.NativeFunctionBinding is not null)
-            : transpiler.Transpile(input.CompilationSourceFiles, "PowerForge.Compiled", typeName, targetFramework);
+                targetFramework, profile, commandProviders ?? Array.Empty<PowerShellCompilationCommandProviderContract>(), documents);
+        var typed = transpiler.TranspileAnalyzed(documents, plan, "PowerForge.Compiled", typeName, targetFramework, capabilities,
+            guardedExecutableEntryPath: input.Kind == PowerShellCompilationArtifactKind.Executable ? input.SourcePath : null,
+            nativeScriptEntry: entry?.EntryPointMethod.NativeFunctionBinding is not null);
         if (plan.Mode == PowerShellCompilationMode.Hybrid &&
             input.Kind is PowerShellCompilationArtifactKind.BinaryModule or PowerShellCompilationArtifactKind.Executable)
         {
-            typed = PowerShellHybridFunctionCollisionResolver.RouteNameCollisionsToFallback(typed, targetFramework, profile, capabilities, nativeDependencyTypes);
+            typed = PowerShellHybridFunctionCollisionResolver.RouteNameCollisionsToFallback(typed, targetFramework, profile, capabilities, nativeDependencyTypes, documents, plan, commandProviders);
         }
         if (input.Kind == PowerShellCompilationArtifactKind.BinaryModule)
         {
             if (plan.Mode == PowerShellCompilationMode.Hybrid)
-                typed = PowerShellAdvancedFunctionLifecyclePlanner.AddHostedLifecycleMethods(typed, targetFramework);
-            var exportContract = PowerShellModuleExportContract.TryRead(input.SourcePath);
+                typed = PowerShellAdvancedFunctionLifecyclePlanner.AddHostedLifecycleMethods(typed, targetFramework, documents);
+            var exportContract = PowerShellModuleExportContract.TryRead(snapshot.Get(input.SourcePath).SyntaxRoot);
             var exportedFunctions = exportContract?.SelectFunctions(typed.Methods.Select(static method => method.SourceName));
-            typed = PowerShellBinaryCmdletSourceGenerator.PrepareForBinaryModule(typed, exportedFunctions, targetFramework, profile, capabilities);
+            typed = PowerShellBinaryCmdletSourceGenerator.PrepareForBinaryModule(typed, exportedFunctions, targetFramework, profile, capabilities, documents, plan, transpiler);
         }
         else if (input.Kind == PowerShellCompilationArtifactKind.Executable)
         {
-            typed = PowerShellBinaryCmdletSourceGenerator.PrepareForBinaryModule(typed, exportedFunctions: null, targetFramework, profile, capabilities);
+            typed = PowerShellBinaryCmdletSourceGenerator.PrepareForBinaryModule(typed, exportedFunctions: null, targetFramework, profile, capabilities, documents, plan, transpiler);
         }
         return typed;
     }
+
+    private static string GetProfile(PowerShellCompilationResolvedInput input, PowerShellCompilationPlan plan)
+        => plan.TargetContract?.SemanticProfileId ?? plan.AnalysisSemanticProfileId ?? input.SourceSnapshot.SemanticProfileId;
 }

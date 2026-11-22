@@ -42,12 +42,7 @@ internal sealed class PowerShellModuleCompilationReleaseContract
             ?? throw new InvalidOperationException("PowerShell compilation configuration is unavailable.");
         if (compilation.DependencyLock is not null)
             PowerShellCompilationDependencyLockHasher.EnsureValid(compilation.DependencyLock, "Configured dependency lock");
-        var sourceInput = new PowerShellCompilationInputResolver().Resolve(
-            plan.BuildSpec.SourcePath,
-            PowerShellCompilationArtifactKind.BinaryModule,
-            compilation.Mode,
-            allowDynamicModuleRuntimeSources: compilation.ResourceMode == PowerShellCompilationResourceMode.CompleteModule &&
-                                              compilation.Mode != PowerShellCompilationMode.Strict);
+        var sourceInput = PowerShellModuleCompilationIntegrator.ResolveInput(plan.BuildSpec.SourcePath, compilation);
         var sourceInputSha256 = CreateSourceInputSha256(
             sourceInput,
             compilation);

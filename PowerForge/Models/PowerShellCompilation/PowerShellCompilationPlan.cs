@@ -360,6 +360,18 @@ public sealed class PowerShellCompilationPlan
         PowerShellCompilationDependency[]? dependencies,
         PowerShellCompilationDependencyGraph? dependencyGraph,
         PowerShellCompilationTargetContract? targetContract)
+        : this(mode, files, targetFramework, dependencies, dependencyGraph, targetContract, null)
+    {
+    }
+
+    internal PowerShellCompilationPlan(
+        PowerShellCompilationMode mode,
+        PowerShellCompilationFilePlan[] files,
+        string? targetFramework,
+        PowerShellCompilationDependency[]? dependencies,
+        PowerShellCompilationDependencyGraph? dependencyGraph,
+        PowerShellCompilationTargetContract? targetContract,
+        string? analysisSemanticProfileId)
     {
         if (!Enum.IsDefined(typeof(PowerShellCompilationMode), mode))
             throw new ArgumentOutOfRangeException(nameof(mode));
@@ -369,6 +381,7 @@ public sealed class PowerShellCompilationPlan
         Dependencies = dependencies ?? Array.Empty<PowerShellCompilationDependency>();
         DependencyGraph = dependencyGraph;
         TargetContract = targetContract;
+        AnalysisSemanticProfileId = analysisSemanticProfileId;
         ResourceSummary = PowerShellCompilationResourceSummary.Create(Dependencies);
         TotalUnits = Files.Sum(static file => file.Units.Length);
         CompilableUnits = Files.Sum(static file => file.Units.Count(static unit => unit.IsCompilable));
@@ -393,6 +406,8 @@ public sealed class PowerShellCompilationPlan
 
     /// <summary>Normalized explicit target whose deployment inputs shaped this plan, when supplied.</summary>
     public PowerShellCompilationTargetContract? TargetContract { get; }
+
+    internal string? AnalysisSemanticProfileId { get; }
 
     /// <summary>Included, excluded, required, inferred, and unclassified resource totals.</summary>
     public PowerShellCompilationResourceSummary ResourceSummary { get; }

@@ -118,7 +118,8 @@ internal sealed class PowerShellBoundOptimizer
             PowerShellBoundReturnStatement returned => new PowerShellBoundReturnStatement(
                 returned.Span, returned.Expression is null ? null : OptimizeExpression(returned.Expression), returned.EmitsValue),
             PowerShellBoundExpressionStatement expression => new PowerShellBoundExpressionStatement(
-                expression.Span, OptimizeExpression(expression.Expression), expression.EmitsOutput, expression.RequiresOutputContinuation, expression.DiscardsSuccessOutput),
+                expression.Span, OptimizeExpression(expression.Expression), expression.EmitsOutput, expression.RequiresOutputContinuation,
+                expression.DiscardsSuccessOutput, expression.CollectsLifecycleOutput),
             PowerShellBoundForStatement loop => new PowerShellBoundForStatement(
                 loop.Span,
                 loop.Initializer is null ? null : (PowerShellBoundMutationExpression)OptimizeExpression(loop.Initializer),

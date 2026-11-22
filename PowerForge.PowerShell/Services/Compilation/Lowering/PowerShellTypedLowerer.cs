@@ -200,7 +200,7 @@ internal sealed partial class PowerShellTypedLowerer
             if (function.NativeFunctionBinding is not null) localTypes.Clear();
             var symbolTypes = function.Parameters.ToDictionary(static parameter => parameter.Symbol.StableKey, static parameter => parameter.Type.ClrType, StringComparer.Ordinal);
             foreach (var local in function.Locals) symbolTypes[local.Symbol.StableKey] = local.Type.ClrType;
-            var sharesLifecycleLocals = function.Parameters.Any(static parameter => IsStrictStageType(parameter.Type.ClrType));
+            var sharesLifecycleLocals = function.StrictLifecycle is not null;
             var names = new LoweredFunctionScope(function.Parameters.Select(static parameter => parameter.Symbol.Name)
                 .Concat(function.Locals.Select(static local => local.Symbol.Name)), symbolTypes, localTypes, declared, sharesLifecycleLocals);
             var topLevelAssignments = function.Body.Statements.OfType<PowerShellBoundAssignmentStatement>()
@@ -267,7 +267,8 @@ internal sealed partial class PowerShellTypedLowerer
                 string.Join("\n", (functionDocument?.SourceText ?? string.Empty).Replace("\r\n", "\n").Split('\n')
                     .Skip(function.Body.Span.StartLine - 1).Take(function.Body.Span.EndLine - function.Body.Span.StartLine + 1)),
                 PowerShellSuccessOutputTypePolicy.Resolve(function, boundFunctions),
-                function.OutputTypeDeclarations));
+                function.OutputTypeDeclarations,
+                LowerStrictLifecycle(function, statements, predeclared.Length)));
         }
 
         CloseLoweringDependencies(functions, program, diagnostics);
@@ -634,7 +635,10 @@ internal sealed partial class PowerShellTypedLowerer
             : new PowerShellLoweredExpressionStatement(
                 statement.Span,
                 expression,
-                discardValue: !statement.EmitsOutput && expression.ClrType != typeof(void));
+                discardValue: !statement.EmitsOutput && expression.ClrType != typeof(void),
+                attachedLifecycleRecord: names.SharesLifecycleLocals && statement.CollectsLifecycleOutput
+                    ? ((PowerShellLoweredClrInvocationExpression)expression).Arguments.Single()
+                    : null);
     }
 
     private static PowerShellLoweredForStatement LowerFor(

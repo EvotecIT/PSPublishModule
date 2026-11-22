@@ -24,13 +24,13 @@ public static class PowerShellCompilationOutputPolicy
         return Path.Combine(parent!, "artifacts", new DirectoryInfo(input.ModuleRoot).Name);
     }
 
-    internal static void EnsureDoesNotOverlapRecursiveLoaderRoot(string sourcePath, string outputDirectory)
+    internal static void EnsureDoesNotOverlapRecursiveLoaderRoot(string sourcePath, string outputDirectory, PowerShellSourceSnapshot? snapshot = null)
     {
         var sourceRoot = Path.GetDirectoryName(Path.GetFullPath(sourcePath)) ?? Directory.GetCurrentDirectory();
         if (!IsSameOrContained(sourceRoot, outputDirectory))
             return;
 
-        var discovery = PowerShellConventionalModuleSourceDiscovery.Analyze(sourcePath);
+        var discovery = PowerShellConventionalModuleSourceDiscovery.Analyze(sourcePath, snapshot: snapshot);
         var overlap = discovery.RecursiveSourceDirectories.FirstOrDefault(root => IsSameOrContained(root, outputDirectory));
         if (overlap is null)
             return;

@@ -5,6 +5,9 @@ namespace PowerForge;
 /// </summary>
 public sealed class PowerShellCompilationResolvedInput
 {
+    private readonly Func<string, PowerShellCompilationResolvedInput> _resolveForProfile;
+    private PowerShellCompilationResolvedInput? _alternateInput;
+
     internal PowerShellCompilationResolvedInput(
         string requestedPath,
         string sourcePath,
@@ -15,6 +18,8 @@ public sealed class PowerShellCompilationResolvedInput
         PowerShellCompilationMode mode,
         string[] sourceFiles,
         string[] compilationSourceFiles,
+        PowerShellSourceSnapshot sourceSnapshot,
+        Func<string, PowerShellCompilationResolvedInput> resolveForProfile,
         string[]? recursiveSourceDirectories = null)
     {
         RequestedPath = requestedPath;
@@ -28,6 +33,8 @@ public sealed class PowerShellCompilationResolvedInput
         SourceFiles = sourceFiles;
         CompilationSourceFiles = compilationSourceFiles;
         RecursiveSourceDirectories = recursiveSourceDirectories ?? Array.Empty<string>();
+        SourceSnapshot = sourceSnapshot;
+        _resolveForProfile = resolveForProfile;
         var dependencyPlanner = new PowerShellCompilationDependencyPlanner();
         Dependencies = dependencyPlanner.Analyze(this);
         DependencyGraph = PowerShellCompilationDependencyGraphBuilder.Build(
@@ -37,7 +44,8 @@ public sealed class PowerShellCompilationResolvedInput
             Kind,
             Mode,
             CompilationSourceFiles,
-            Dependencies);
+            Dependencies,
+            snapshot: SourceSnapshot);
     }
 
     /// <summary>Original absolute input path.</summary>
@@ -74,6 +82,13 @@ public sealed class PowerShellCompilationResolvedInput
     public PowerShellCompilationDependencyGraph DependencyGraph { get; }
 
     internal string[] RecursiveSourceDirectories { get; }
+    internal PowerShellSourceSnapshot SourceSnapshot { get; }
+    internal PowerShellCompilationResolvedInput ResolveForProfile(string profile)
+    {
+        profile = PowerShellCompilationSemanticOracleCatalog.Get(profile).ProfileId;
+        if (SourceSnapshot.SemanticProfileId == profile) return this;
+        return LazyInitializer.EnsureInitialized(ref _alternateInput, () => _resolveForProfile(profile))!;
+    }
 }
 
 /// <summary>
@@ -81,6 +96,15 @@ public sealed class PowerShellCompilationResolvedInput
 /// </summary>
 public sealed class PowerShellCompilationInputResolver
 {
+    private readonly string? _semanticProfileId;
+
+    /// <summary>Resolves source using the active PowerShell parser's file encoding.</summary>
+    public PowerShellCompilationInputResolver() { }
+
+    /// <summary>Resolves sources using the selected compiler profile's file encoding.</summary>
+    public PowerShellCompilationInputResolver(string semanticProfileId)
+        => _semanticProfileId = PowerShellCompilationSemanticOracleCatalog.Get(semanticProfileId).ProfileId;
+
     internal static PowerShellCompilationArtifactKind InferDefaultArtifactKind(string path)
     {
         if (string.IsNullOrWhiteSpace(path))
@@ -144,8 +168,10 @@ public sealed class PowerShellCompilationInputResolver
             if (!requestedPaths.Contains(entryPoint, PowerShellCompilationPathSafety.PathComparer))
                 throw new InvalidOperationException("The executable entrypoint must also be present in the requested path set.");
             var sourceRoot = Path.GetDirectoryName(entryPoint) ?? Directory.GetCurrentDirectory();
+            var snapshot = new PowerShellSourceSnapshot(sourceRoot, _semanticProfileId);
             var closure = PowerShellHybridDependencyResolver.DiscoverDependencies(entryPoint,
-                allowDerivedPaths: (mode ?? PowerShellCompilationMode.Package) != PowerShellCompilationMode.Strict);
+                allowDerivedPaths: (mode ?? PowerShellCompilationMode.Package) != PowerShellCompilationMode.Strict,
+                snapshot: snapshot);
             var unreachable = requestedPaths.Where(path => !closure.Contains(path, PowerShellCompilationPathSafety.PathComparer)).ToArray();
             if (unreachable.Length > 0)
                 throw new InvalidOperationException($"Executable path set contains source file(s) unreachable from the entrypoint: {string.Join(", ", unreachable.Select(Path.GetFileName))}.");
@@ -159,7 +185,10 @@ public sealed class PowerShellCompilationInputResolver
                 resolvedKind,
                 executableMode,
                 closure,
-                closure);
+                closure,
+                snapshot,
+                profile => new PowerShellCompilationInputResolver(profile).Resolve(
+                    requestedPaths, resolvedKind, executableMode, entryPoint, allowDynamicModuleRuntimeSources));
         }
         var resolvedMode = mode ?? (resolvedKind == PowerShellCompilationArtifactKind.BinaryModule
             ? PowerShellCompilationMode.Strict
@@ -182,6 +211,7 @@ public sealed class PowerShellCompilationInputResolver
                 $"Loose compilation source '{requestedPath}' traverses a symbolic link or junction.");
         }
 
+        var pathsForResolution = requestedPaths.ToArray();
         return new PowerShellCompilationResolvedInput(
             sourcePath,
             sourcePath,
@@ -191,7 +221,10 @@ public sealed class PowerShellCompilationInputResolver
             resolvedKind,
             resolvedMode,
             requestedPaths,
-            requestedPaths);
+            requestedPaths,
+            new PowerShellSourceSnapshot(moduleRoot, _semanticProfileId),
+            profile => new PowerShellCompilationInputResolver(profile).Resolve(
+                pathsForResolution, resolvedKind, resolvedMode, allowDynamicModuleRuntimeSources: allowDynamicModuleRuntimeSources));
     }
 
     private static string FindCommonSourceRoot(IReadOnlyCollection<string> sourcePaths)
@@ -262,18 +295,19 @@ public sealed class PowerShellCompilationInputResolver
                 "Executable compilation accepts a standalone .ps1 entrypoint. Use BinaryModule for module inputs until module-to-executable entrypoint semantics are defined.");
         }
         var resolvedMode = mode ?? PowerShellCompilationBuildSpec.GetDefaultMode(resolvedKind);
+        var snapshot = new PowerShellSourceSnapshot(moduleRoot, _semanticProfileId);
         string[] compilationSourceFiles;
         string[] sourceFiles;
         var recursiveSourceDirectories = Array.Empty<string>();
         if (resolvedKind == PowerShellCompilationArtifactKind.Executable)
         {
             compilationSourceFiles = PowerShellHybridDependencyResolver.DiscoverDependencies(sourcePath,
-                allowDerivedPaths: resolvedMode != PowerShellCompilationMode.Strict);
+                allowDerivedPaths: resolvedMode != PowerShellCompilationMode.Strict, snapshot: snapshot);
             sourceFiles = compilationSourceFiles;
         }
         else
         {
-            var conventionalDiscovery = PowerShellConventionalModuleSourceDiscovery.Analyze(sourcePath);
+            var conventionalDiscovery = PowerShellConventionalModuleSourceDiscovery.Analyze(sourcePath, snapshot: snapshot);
             recursiveSourceDirectories = conventionalDiscovery.RecursiveSourceDirectories;
             var conventionalSources = conventionalDiscovery.SourcePaths;
             var runtimeHooks = manifestPath is null
@@ -288,7 +322,7 @@ public sealed class PowerShellCompilationInputResolver
                 ? PowerShellModuleRuntimeAlternatives.Stage
                 : PowerShellModuleRuntimeAlternatives.Reject;
             compilationSourceFiles = PowerShellHybridDependencyResolver.DiscoverModuleScopeDependencies(
-                    sourcePath, null, null, hybridModule ? PowerShellModuleRuntimeAlternatives.Skip : runtimeAlternatives)
+                    sourcePath, null, null, hybridModule ? PowerShellModuleRuntimeAlternatives.Skip : runtimeAlternatives, snapshot)
                 .Concat(conventionalSources)
                 .Where(file => IsPowerShellSource(file))
                 .Where(file => !runtimeHookSet.Contains(file))
@@ -297,22 +331,20 @@ public sealed class PowerShellCompilationInputResolver
                 .ThenBy(file => FrameworkCompatibility.GetRelativePath(moduleRoot, file), StringComparer.OrdinalIgnoreCase)
                 .ToArray();
             if (hybridModule)
-                _ = PowerShellHybridDependencyResolver.DiscoverRetainedModuleAlternatives(sourcePath, compilationSourceFiles);
-            sourceFiles = (allowDynamicModuleRuntimeSources && resolvedMode != PowerShellCompilationMode.Strict
-                    ? new[] { sourcePath }
-                        .Concat(runtimeHooks)
-                        .Concat(conventionalSources)
-                        .Distinct(PowerShellCompilationPathSafety.PathComparer)
+                _ = PowerShellHybridDependencyResolver.DiscoverRetainedModuleAlternatives(sourcePath, compilationSourceFiles, snapshot);
+            var runtimeEntries = runtimeHooks.Concat(conventionalSources);
+            var runtimePaths = allowDynamicModuleRuntimeSources && resolvedMode != PowerShellCompilationMode.Strict
+                ? PowerShellHybridDependencyResolver.DiscoverKnownRuntimeDependencies(
+                    sourcePath,
+                    new[] { sourcePath }.Concat(runtimeEntries).Distinct(PowerShellCompilationPathSafety.PathComparer)
                         .SelectMany(path => PowerShellHybridDependencyResolver.DiscoverModuleScopeDependencies(
                             path, null, null, PowerShellCompilationPathSafety.PathEquals(path, sourcePath)
-                                ? runtimeAlternatives
-                                : PowerShellModuleRuntimeAlternatives.Reject))
-                        .Distinct(PowerShellCompilationPathSafety.PathComparer)
-                    : PowerShellHybridDependencyResolver.DiscoverDependencies(
-                        sourcePath,
-                        runtimeHooks.Concat(conventionalSources),
-                        conventionalLoaders: conventionalDiscovery.Loaders,
-                        runtimeAlternatives: runtimeAlternatives))
+                                ? runtimeAlternatives : PowerShellModuleRuntimeAlternatives.Reject, snapshot))
+                        .Distinct(PowerShellCompilationPathSafety.PathComparer),
+                    conventionalDiscovery.Loaders, runtimeAlternatives, snapshot)
+                : PowerShellHybridDependencyResolver.DiscoverDependencies(sourcePath, runtimeEntries,
+                    conventionalLoaders: conventionalDiscovery.Loaders, runtimeAlternatives: runtimeAlternatives, snapshot: snapshot);
+            sourceFiles = runtimePaths
                 .Where(file => IsPowerShellSource(file))
                 .OrderBy(file => FrameworkCompatibility.GetRelativePath(moduleRoot, file), StringComparer.OrdinalIgnoreCase)
                 .ToArray();
@@ -328,6 +360,9 @@ public sealed class PowerShellCompilationInputResolver
             resolvedMode,
             sourceFiles,
             compilationSourceFiles,
+            snapshot,
+            profile => new PowerShellCompilationInputResolver(profile).Resolve(
+                requestedPath, resolvedKind, resolvedMode, allowDynamicModuleRuntimeSources),
             recursiveSourceDirectories);
     }
 
@@ -433,7 +468,7 @@ public sealed class PowerShellCompilationInputResolver
         return path;
     }
 
-    private static bool IsPowerShellSource(string path)
+    internal static bool IsPowerShellSource(string path)
         => Path.GetExtension(path) is var extension &&
            (extension.Equals(".ps1", StringComparison.OrdinalIgnoreCase) || extension.Equals(".psm1", StringComparison.OrdinalIgnoreCase));
 

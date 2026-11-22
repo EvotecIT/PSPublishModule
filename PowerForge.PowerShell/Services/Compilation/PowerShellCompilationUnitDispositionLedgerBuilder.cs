@@ -11,7 +11,8 @@ internal static class PowerShellCompilationUnitDispositionLedgerBuilder
         PowerShellTypedCompilationResult? shapedCompilation,
         string rootSourcePath,
         IEnumerable<string>? deliveryRuntimeCauses = null,
-        IEnumerable<PowerShellCompiledMethod>? emittedMethods = null)
+        IEnumerable<PowerShellCompiledMethod>? emittedMethods = null,
+        PowerShellSourceSnapshot? snapshot = null)
     {
         if (plan is null) throw new ArgumentNullException(nameof(plan));
         if (!Enum.IsDefined(typeof(PowerShellCompilationArtifactKind), artifactKind))
@@ -21,7 +22,7 @@ internal static class PowerShellCompilationUnitDispositionLedgerBuilder
         var nestedBodies = methods.SelectMany(static method => method.NestedBodies).ToArray();
         var initializerBodies = methods.Where(static method => method.IsModuleInitializer && method.NativeFunctionBinding is not null)
             .SelectMany(static method => method.NestedBodies).ToHashSet();
-        var wrappedMethodKeys = GetWrappedMethodKeys(plan.Mode, artifactKind, rootSourcePath, shapedCompilation);
+        var wrappedMethodKeys = GetWrappedMethodKeys(plan.Mode, artifactKind, rootSourcePath, shapedCompilation, snapshot);
         var plannedSourcePaths = plan.Files
             .Select(static file => Path.GetFullPath(file.FullPath))
             .ToHashSet(PowerShellCompilationPathSafety.PathComparer);
@@ -41,7 +42,7 @@ internal static class PowerShellCompilationUnitDispositionLedgerBuilder
         foreach (var file in plan.Files.OrderBy(static file => NormalizePath(file.RelativePath), StringComparer.Ordinal))
         {
             var relativePath = NormalizeRelativePath(file.RelativePath, Path.GetFileName(file.FullPath));
-            var functionExtents = GetFunctionExtents(file.FullPath);
+            var functionExtents = GetFunctionExtents(file.FullPath, snapshot);
             foreach (var indexedUnit in file.Units
                          .Select(static (unit, index) => (Unit: unit, Index: index))
                          .OrderBy(static item => item.Unit.StartLine)
@@ -233,8 +234,9 @@ internal static class PowerShellCompilationUnitDispositionLedgerBuilder
             : throw new InvalidOperationException("An emitted native body has no unique authored script or enclosing function owner.");
     }
 
-    private static FunctionDefinitionAst[] GetFunctionExtents(string sourcePath)
+    private static FunctionDefinitionAst[] GetFunctionExtents(string sourcePath, PowerShellSourceSnapshot? snapshot)
     {
+        if (snapshot is not null) return snapshot.Get(sourcePath).RootFunctionDeclarations.Select(static declaration => declaration.Syntax).ToArray();
         if (!File.Exists(sourcePath)) return Array.Empty<FunctionDefinitionAst>();
         return PowerShellSourceParser.GetRootFunctionDeclarations(Parser.ParseFile(sourcePath, out _, out _))
             .Select(static declaration => declaration.Syntax).ToArray();
@@ -269,12 +271,13 @@ internal static class PowerShellCompilationUnitDispositionLedgerBuilder
         PowerShellCompilationMode mode,
         PowerShellCompilationArtifactKind artifactKind,
         string rootSourcePath,
-        PowerShellTypedCompilationResult? shapedCompilation)
+        PowerShellTypedCompilationResult? shapedCompilation,
+        PowerShellSourceSnapshot? snapshot)
     {
         if (shapedCompilation is null || mode is PowerShellCompilationMode.Package or PowerShellCompilationMode.Analyze)
             return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         if (artifactKind == PowerShellCompilationArtifactKind.BinaryModule && mode == PowerShellCompilationMode.Hybrid)
-            return PowerShellHybridModuleComposer.GetWrappedCompiledMethodKeys(rootSourcePath, shapedCompilation);
+            return PowerShellHybridModuleComposer.GetWrappedCompiledMethodKeys(rootSourcePath, shapedCompilation, snapshot?.Get(rootSourcePath));
         return PowerShellHybridModuleComposer.GetExecutableCompiledMethodKeys(shapedCompilation);
     }
 

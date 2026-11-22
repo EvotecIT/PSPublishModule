@@ -12,7 +12,7 @@ internal static class PowerShellHybridRegionRewriter
 {
     internal static PowerShellHybridSourceEdit[] CreateEdits(
         string sourcePath,
-        ScriptBlockAst ast,
+        ParsedSourceDocument document,
         PowerShellTypedCompilationResult typed,
         ISet<string> removedFunctionKeys)
     {
@@ -22,7 +22,8 @@ internal static class PowerShellHybridRegionRewriter
             .OrderBy(static region => region.StartOffset)
             .ToArray();
         if (regions.Length == 0) return Array.Empty<PowerShellHybridSourceEdit>();
-        var source = ast.Extent.Text;
+        var ast = document.SyntaxRoot;
+        var source = document.Text;
         var sourceDocumentSha256 = ComputeSha256(source);
         var functions = ast.FindAll(static node => node is FunctionDefinitionAst, searchNestedScriptBlocks: false)
             .Cast<FunctionDefinitionAst>()

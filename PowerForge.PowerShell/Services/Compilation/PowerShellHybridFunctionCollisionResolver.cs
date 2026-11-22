@@ -12,16 +12,20 @@ internal static partial class PowerShellHybridFunctionCollisionResolver
         string? targetFramework,
         string semanticProfileId = PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId,
         PowerShellCompilationCapability capabilities = PowerShellCompilationCapabilities.BinaryModule,
-        PowerShellNativeDependencyTypes? nativeDependencyTypes = null)
+        PowerShellNativeDependencyTypes? nativeDependencyTypes = null,
+        IReadOnlyList<ParsedSourceDocument>? sourceDocuments = null,
+        PowerShellCompilationPlan? plan = null,
+        IEnumerable<PowerShellCompilationCommandProviderContract>? commandProviders = null)
     {
         var definitions = new List<(string Path, FunctionDefinitionAst Function)>();
         var sources = new List<(string Path, ScriptBlockAst Root)>();
-        foreach (var sourcePath in typed.SourcePaths)
+        var root = Path.GetDirectoryName(typed.SourcePath);
+        sourceDocuments ??= typed.SourcePaths.Select(path => PowerShellSourceParser.ParseFile(path, root, semanticProfileId)).ToArray();
+        foreach (var document in sourceDocuments)
         {
-            Token[] tokens;
-            ParseError[] errors;
-            var ast = Parser.ParseFile(sourcePath, out tokens, out errors);
-            if (errors.Length > 0)
+            var sourcePath = document.Path;
+            var ast = document.SyntaxRoot;
+            if (document.Errors.Length > 0)
                 return typed;
             sources.Add((sourcePath, ast));
             definitions.AddRange(ast.FindAll(static node => node is FunctionDefinitionAst, searchNestedScriptBlocks: false)
@@ -54,7 +58,7 @@ internal static partial class PowerShellHybridFunctionCollisionResolver
         if (excludedMethods.Count == 0)
             return typed;
 
-        var filtered = new PowerShellTypedCompilationTranspiler(Array.Empty<PowerShellCompilationCommandProviderContract>(), semanticProfileId,
+        var filtered = new PowerShellTypedCompilationTranspiler(commandProviders ?? Array.Empty<PowerShellCompilationCommandProviderContract>(), semanticProfileId,
             nativeDependencyTypes ?? PowerShellNativeDependencyTypes.Empty).TranspileExcluding(
             typed.SourcePaths,
             typed.NamespaceName,
@@ -63,7 +67,8 @@ internal static partial class PowerShellHybridFunctionCollisionResolver
             excludedMethods,
             capabilities,
             nativeDeclarationTimingSourcePaths: typed.NativeDeclarationTimingSourcePaths,
-            guardedExecutableEntryPath: typed.GuardedExecutableEntryPath);
+            guardedExecutableEntryPath: typed.GuardedExecutableEntryPath,
+            analyzedDocuments: sourceDocuments, analysisPlan: plan);
         var conditionalKeys = typed.Methods.Where(static method => method.ConditionalDeclarationOffset is not null && method.NativeFunctionBinding is not null)
             .Select(method => PowerShellHybridModuleComposer.GetCompiledMethodKey(
                 string.IsNullOrWhiteSpace(method.SourcePath) ? typed.SourcePath : method.SourcePath,

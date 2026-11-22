@@ -12,9 +12,11 @@ internal static class PowerShellTypedExecutableCompiler
         PowerShellCompilationPlan plan,
         string targetFramework,
         string semanticProfileId,
-        IEnumerable<PowerShellCompilationCommandProviderContract>? commandProviders = null)
+        IEnumerable<PowerShellCompilationCommandProviderContract>? commandProviders = null,
+        IReadOnlyList<ParsedSourceDocument>? sourceDocuments = null)
         => CompileCore(entryPointPath, sourcePaths, plan, targetFramework, semanticProfileId,
-            commandProviders, PowerShellCompilationCapabilities.TypedExecutable, parametersAlreadyBound: false);
+            commandProviders, PowerShellCompilationCapabilities.TypedExecutable, parametersAlreadyBound: false,
+            sourceDocuments: sourceDocuments);
 
     internal static PowerShellTypedExecutableCompilation CompileHybridPreboundEntry(
         string entryPointPath,
@@ -22,7 +24,8 @@ internal static class PowerShellTypedExecutableCompiler
         PowerShellCompilationPlan plan,
         string targetFramework,
         string semanticProfileId,
-        IEnumerable<PowerShellCompilationCommandProviderContract>? commandProviders = null)
+        IEnumerable<PowerShellCompilationCommandProviderContract>? commandProviders = null,
+        IReadOnlyList<ParsedSourceDocument>? sourceDocuments = null)
     {
         if (plan.Mode != PowerShellCompilationMode.Hybrid)
             throw new InvalidOperationException("A prebound executable entry requires a Hybrid compilation plan.");
@@ -38,7 +41,7 @@ internal static class PowerShellTypedExecutableCompiler
         var entryCapabilities = PowerShellCompilationCapabilities.HybridExecutable &
                                 ~PowerShellCompilationCapability.NativeFunctionBinding;
         return CompileCore(entryPointPath, sourcePaths, plan, targetFramework, semanticProfileId,
-            commandProviders, entryCapabilities, parametersAlreadyBound: true);
+            commandProviders, entryCapabilities, parametersAlreadyBound: true, sourceDocuments: sourceDocuments);
     }
 
     /// <summary>Compiles authored script lifecycle clauses for the native script invocation owner.</summary>
@@ -52,13 +55,14 @@ internal static class PowerShellTypedExecutableCompiler
         IEnumerable<string> sourcePaths,
         PowerShellCompilationPlan plan,
         string targetFramework,
-        string semanticProfileId)
+        string semanticProfileId,
+        IReadOnlyList<ParsedSourceDocument>? sourceDocuments = null)
     {
         if (plan.Mode != PowerShellCompilationMode.Hybrid)
             throw new InvalidOperationException("A native script entry requires a Hybrid compilation plan.");
         return CompileCore(entryPointPath, sourcePaths, plan, targetFramework,
             semanticProfileId, null, PowerShellCompilationCapabilities.HybridExecutable,
-            parametersAlreadyBound: false, nativeScriptEntry: true);
+            parametersAlreadyBound: false, nativeScriptEntry: true, sourceDocuments: sourceDocuments);
     }
 
     private static PowerShellTypedExecutableCompilation CompileCore(
@@ -70,17 +74,19 @@ internal static class PowerShellTypedExecutableCompiler
         IEnumerable<PowerShellCompilationCommandProviderContract>? commandProviders,
         PowerShellCompilationCapability capabilities,
         bool parametersAlreadyBound,
-        bool nativeScriptEntry = false)
+        bool nativeScriptEntry = false,
+        IReadOnlyList<ParsedSourceDocument>? sourceDocuments = null)
     {
         if (!plan.CanProceed) throw CreatePlanFailure(plan);
 
         var entryPoint = Path.GetFullPath(entryPointPath);
         var requestedSources = sourcePaths.Select(Path.GetFullPath)
             .Distinct(PowerShellCompilationPathSafety.PathComparer).ToArray();
-        ValidateSourceClosure(entryPoint, requestedSources, allowDerivedPaths: nativeScriptEntry);
-
         var identityRoot = Path.GetDirectoryName(entryPoint) ?? Directory.GetCurrentDirectory();
-        var parsed = requestedSources.Select(path => Parse(path, identityRoot))
+        var documents = sourceDocuments ?? requestedSources.Select(path =>
+            PowerShellSourceParser.ParseFile(path, identityRoot, semanticProfileId)).ToArray();
+        ValidateSourceClosure(entryPoint, requestedSources, documents, allowDerivedPaths: nativeScriptEntry);
+        var parsed = documents.Select(Parse)
             .ToDictionary(static source => source.Path, PowerShellCompilationPathSafety.PathComparer);
         if (!parsed.TryGetValue(entryPoint, out var entrySource))
             throw new InvalidOperationException("The typed executable entrypoint is not present in its compilation source closure.");
@@ -242,9 +248,11 @@ internal static class PowerShellTypedExecutableCompiler
             .ToArray();
     }
 
-    private static void ValidateSourceClosure(string entryPoint, string[] requestedSources, bool allowDerivedPaths = false)
+    private static void ValidateSourceClosure(string entryPoint, string[] requestedSources,
+        IReadOnlyList<ParsedSourceDocument> documents, bool allowDerivedPaths)
     {
-        var reachableSources = PowerShellHybridDependencyResolver.DiscoverDependencies(entryPoint, allowDerivedPaths: allowDerivedPaths);
+        var reachableSources = PowerShellHybridDependencyResolver.DiscoverDependencies(entryPoint, allowDerivedPaths: allowDerivedPaths,
+            sourceDocuments: documents.ToDictionary(static document => document.Path, PowerShellCompilationPathSafety.PathComparer));
         var injected = requestedSources.Except(reachableSources, PowerShellCompilationPathSafety.PathComparer).ToArray();
         var missing = reachableSources.Except(requestedSources, PowerShellCompilationPathSafety.PathComparer).ToArray();
         if (injected.Length == 0 && missing.Length == 0) return;
@@ -404,13 +412,11 @@ internal static class PowerShellTypedExecutableCompiler
         return description;
     }
 
-    private static ParsedSource Parse(string path, string identityRoot)
+    private static ParsedSource Parse(ParsedSourceDocument document)
     {
-        var fullPath = Path.GetFullPath(path);
-        var document = PowerShellSourceParser.ParseFile(fullPath, identityRoot);
         if (document.Errors.Length > 0)
-            throw new InvalidOperationException($"Typed executable source '{fullPath}' could not be parsed.");
-        return new ParsedSource(fullPath, document);
+            throw new InvalidOperationException($"Typed executable source '{document.Path}' could not be parsed.");
+        return new ParsedSource(document.Path, document);
     }
 
     private static IEnumerable<FunctionDefinitionAst> GetTopLevelFunctions(ParsedSource source)

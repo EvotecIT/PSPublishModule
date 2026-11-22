@@ -161,15 +161,18 @@ internal class PowerShellLoweredReturnStatement : PowerShellLoweredStatement
 
 internal sealed class PowerShellLoweredExpressionStatement : PowerShellLoweredStatement
 {
-    internal PowerShellLoweredExpressionStatement(SourceSpan span, PowerShellLoweredExpression expression, bool discardValue)
+    internal PowerShellLoweredExpressionStatement(SourceSpan span, PowerShellLoweredExpression expression, bool discardValue,
+        PowerShellLoweredExpression? attachedLifecycleRecord = null)
         : base(span)
     {
         Expression = expression;
         DiscardValue = discardValue;
+        AttachedLifecycleRecord = attachedLifecycleRecord;
     }
 
     internal PowerShellLoweredExpression Expression { get; }
     internal bool DiscardValue { get; }
+    internal PowerShellLoweredExpression? AttachedLifecycleRecord { get; }
 }
 
 internal sealed class PowerShellLoweredAssignmentStatement : PowerShellLoweredStatement
@@ -267,7 +270,8 @@ internal sealed class PowerShellLoweredFunction
         bool requiresPowerShellStopping = false,
         PowerShellNativeFunctionBinding? nativeFunctionBinding = null,
         string sourcePath = "", string sourceText = "", Type? successOutputType = null,
-        PowerShellOutputTypeDeclaration[]? outputTypeDeclarations = null)
+        PowerShellOutputTypeDeclaration[]? outputTypeDeclarations = null,
+        PowerShellLoweredStrictLifecycle? strictLifecycle = null)
     {
         Symbol = symbol;
         GeneratedName = generatedName;
@@ -300,6 +304,7 @@ internal sealed class PowerShellLoweredFunction
         SourcePath = sourcePath;
         SourceText = sourceText;
         SuccessOutputType = successOutputType;
+        StrictLifecycle = strictLifecycle;
     }
 
     internal PowerShellSymbolId Symbol { get; }
@@ -333,6 +338,7 @@ internal sealed class PowerShellLoweredFunction
     internal Type? CollectionElementType { get; }
     internal Type? SuccessOutputType { get; }
     internal PowerShellImmutableArray<PowerShellLoweredStatement> Statements { get; }
+    internal PowerShellLoweredStrictLifecycle? StrictLifecycle { get; }
     internal SourceSpan Span { get; }
 }
 

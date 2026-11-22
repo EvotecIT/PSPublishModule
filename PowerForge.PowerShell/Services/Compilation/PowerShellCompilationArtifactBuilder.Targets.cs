@@ -29,6 +29,10 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         };
     }
 
+    internal static string GetDefaultBuildSemanticProfileId(PowerShellCompilationMode mode, string? targetFramework)
+        => mode == PowerShellCompilationMode.Package ? PowerShellSourceParser.HostSemanticProfileId
+            : PowerShellCompilationTargetContractService.GetDefaultSemanticProfileId(targetFramework);
+
     internal static void ApplyExplicitTargetContract(PowerShellCompilationBuildSpec spec)
     {
         if (spec.TargetContract is not null)
@@ -55,7 +59,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
 
         spec.SemanticProfileId = PowerShellCompilationSemanticOracleCatalog.Get(
             string.IsNullOrWhiteSpace(spec.SemanticProfileId)
-                ? PowerShellCompilationTargetContractService.GetDefaultSemanticProfileId(spec.TargetFramework)
+                ? GetDefaultBuildSemanticProfileId(spec.Mode, spec.TargetFramework)
                 : spec.SemanticProfileId.Trim()).ProfileId;
     }
 

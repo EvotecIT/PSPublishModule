@@ -7,7 +7,8 @@ internal static class PowerShellHybridNativeEntryPlanner
 {
     internal static PowerShellTypedExecutableCompilation? TryPlan(string sourcePath,
         IReadOnlyCollection<string> sourcePaths, PowerShellCompilationPlan plan,
-        string targetFramework, string semanticProfileId)
+        string targetFramework, string semanticProfileId,
+        IReadOnlyList<ParsedSourceDocument>? sourceDocuments = null)
     {
         if (plan.Mode != PowerShellCompilationMode.Hybrid || sourcePaths.Count == 0 ||
             !targetFramework.Equals("net10.0", StringComparison.OrdinalIgnoreCase) ||
@@ -20,10 +21,13 @@ internal static class PowerShellHybridNativeEntryPlanner
         var root = plan.Files.FirstOrDefault(file => PowerShellCompilationPathSafety.PathEquals(file.FullPath, path))?
             .Units.SingleOrDefault(static unit => unit.Kind == PowerShellCompilationUnitKind.Script);
         if (root?.IsCompilable != true) return null;
-        var ast = Parser.ParseFile(path, out _, out var errors);
+        sourceDocuments ??= sourcePaths.Select(source => PowerShellSourceParser.ParseFile(
+            source, Path.GetDirectoryName(path), semanticProfileId)).ToArray();
+        var document = sourceDocuments.Single(source => PowerShellCompilationPathSafety.PathEquals(source.Path, path));
+        var ast = document.SyntaxRoot;
         // Caller-frame observations need their own launcher contract. This first route
         // owns the native script frame, not the wrapper's caller identity or input pipe.
-        if (errors.Length != 0 || ast.FindAll(static node => node is ParamBlockAst, true)
+        if (document.Errors.Length != 0 || ast.FindAll(static node => node is ParamBlockAst, true)
                 .OfType<ParamBlockAst>().Any(static block => block.FindAll(static node => node is CommandAst, true).Any()) ||
             ast.FindAll(static node => node is VariableExpressionAst variable &&
                 (variable.VariablePath.UserPath.Equals("MyInvocation", StringComparison.OrdinalIgnoreCase) ||
@@ -39,7 +43,7 @@ internal static class PowerShellHybridNativeEntryPlanner
             return null;
         try
         {
-            var compiled = PowerShellTypedExecutableCompiler.CompileHybridNativeEntry(path, sourcePaths, plan, targetFramework, semanticProfileId);
+            var compiled = PowerShellTypedExecutableCompiler.CompileHybridNativeEntry(path, sourcePaths, plan, targetFramework, semanticProfileId, sourceDocuments);
             var method = compiled.EntryPointMethod;
             // Native command regions retain live command lookup and pipeline state. Dependencies
             // are declaration-only and enter this frame through a guarded authored source load.

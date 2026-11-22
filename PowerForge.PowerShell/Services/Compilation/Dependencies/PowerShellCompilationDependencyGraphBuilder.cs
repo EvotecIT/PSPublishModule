@@ -14,6 +14,7 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
     private readonly PowerShellCompilationMode _mode;
     private readonly PowerShellCompilationArtifactKind _artifactKind;
     private readonly string? _nuGetPackageRoot;
+    private readonly PowerShellSourceSnapshot _snapshot;
     private readonly Dictionary<string, PowerShellCompilationDependencyNode> _nodes = new(StringComparer.Ordinal);
     private readonly List<PowerShellCompilationDependencyEdge> _edges = new();
     private readonly Dictionary<string, string> _pathNodes = new(PowerShellCompilationPathSafety.PathComparer);
@@ -22,8 +23,10 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
         string moduleRoot,
         PowerShellCompilationMode mode,
         PowerShellCompilationArtifactKind artifactKind,
-        string? nuGetPackageRoot)
+        string? nuGetPackageRoot,
+        PowerShellSourceSnapshot snapshot)
     {
+        _snapshot = snapshot;
         _moduleRoot = Path.GetFullPath(moduleRoot);
         _mode = mode;
         _artifactKind = artifactKind;
@@ -41,10 +44,12 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
         string? targetFramework = null,
         string? runtimeIdentifier = null,
         bool includeRuntimePack = false,
-        string? nuGetPackageRoot = null)
+        string? nuGetPackageRoot = null,
+        PowerShellSourceSnapshot? snapshot = null)
     {
         runtimeIdentifier = string.IsNullOrWhiteSpace(runtimeIdentifier) ? null : runtimeIdentifier;
-        var builder = new PowerShellCompilationDependencyGraphBuilder(moduleRoot, mode, artifactKind, nuGetPackageRoot);
+        var builder = new PowerShellCompilationDependencyGraphBuilder(moduleRoot, mode, artifactKind, nuGetPackageRoot,
+            snapshot ?? new PowerShellSourceSnapshot(moduleRoot, null));
         return builder.BuildCore(
             sourcePath,
             manifestPath,
@@ -64,6 +69,12 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
         string? runtimeIdentifier,
         bool includeRuntimePack)
     {
+        var sources = compilationSourceFiles.Where(static path => !string.IsNullOrWhiteSpace(path))
+            .Select(Path.GetFullPath).Distinct(PowerShellCompilationPathSafety.PathComparer)
+            .OrderBy(static path => path, PowerShellCompilationPathSafety.PathComparer).ToArray();
+        foreach (var source in sources)
+            if (File.Exists(source)) _snapshot.Get(source);
+
         var sourceNodeId = AddLocalNode(
             sourcePath,
             ClassifyLocalPath(sourcePath),
@@ -96,11 +107,7 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
             AddEdge(rootId, nodeId, MapEdgeKind(dependency.Discovery), dependency.RelativePath);
         }
 
-        foreach (var input in compilationSourceFiles
-                     .Where(static path => !string.IsNullOrWhiteSpace(path))
-                     .Select(Path.GetFullPath)
-                     .Distinct(PowerShellCompilationPathSafety.PathComparer)
-                     .OrderBy(static path => path, PowerShellCompilationPathSafety.PathComparer))
+        foreach (var input in sources)
         {
             var inputId = AddLocalNode(
                 input,
@@ -244,7 +251,7 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
         }
 
         var exists = File.Exists(path);
-        var sha = exists ? ComputeFileHash(path) : string.Empty;
+        var sha = exists ? _snapshot.GetCapturedSha256(path) ?? ComputeFileHash(path) : string.Empty;
         var relative = hostRelativeSource ?? Relative(path);
         var id = StableId("local", kind.ToString(), relative.ToUpperInvariant(), sha);
         var identity = new PowerShellCompilationDependencyIdentity

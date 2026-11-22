@@ -13,12 +13,14 @@ internal static class PowerShellConventionalModuleSourceDiscovery
         "Set-Variable", "New-Variable", "Remove-Variable", "Clear-Variable", "set", "sv", "nv", "rv", "clv"
     };
 
-    internal static PowerShellConventionalModuleSourceDiscoveryResult Analyze(string sourcePath, bool rejectChangingFileLists = false)
+    internal static PowerShellConventionalModuleSourceDiscoveryResult Analyze(string sourcePath, bool rejectChangingFileLists = false,
+        PowerShellSourceSnapshot? snapshot = null)
     {
         var rootPath = Path.GetFullPath(sourcePath);
         var sourceRoot = Path.GetDirectoryName(rootPath) ?? Directory.GetCurrentDirectory();
-        var ast = Parser.ParseFile(rootPath, out _, out var errors);
-        if (errors.Length > 0)
+        var document = snapshot?.Get(rootPath) ?? PowerShellSourceParser.ParseHostFile(rootPath);
+        var ast = document.SyntaxRoot;
+        if (document.Errors.Length > 0)
             throw new InvalidOperationException($"Conventional module source discovery could not parse '{rootPath}'.");
 
         var discovered = new HashSet<string>(PowerShellCompilationPathSafety.PathComparer);

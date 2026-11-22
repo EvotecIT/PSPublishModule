@@ -67,15 +67,16 @@ public sealed partial class PowerShellCompilationAnalyzer
     };
 
     private PowerShellCompilationFilePlan AnalyzeFile(
-        string file,
+        ParsedSourceDocument document,
         string basePath,
         string? targetFramework,
         PowerShellCompilationCapability capabilities,
         ISet<string>? localFunctionNames)
     {
-        Token[] tokens;
-        ParseError[] errors;
-        var ast = Parser.ParseFile(file, out tokens, out errors);
+        var file = document.Path;
+        var ast = document.SyntaxRoot;
+        var tokens = document.Tokens;
+        var errors = document.Errors;
         var relativePath = FrameworkCompatibility.GetRelativePath(basePath, file);
         if (errors.Length > 0)
         {
@@ -284,7 +285,8 @@ public sealed partial class PowerShellCompilationAnalyzer
                         candidate.Extent,
                         PowerShellCompilationFeatureIds.ScriptBlock));
                     break;
-                case AttributeAst attribute when IsSupportedMetadataAttribute(attribute, capabilities, targetFramework):
+                case AttributeAst attribute when PowerShellParameterSemanticValidator.IsSupportedMetadata(
+                    attribute, capabilities, targetFramework, _nativeDependencyTypes):
                     break;
                 case AttributeAst attribute:
                     diagnostics.Add(CreateDiagnostic(

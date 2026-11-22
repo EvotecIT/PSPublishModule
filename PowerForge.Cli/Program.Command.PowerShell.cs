@@ -125,7 +125,7 @@ internal static partial class Program
             var fullPaths = paths.Select(path => Path.GetFullPath(path.Trim().Trim('"'))).ToArray();
             var entryPoint = TryGetOptionValue(args, "--entry-point");
             var fullEntryPoint = string.IsNullOrWhiteSpace(entryPoint) ? null : Path.GetFullPath(entryPoint.Trim().Trim('"'));
-            var resolved = new PowerShellCompilationInputResolver().Resolve(
+            var resolved = new PowerShellCompilationInputResolver(semanticProfileId).Resolve(
                 fullPaths,
                 kindOverride,
                 modeOverride,

@@ -26,21 +26,41 @@ internal static partial class PowerShellPackagedScriptRewriter
             // or changing the selected pipeline's native evaluation semantics.
             if (guards.Any(guard => guard.StartOffset < extent.EndOffset && guard.EndOffset > extent.StartOffset))
                 throw new InvalidOperationException("Nested packaged path operands require an unsupported overlapping guard.");
-            var text = new StringBuilder(extent.Text);
-            foreach (var replacement in existing.Where(replacement => replacement.StartOffset >= extent.StartOffset &&
-                         replacement.EndOffset <= extent.EndOffset).OrderByDescending(static replacement => replacement.StartOffset))
-            {
-                text.Remove(replacement.StartOffset - extent.StartOffset, replacement.EndOffset - replacement.StartOffset);
-                text.Insert(replacement.StartOffset - extent.StartOffset, replacement.Text);
-            }
             if (existing.Any(replacement => replacement.StartOffset < extent.EndOffset && replacement.EndOffset > extent.StartOffset &&
                     (replacement.StartOffset < extent.StartOffset || replacement.EndOffset > extent.EndOffset)))
                 throw new InvalidOperationException("A packaged provider-path guard overlaps another script-semantics rewrite.");
+            var text = RenderGuardOperand(operand, existing);
             guards.Add(new SourceReplacement(extent.StartOffset, extent.EndOffset,
                 "([PowerForge.Generated.Runtime.PowerShellNativeFunctionFileSystemPathGuard]::Validate((" + text + "), $ExecutionContext.SessionState))"));
         }
         return existing.Where(replacement => !guards.Any(guard => replacement.StartOffset >= guard.StartOffset &&
                 replacement.EndOffset <= guard.EndOffset))
             .Concat(guards).OrderByDescending(static replacement => replacement.StartOffset).ToArray();
+    }
+
+    private static string RenderGuardOperand(CommandElementAst operand, SourceReplacement[] replacements)
+    {
+        // A bareword path interpolates in command-argument mode. A guard moves it into
+        // expression mode, where the slash would instead be parsed as division.
+        if (operand is ExpandableStringExpressionAst { StringConstantType: StringConstantType.BareWord } expandable &&
+            PowerShellCompilationSourcePathPlanner.TryReadScriptRootLiteral(expandable, out _))
+        {
+            var root = RewriteOperandText(expandable.NestedExpressions[0].Extent, replacements);
+            var suffix = expandable.Value.Substring(expandable.Value.IndexOfAny(new[] { '/', '\\' }));
+            return "\"$(" + root + ")\" + '" + CodeGeneration.EscapeSingleQuotedStringContent(suffix) + "'";
+        }
+        return RewriteOperandText(operand.Extent, replacements);
+    }
+
+    private static string RewriteOperandText(IScriptExtent extent, IEnumerable<SourceReplacement> replacements)
+    {
+        var text = new StringBuilder(extent.Text);
+        foreach (var replacement in replacements.Where(replacement => replacement.StartOffset >= extent.StartOffset &&
+                     replacement.EndOffset <= extent.EndOffset).OrderByDescending(static replacement => replacement.StartOffset))
+        {
+            text.Remove(replacement.StartOffset - extent.StartOffset, replacement.EndOffset - replacement.StartOffset);
+            text.Insert(replacement.StartOffset - extent.StartOffset, replacement.Text);
+        }
+        return text.ToString();
     }
 }

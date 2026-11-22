@@ -429,7 +429,8 @@ internal class PowerShellBoundReturnStatement : PowerShellBoundStatement
 internal sealed class PowerShellBoundExpressionStatement : PowerShellBoundStatement
 {
     internal PowerShellBoundExpressionStatement(SourceSpan span, PowerShellBoundExpression expression, bool emitsOutput,
-        bool requiresOutputContinuation = false, bool discardsSuccessOutput = false)
+        bool requiresOutputContinuation = false, bool discardsSuccessOutput = false,
+        bool collectsLifecycleOutput = false)
         : base(span,
             expression.Effects |
             (emitsOutput ? PowerShellSemanticEffect.SuccessOutput : PowerShellSemanticEffect.None) |
@@ -440,6 +441,7 @@ internal sealed class PowerShellBoundExpressionStatement : PowerShellBoundStatem
         EmitsOutput = emitsOutput;
         RequiresOutputContinuation = requiresOutputContinuation;
         DiscardsSuccessOutput = discardsSuccessOutput;
+        CollectsLifecycleOutput = collectsLifecycleOutput;
     }
 
     internal PowerShellBoundExpression Expression { get; }
@@ -448,6 +450,7 @@ internal sealed class PowerShellBoundExpressionStatement : PowerShellBoundStatem
     internal bool RequiresOutputContinuation { get; }
     /// <summary>The authored statement explicitly discards its operand's success output.</summary>
     internal bool DiscardsSuccessOutput { get; }
+    internal bool CollectsLifecycleOutput { get; }
 }
 
 internal sealed class PowerShellBoundAssignmentStatement : PowerShellBoundStatement
@@ -603,7 +606,8 @@ internal sealed class PowerShellBoundFunction
         PowerShellRequiredCapability capabilities,
         PowerShellExecutionDisposition disposition,
         PowerShellNativeFunctionBinding? nativeFunctionBinding = null,
-        PowerShellOutputTypeDeclaration[]? outputTypeDeclarations = null)
+        PowerShellOutputTypeDeclaration[]? outputTypeDeclarations = null,
+        PowerShellBoundStrictLifecycle? strictLifecycle = null)
     {
         Symbol = symbol;
         Parameters = parameters ?? Array.Empty<PowerShellBoundParameter>();
@@ -622,6 +626,7 @@ internal sealed class PowerShellBoundFunction
         Capabilities = capabilities;
         Disposition = disposition;
         NativeFunctionBinding = nativeFunctionBinding;
+        StrictLifecycle = strictLifecycle;
     }
 
     internal PowerShellSymbolId Symbol { get; }
@@ -642,6 +647,7 @@ internal sealed class PowerShellBoundFunction
     internal PowerShellExecutionDisposition Disposition { get; }
 
     internal PowerShellNativeFunctionBinding? NativeFunctionBinding { get; }
+    internal PowerShellBoundStrictLifecycle? StrictLifecycle { get; }
 
     internal PowerShellBoundFunction WithAnalysis(
         PowerShellTypeFact? returnType = null,
@@ -649,10 +655,10 @@ internal sealed class PowerShellBoundFunction
         PowerShellSemanticEffect? effects = null,
         PowerShellRequiredCapability? capabilities = null,
         PowerShellExecutionDisposition? disposition = null)
-        => new(Symbol, Parameters.ToArray(), Locals.ToArray(), Scope, Help, Aliases.ToArray(), CommandBinding, DeclaredOutputType, DeclaredOutputTypeName, Body, returnType ?? ReturnType, outputCardinality ?? OutputCardinality, effects ?? Effects, capabilities ?? Capabilities, disposition ?? Disposition, NativeFunctionBinding, OutputTypeDeclarations);
+        => new(Symbol, Parameters.ToArray(), Locals.ToArray(), Scope, Help, Aliases.ToArray(), CommandBinding, DeclaredOutputType, DeclaredOutputTypeName, Body, returnType ?? ReturnType, outputCardinality ?? OutputCardinality, effects ?? Effects, capabilities ?? Capabilities, disposition ?? Disposition, NativeFunctionBinding, OutputTypeDeclarations, StrictLifecycle);
 
     internal PowerShellBoundFunction WithBody(PowerShellBoundBlock body)
-        => new(Symbol, Parameters.ToArray(), Locals.ToArray(), Scope, Help, Aliases.ToArray(), CommandBinding, DeclaredOutputType, DeclaredOutputTypeName, body, ReturnType, OutputCardinality, body.Effects, body.Capabilities, Disposition, NativeFunctionBinding, OutputTypeDeclarations);
+        => new(Symbol, Parameters.ToArray(), Locals.ToArray(), Scope, Help, Aliases.ToArray(), CommandBinding, DeclaredOutputType, DeclaredOutputTypeName, body, ReturnType, OutputCardinality, body.Effects, body.Capabilities, Disposition, NativeFunctionBinding, OutputTypeDeclarations, StrictLifecycle);
 }
 
 internal sealed class PowerShellBoundSourceDocument

@@ -27,8 +27,9 @@ public sealed partial class PowerShellCompilationDependencyPlanner
             if (!PowerShellCompilationPathSafety.PathEquals(path, sourcePath))
                 PowerShellCompilationPathSafety.EnsureContained(sourceRoot, path, $"Additional compilation source '{path}' escapes the root module directory.");
         }
-        var dependencies = Analyze(spec, sourceFiles);
-        return AnalyzeGraph(spec, sourceFiles, dependencies);
+        var snapshot = new PowerShellSourceSnapshot(sourceRoot, spec.SemanticProfileId);
+        var dependencies = Analyze(spec, sourceFiles, snapshot);
+        return AnalyzeGraph(spec, sourceFiles, dependencies, snapshot);
     }
 
     /// <summary>Plans dependencies for a source graph selected by the shared input resolver.</summary>
@@ -48,7 +49,8 @@ public sealed partial class PowerShellCompilationDependencyPlanner
         IEnumerable<string>? includeResource,
         IEnumerable<string>? excludeResource,
         string? outputDirectory,
-        IEnumerable<string>? generatedOutputDirectories)
+        IEnumerable<string>? generatedOutputDirectories,
+        PowerShellSourceSnapshot? snapshot = null)
     {
         if (input is null) throw new ArgumentNullException(nameof(input));
         var effectiveMode = mode ?? input.Mode;
@@ -64,7 +66,8 @@ public sealed partial class PowerShellCompilationDependencyPlanner
             includeResource,
             excludeResource,
             outputDirectory,
-            generatedOutputDirectories);
+            generatedOutputDirectories,
+            snapshot ?? input.SourceSnapshot);
     }
 
     /// <summary>Builds the locked graph used by semantic analysis, artifact planning, and deployment evidence.</summary>
@@ -90,23 +93,26 @@ public sealed partial class PowerShellCompilationDependencyPlanner
             input.CompilationSourceFiles,
             dependencies,
             targetFramework,
-            runtimeIdentifier);
+            runtimeIdentifier,
+            snapshot: input.SourceSnapshot);
     }
 
     internal static PowerShellCompilationDependency[] Analyze(
         PowerShellCompilationBuildSpec spec,
-        IEnumerable<string> sourceFiles)
+        IEnumerable<string> sourceFiles,
+        PowerShellSourceSnapshot? snapshot = null)
     {
         if (spec is null) throw new ArgumentNullException(nameof(spec));
         var manifestPath = spec.Kind == PowerShellCompilationArtifactKind.BinaryModule
             ? PowerShellCompiledModuleManifest.ResolveSourceManifest(spec.SourcePath, spec.ModuleManifestPath) : spec.ModuleManifestPath;
         if (!File.Exists(manifestPath)) manifestPath = null;
         var moduleRoot = Path.GetDirectoryName(Path.GetFullPath(manifestPath ?? spec.SourcePath)) ?? Directory.GetCurrentDirectory();
+        snapshot ??= new PowerShellSourceSnapshot(moduleRoot, spec.SemanticProfileId);
         var compilationPaths = sourceFiles.ToArray();
         var runtimePaths = spec.RuntimeSourcePaths is { Length: > 0 } ? spec.RuntimeSourcePaths : compilationPaths;
         if (spec.Kind == PowerShellCompilationArtifactKind.BinaryModule && spec.Mode == PowerShellCompilationMode.Hybrid)
         {
-            var alternatives = PowerShellHybridDependencyResolver.DiscoverRetainedModuleAlternatives(spec.SourcePath, compilationPaths);
+            var alternatives = PowerShellHybridDependencyResolver.DiscoverRetainedModuleAlternatives(spec.SourcePath, compilationPaths, snapshot);
             runtimePaths = runtimePaths.Concat(alternatives).Distinct(PowerShellCompilationPathSafety.PathComparer).ToArray();
         }
         return AnalyzeCore(
@@ -121,13 +127,15 @@ public sealed partial class PowerShellCompilationDependencyPlanner
             spec.IncludeResource,
             spec.ExcludeResource,
             spec.OutputDirectory,
-            spec.GeneratedOutputDirectories);
+            spec.GeneratedOutputDirectories,
+            snapshot);
     }
 
     internal static PowerShellCompilationDependencyGraph AnalyzeGraph(
         PowerShellCompilationBuildSpec spec,
         IEnumerable<string> sourceFiles,
-        IReadOnlyCollection<PowerShellCompilationDependency> dependencies)
+        IReadOnlyCollection<PowerShellCompilationDependency> dependencies,
+        PowerShellSourceSnapshot? snapshot = null)
     {
         if (spec is null) throw new ArgumentNullException(nameof(spec));
         var manifestPath = spec.Kind == PowerShellCompilationArtifactKind.BinaryModule
@@ -147,7 +155,8 @@ public sealed partial class PowerShellCompilationDependencyPlanner
             spec.RuntimeIdentifier,
             includeRuntimePack: spec.Kind == PowerShellCompilationArtifactKind.Executable &&
                                 (spec.SelfContained || spec.Optimization != PowerShellCompilationExecutableOptimization.None),
-            nuGetPackageRoot: spec.NuGetPackageRoot);
+            nuGetPackageRoot: spec.NuGetPackageRoot,
+            snapshot: snapshot ?? new PowerShellSourceSnapshot(moduleRoot, spec.SemanticProfileId));
     }
     private static PowerShellCompilationDependency[] AnalyzeCore(
         string sourcePath,
@@ -161,7 +170,8 @@ public sealed partial class PowerShellCompilationDependencyPlanner
         IEnumerable<string>? includeResource,
         IEnumerable<string>? excludeResource,
         string? outputDirectory,
-        IEnumerable<string>? generatedOutputDirectories)
+        IEnumerable<string>? generatedOutputDirectories,
+        PowerShellSourceSnapshot snapshot)
     {
         if (!Enum.IsDefined(typeof(PowerShellCompilationResourceMode), resourceMode))
             throw new ArgumentOutOfRangeException(nameof(resourceMode));
@@ -237,7 +247,8 @@ public sealed partial class PowerShellCompilationDependencyPlanner
             generatedOutputDirectories,
             compilationGraph,
             results,
-            localPaths);
+            localPaths,
+            snapshot);
         return results
             .OrderBy(static dependency => dependency.RelativePath, StringComparer.OrdinalIgnoreCase)
             .ThenBy(static dependency => dependency.Discovery)

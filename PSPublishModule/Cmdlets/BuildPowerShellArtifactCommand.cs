@@ -149,7 +149,9 @@ public sealed class BuildPowerShellArtifactCommand : AsyncPSCmdlet
     /// <inheritdoc />
     protected override async Task ProcessRecordAsync()
     {
-        var requestedPaths = Path.Select(path => SessionState.Path.GetUnresolvedProviderPathFromPSPath(path)).ToArray();
+        var requestedPaths = Path.Select(path => SessionState.Path.GetUnresolvedProviderPathFromPSPath(path))
+            .Distinct(PowerShellCompilationPathSafety.PathComparer)
+            .ToArray();
         var entryPointPath = string.IsNullOrWhiteSpace(EntryPoint)
             ? null
             : SessionState.Path.GetUnresolvedProviderPathFromPSPath(EntryPoint);
@@ -163,9 +165,19 @@ public sealed class BuildPowerShellArtifactCommand : AsyncPSCmdlet
             return;
         }
         PowerShellCompilationResolvedInput resolved;
+        string profileId;
+        PowerShellCompilationTargetContract? target;
         try
         {
-            resolved = new PowerShellCompilationInputResolver().Resolve(requestedPaths, Kind, Mode, entryPointPath);
+            target = TargetContract is null ? null : PowerShellCompilationTargetContractService.Normalize(TargetContract.Copy());
+            var kind = Kind ?? target?.ArtifactKind ?? (entryPointPath is not null ? PowerShellCompilationArtifactKind.Executable
+                : requestedPaths.Length > 1 ? PowerShellCompilationArtifactKind.Library
+                : PowerShellCompilationInputResolver.InferDefaultArtifactKind(requestedPaths[0]));
+            var mode = Mode ?? target?.Mode ?? PowerShellCompilationBuildSpec.GetDefaultMode(kind);
+            profileId = target?.SemanticProfileId ??
+                PowerShellCompilationArtifactBuilder.GetDefaultBuildSemanticProfileId(mode, TargetFramework);
+            resolved = new PowerShellCompilationInputResolver(profileId).Resolve(requestedPaths, Kind ?? target?.ArtifactKind,
+                Mode ?? target?.Mode, entryPointPath);
         }
         catch (Exception ex)
         {
@@ -188,11 +200,12 @@ public sealed class BuildPowerShellArtifactCommand : AsyncPSCmdlet
             IncludeResource = IncludeResource,
             ExcludeResource = ExcludeResource,
             TargetFramework = TargetFramework,
+            SemanticProfileId = profileId,
             RuntimeIdentifier = RuntimeIdentifier,
             SelfContained = SelfContained.IsPresent,
             SingleFile = SingleFile,
             Optimization = Optimization,
-            TargetContract = TargetContract,
+            TargetContract = target,
             UseBuildCache = UseBuildCache,
             BuildCacheDirectory = BuildCacheDirectory,
             SignArtifact = SignArtifact.IsPresent,

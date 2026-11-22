@@ -84,9 +84,24 @@ public sealed partial class PowerShellTypedCompilationTranspiler
         ISet<string> excludedMethods,
         PowerShellCompilationCapability capabilities = PowerShellCompilationCapability.None,
         IReadOnlyCollection<string>? nativeDeclarationTimingSourcePaths = null,
-        string? guardedExecutableEntryPath = null)
+        string? guardedExecutableEntryPath = null,
+        IReadOnlyList<ParsedSourceDocument>? analyzedDocuments = null,
+        PowerShellCompilationPlan? analysisPlan = null)
         => TranspileCore(sourcePaths, namespaceName, typeName, targetFramework, excludedMethods, capabilities, _commandRegistry, _semanticProfileId,
-            _nativeDependencyTypes, guardedExecutableEntryPath, nativeDeclarationTimingSourcePaths);
+            _nativeDependencyTypes, guardedExecutableEntryPath, nativeDeclarationTimingSourcePaths, analyzedDocuments: analyzedDocuments, analysisPlan: analysisPlan);
+
+    internal PowerShellTypedCompilationResult TranspileAnalyzed(
+        IReadOnlyList<ParsedSourceDocument> documents,
+        PowerShellCompilationPlan plan,
+        string namespaceName,
+        string typeName,
+        string? targetFramework,
+        PowerShellCompilationCapability capabilities,
+        string? guardedExecutableEntryPath = null,
+        bool nativeScriptEntry = false)
+        => TranspileCore(documents.Select(static document => document.Path), namespaceName, typeName, targetFramework,
+            excludedMethods: null, capabilities, _commandRegistry, _semanticProfileId, _nativeDependencyTypes,
+            guardedExecutableEntryPath, nativeScriptEntry: nativeScriptEntry, analyzedDocuments: documents, analysisPlan: plan);
 
     private static PowerShellTypedCompilationResult TranspileCore(
         IEnumerable<string> sourcePaths,
@@ -100,7 +115,9 @@ public sealed partial class PowerShellTypedCompilationTranspiler
         PowerShellNativeDependencyTypes? nativeDependencyTypes = null,
         string? guardedExecutableEntryPath = null,
         IReadOnlyCollection<string>? nativeDeclarationTimingSourcePaths = null,
-        bool nativeScriptEntry = false)
+        bool nativeScriptEntry = false,
+        IReadOnlyList<ParsedSourceDocument>? analyzedDocuments = null,
+        PowerShellCompilationPlan? analysisPlan = null)
     {
         if (sourcePaths is null)
             throw new ArgumentNullException(nameof(sourcePaths));
@@ -120,25 +137,23 @@ public sealed partial class PowerShellTypedCompilationTranspiler
         var diagnostics = new List<PowerShellCompilationDiagnostic>();
         var parsedFiles = new List<ParsedSource>();
         var basePath = Path.GetDirectoryName(fullPaths[0]) ?? Directory.GetCurrentDirectory();
-        var combinedPlan = new PowerShellCompilationAnalyzer(commandRegistry, semanticProfileId,
-            nativeDependencyTypes ?? PowerShellNativeDependencyTypes.Empty).AnalyzeFiles(
+        var documents = analyzedDocuments ?? fullPaths.Select(path => PowerShellSourceParser.ParseFile(path, basePath, semanticProfileId)).ToArray();
+        var combinedPlan = analysisPlan ?? new PowerShellCompilationAnalyzer(commandRegistry, semanticProfileId,
+            nativeDependencyTypes ?? PowerShellNativeDependencyTypes.Empty).AnalyzeDocuments(
             PowerShellCompilationMode.Analyze,
-            fullPaths,
+            documents,
             basePath,
             targetFramework,
             capabilities);
-        foreach (var fullPath in fullPaths)
+        foreach (var document in documents)
         {
             var filePlan = combinedPlan.Files.Single(file =>
-                PowerShellCompilationPathSafety.PathEquals(file.FullPath, fullPath));
+                PowerShellCompilationPathSafety.PathEquals(file.FullPath, document.Path));
             diagnostics.AddRange(filePlan.Diagnostics);
             diagnostics.AddRange(filePlan.Units.SelectMany(static unit => unit.Diagnostics));
 
-            Token[] tokens;
-            ParseError[] parseErrors;
-            var ast = Parser.ParseFile(fullPath, out tokens, out parseErrors);
-            if (parseErrors.Length == 0)
-                parsedFiles.Add(new ParsedSource(fullPath, ast, filePlan, PowerShellSourceParser.ParseFile(fullPath, basePath)));
+            if (document.Errors.Length == 0)
+                parsedFiles.Add(new ParsedSource(document.Path, document.SyntaxRoot, filePlan, document));
         }
         if (parsedFiles.Count != fullPaths.Length)
             return CreateResult(fullPaths, namespaceName, typeName, Array.Empty<PowerShellCompiledMethod>(), Array.Empty<string>(), diagnostics, parsedFiles, targetFramework, semanticProfileId);

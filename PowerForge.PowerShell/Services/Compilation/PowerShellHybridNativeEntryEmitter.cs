@@ -10,14 +10,14 @@ internal static class PowerShellHybridNativeEntryEmitter
     private const string TypeName = "CompiledNativeScriptEntry";
     internal const string DeclaringTypeName = NamespaceName + "." + TypeName;
 
-    internal static string GenerateSource(PowerShellTypedExecutableCompilation compiled, string sourcePath)
+    internal static string GenerateSource(PowerShellTypedExecutableCompilation compiled, ParsedSourceDocument document)
     {
         var method = compiled.EntryPointMethod;
         if (method.NativeFunctionBinding is null)
             throw new InvalidOperationException("Native entry emission requires native script binding.");
         string sourceHash;
         using (var sha = SHA256.Create())
-            sourceHash = BitConverter.ToString(sha.ComputeHash(Encoding.UTF8.GetBytes(File.ReadAllText(sourcePath))))
+            sourceHash = BitConverter.ToString(sha.ComputeHash(Encoding.UTF8.GetBytes(document.Text)))
                 .Replace("-", string.Empty).ToLowerInvariant();
         var builder = new StringBuilder("#nullable enable\nnamespace " + NamespaceName + ";\npublic static class " + TypeName + "\n{\n")
             .AppendLine(string.Join(Environment.NewLine, PowerShellCSharpSourceDocumentPool.Declarations(new[] { method })))

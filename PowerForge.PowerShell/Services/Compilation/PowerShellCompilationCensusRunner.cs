@@ -131,7 +131,7 @@ public sealed partial class PowerShellCompilationCensusRunner
         PowerShellCompilationRegionOpportunity[] regionOpportunities = Array.Empty<PowerShellCompilationRegionOpportunity>();
         if (recurse)
         {
-            var resolved = new PowerShellCompilationInputResolver().Resolve(
+            var resolved = new PowerShellCompilationInputResolver(profile).Resolve(
                 path,
                 kind: requestedKind,
                 mode: mode,
@@ -170,7 +170,8 @@ public sealed partial class PowerShellCompilationCensusRunner
                 resolved.Kind,
                 emitted,
                 resolved.SourcePath,
-                emittedMethods: PowerShellCompilationExplainShaper.GetEmittedMethods(emitted, entry));
+                emittedMethods: PowerShellCompilationExplainShaper.GetEmittedMethods(emitted, entry),
+                snapshot: resolved.SourceSnapshot);
             sourceFiles = resolved.SourceFiles.Length;
             sourceFingerprint = ComputeSourceFingerprint(resolved.SourceFiles, path);
             coverage = BuildCoverageBreakdown(dispositionLedger);

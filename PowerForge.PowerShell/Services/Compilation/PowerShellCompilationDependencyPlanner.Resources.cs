@@ -29,7 +29,8 @@ public sealed partial class PowerShellCompilationDependencyPlanner
         IEnumerable<string>? generatedOutputDirectories,
         IEnumerable<string> compilationGraph,
         ICollection<PowerShellCompilationDependency> results,
-        ISet<string> localPaths)
+        ISet<string> localPaths,
+        PowerShellSourceSnapshot snapshot)
     {
         var includePatterns = NormalizePatterns(includeResource, nameof(includeResource));
         var excludePatterns = NormalizePatterns(excludeResource, nameof(excludeResource));
@@ -99,7 +100,7 @@ public sealed partial class PowerShellCompilationDependencyPlanner
 
         var inferredPaths = resourceMode == PowerShellCompilationResourceMode.None
             ? new HashSet<string>(PowerShellCompilationPathSafety.PathComparer)
-            : DiscoverLiteralResources(compilationGraph, moduleRoot).ToHashSet(PowerShellCompilationPathSafety.PathComparer);
+            : DiscoverLiteralResources(compilationGraph, moduleRoot, snapshot).ToHashSet(PowerShellCompilationPathSafety.PathComparer);
         foreach (var inferred in inferredPaths)
         {
             if (inventory.All(candidate => !PowerShellCompilationPathSafety.PathEquals(candidate.FullPath, inferred)))

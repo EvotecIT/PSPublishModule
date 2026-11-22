@@ -10,6 +10,12 @@ internal sealed class PowerShellModuleCompilationIntegrator
 {
     private const int CheckpointSchemaVersion = 4;
 
+    internal static PowerShellCompilationResolvedInput ResolveInput(string path, PowerShellModuleCompilationConfiguration configuration)
+        => new PowerShellCompilationInputResolver(PowerShellCompilationTargetContractService.GetDefaultSemanticProfileId(configuration.TargetFramework))
+            .Resolve(path, PowerShellCompilationArtifactKind.BinaryModule, configuration.Mode,
+                allowDynamicModuleRuntimeSources: configuration.ResourceMode == PowerShellCompilationResourceMode.CompleteModule &&
+                                                  configuration.Mode != PowerShellCompilationMode.Strict);
+
     public (ModuleBuildResult BuildResult, PowerShellModuleCompilationResult CompilationResult) Compile(
         ModuleBuildResult buildResult,
         PowerShellModuleCompilationConfiguration configuration,
@@ -32,12 +38,7 @@ internal sealed class PowerShellModuleCompilationIntegrator
 
         try
         {
-            var resolved = new PowerShellCompilationInputResolver().Resolve(
-                stagingPath,
-                PowerShellCompilationArtifactKind.BinaryModule,
-                configuration.Mode,
-                allowDynamicModuleRuntimeSources: configuration.ResourceMode == PowerShellCompilationResourceMode.CompleteModule &&
-                                                  configuration.Mode != PowerShellCompilationMode.Strict);
+            var resolved = ResolveInput(stagingPath, configuration);
             var compilationSpec = new PowerShellCompilationBuildSpec(
                 resolved.SourcePath,
                 outputRoot,

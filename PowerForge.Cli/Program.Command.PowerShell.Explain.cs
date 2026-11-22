@@ -169,7 +169,7 @@ internal static partial class Program
 
     private static PowerShellCompilationPlan CreatePowerShellAnalysisPlan(string[] args, PowerShellAnalysisRequest request)
     {
-        var resolved = new PowerShellCompilationInputResolver().Resolve(
+        var resolved = new PowerShellCompilationInputResolver(request.SemanticProfileId).Resolve(
             request.Path,
             request.Kind,
             request.Mode == PowerShellCompilationMode.Analyze ? null : request.Mode,
@@ -189,7 +189,7 @@ internal static partial class Program
     private static PowerShellCompilationExplanation CreatePowerShellExplanation(string[] args, PowerShellAnalysisRequest request)
     {
         var targetFramework = request.TargetContract?.TargetFramework ?? TryGetOptionValue(args, "--framework") ?? PowerShellCompilationTargetFrameworkPolicy.Default;
-        var resolved = new PowerShellCompilationInputResolver().Resolve(
+        var resolved = new PowerShellCompilationInputResolver(request.SemanticProfileId).Resolve(
             request.Path,
             request.Kind,
             request.Mode == PowerShellCompilationMode.Analyze ? null : request.Mode,

@@ -62,7 +62,9 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         ValidateSpec(spec);
         var runtimeIdentifier = ResolveRuntimeIdentifier(spec);
         if (!string.IsNullOrWhiteSpace(runtimeIdentifier)) spec.RuntimeIdentifier = runtimeIdentifier;
-        PowerShellCompilationOutputPolicy.EnsureDoesNotOverlapRecursiveLoaderRoot(spec.SourcePath, spec.OutputDirectory);
+        var sourceRoot = Path.GetDirectoryName(Path.GetFullPath(spec.SourcePath)) ?? Directory.GetCurrentDirectory();
+        var snapshot = new PowerShellSourceSnapshot(sourceRoot, spec.SemanticProfileId);
+        PowerShellCompilationOutputPolicy.EnsureDoesNotOverlapRecursiveLoaderRoot(spec.SourcePath, spec.OutputDirectory, snapshot);
 
         Directory.CreateDirectory(spec.OutputDirectory);
         PowerShellCompilationPathSafety.EnsureNoLinksFromFileSystemRoot(
@@ -107,8 +109,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 .ThenBy(static provider => provider.CommandName, StringComparer.Ordinal)
                 .ToArray();
             ValidateProviderTargetCompatibility(spec, commandProviderInputs);
-            var dependencyPlan = PowerShellCompilationDependencyPlanner.Analyze(spec, compilationSourcePaths);
-            var dependencyGraph = PowerShellCompilationDependencyPlanner.AnalyzeGraph(spec, compilationSourcePaths, dependencyPlan);
+            var dependencyPlan = PowerShellCompilationDependencyPlanner.Analyze(spec, compilationSourcePaths, snapshot);
+            var dependencyGraph = PowerShellCompilationDependencyPlanner.AnalyzeGraph(spec, compilationSourcePaths, dependencyPlan, snapshot);
             var generatedAssemblyName = ResolveGeneratedAssemblyName(spec, artifactName, dependencyGraph);
             ValidateExpectedDependencyLock(spec, dependencyGraph, approvedDependencyHash);
             var inputHashes = CreateLockedDependencyFileHashes(spec, dependencyGraph);
@@ -141,9 +143,10 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             var capabilities = PowerShellCompilationBuildSpec.GetCapabilities(spec.Kind, spec.Mode);
             var nativeManifestPath = spec.Kind == PowerShellCompilationArtifactKind.BinaryModule
                 ? PowerShellCompiledModuleManifest.ResolveSourceManifest(spec.SourcePath, spec.ModuleManifestPath) : spec.ModuleManifestPath;
-            var nativeDependencyTypes = PowerShellNativeDependencyTypes.Create(nativeManifestPath, dependencyPlan, dependencyGraph);
-            var plan = AnalyzeCompilationSources(compilationSourcePaths, spec.Mode, spec.TargetFramework, spec.SemanticProfileId, capabilities,
-                commandProviderInputs, nativeDependencyTypes, cancellationToken);
+            var nativeDependencyTypes = PowerShellNativeDependencyTypes.Create(nativeManifestPath, dependencyPlan, dependencyGraph, snapshot: snapshot);
+            var sourceDocuments = compilationSourcePaths.Select(snapshot.Get).ToArray();
+            var analyzer = new PowerShellCompilationAnalyzer(PowerShellCommandSemanticRegistry.Create(commandProviderInputs), spec.SemanticProfileId, nativeDependencyTypes);
+            var plan = analyzer.AnalyzeDocuments(spec.Mode, sourceDocuments, sourceRoot, spec.TargetFramework, capabilities, cancellationToken);
             // Artifact shaping must use the same resolved target as explain, locks
             // and publication. Source-only analysis intentionally has no delivery target.
             plan = new PowerShellCompilationPlan(plan.Mode, plan.Files, plan.TargetFramework,
@@ -178,7 +181,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                     plan,
                     spec.TargetFramework,
                     spec.SemanticProfileId,
-                    commandProviderInputs);
+                    commandProviderInputs,
+                    sourceDocuments);
                 WriteCompiledPowerShellSource(Path.Combine(workspace, "CompiledPowerShellScript.cs"), executable.CompiledSource,
                     spec.SourcePath, compilationSourcePaths, includeSyntheticEntry: true);
                 File.WriteAllText(Path.Combine(workspace, "Program.cs"), executable.ProgramSource, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
@@ -215,7 +219,9 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                     dependencyPlan,
                     inputHashes,
                     commandProviderInputs,
-                    providerProjectReferences);
+                    providerProjectReferences,
+                    sourceDocuments,
+                    snapshot);
                 typed = hybrid.Typed;
                 projectPath = hybrid.ProjectPath;
                 requiresPowerShellRuntime = true;
@@ -231,22 +237,13 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 if (spec.Mode == PowerShellCompilationMode.Package)
                     throw new InvalidOperationException("DLL artifacts require Hybrid or Strict mode because they contain genuinely typed methods.");
                 var transpiler = new PowerShellTypedCompilationTranspiler(commandProviderInputs, spec.SemanticProfileId, nativeDependencyTypes);
-                typed = spec.Kind == PowerShellCompilationArtifactKind.BinaryModule
-                    ? transpiler.TranspileForBinaryModule(
-                        compilationSourcePaths,
-                        "PowerForge.Compiled",
-                        PowerShellCSharpSymbolRenderer.Identifier(artifactName) + "Methods",
-                        spec.TargetFramework,
-                        capabilities)
-                    : transpiler.Transpile(
-                        compilationSourcePaths,
-                        "PowerForge.Compiled",
-                        PowerShellCSharpSymbolRenderer.Identifier(artifactName) + "Methods",
-                        spec.TargetFramework);
+                typed = transpiler.TranspileAnalyzed(
+                    sourceDocuments, plan, "PowerForge.Compiled",
+                    PowerShellCSharpSymbolRenderer.Identifier(artifactName) + "Methods", spec.TargetFramework, capabilities);
                 string[]? exportedFunctions = null;
                 if (spec.Kind == PowerShellCompilationArtifactKind.BinaryModule)
                 {
-                    var exportContract = PowerShellModuleExportContract.TryRead(spec.SourcePath);
+                    var exportContract = PowerShellModuleExportContract.TryRead(snapshot.Get(spec.SourcePath).SyntaxRoot);
                     if (spec.Mode == PowerShellCompilationMode.Strict && exportContract?.HasRuntimeControlledExports == true)
                     {
                         throw new InvalidOperationException(
@@ -254,18 +251,19 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                     }
                     if (spec.Mode == PowerShellCompilationMode.Hybrid)
                     {
-                        typed = PowerShellHybridFunctionCollisionResolver.RouteNameCollisionsToFallback(typed, spec.TargetFramework, spec.SemanticProfileId, capabilities, nativeDependencyTypes);
-                        typed = PowerShellAdvancedFunctionLifecyclePlanner.AddHostedLifecycleMethods(typed, spec.TargetFramework);
+                        typed = PowerShellHybridFunctionCollisionResolver.RouteNameCollisionsToFallback(typed, spec.TargetFramework, spec.SemanticProfileId, capabilities, nativeDependencyTypes, sourceDocuments, plan, commandProviderInputs);
+                        typed = PowerShellAdvancedFunctionLifecyclePlanner.AddHostedLifecycleMethods(typed, spec.TargetFramework, sourceDocuments);
                     }
                     exportedFunctions = exportContract?.SelectFunctions(typed.Methods.Select(static method => method.SourceName));
-                    typed = PowerShellBinaryCmdletSourceGenerator.PrepareForBinaryModule(typed, exportedFunctions, spec.TargetFramework, spec.SemanticProfileId, capabilities);
+                    typed = PowerShellBinaryCmdletSourceGenerator.PrepareForBinaryModule(typed, exportedFunctions, spec.TargetFramework,
+                        spec.SemanticProfileId, capabilities, sourceDocuments, plan, transpiler);
                 }
                 if (typed.Methods.Length == 0 &&
                     !(spec.Kind == PowerShellCompilationArtifactKind.BinaryModule && spec.Mode == PowerShellCompilationMode.Hybrid))
                 {
                     if (spec.Kind == PowerShellCompilationArtifactKind.BinaryModule &&
                         spec.Mode == PowerShellCompilationMode.Strict &&
-                        PowerShellAdvancedFunctionLifecyclePlanner.HasNamedLifecycle(compilationSourcePaths))
+                        PowerShellAdvancedFunctionLifecyclePlanner.HasNamedLifecycle(sourceDocuments))
                     {
                         throw new InvalidOperationException(
                             "Strict binary-module compilation rejects hosted advanced-function begin/process/end/clean lifecycle blocks; use Hybrid mode until these blocks have a runtime-free typed lifecycle owner.");
@@ -321,10 +319,10 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             }
             else
             {
-                var packagedSources = PreparePackagedSources(workspace, spec.SourcePath, compilationSourcePaths, dependencyPlan, inputHashes);
-                var parameterInitializers = PowerShellPackagedParameterBindingPolicy.Generate(spec.SourcePath, spec.TargetFramework);
-                var sourceMapping = new PowerShellPackagedSourceMapping(spec.SourcePath);
-                var packagedScript = GeneratePackagedScript(spec.SourcePath, packagedSources, sourceMapping: sourceMapping);
+                var packagedSources = PreparePackagedSources(workspace, spec.SourcePath, compilationSourcePaths, dependencyPlan, inputHashes, snapshot);
+                var parameterInitializers = PowerShellPackagedParameterBindingPolicy.Generate(spec.SourcePath, spec.TargetFramework, document: snapshot.Get(spec.SourcePath));
+                var sourceMapping = new PowerShellPackagedSourceMapping(snapshot.Get(spec.SourcePath));
+                var packagedScript = GeneratePackagedScript(spec.SourcePath, packagedSources, snapshot.Get(spec.SourcePath), sourceMapping: sourceMapping);
                 sourceMapping.Write(workspace);
                 var packagedScriptPath = Path.Combine(workspace, "Source.ps1");
                 File.WriteAllText(
@@ -369,7 +367,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 typed,
                 spec.SourcePath,
                 runtimeManifestHooks.Select(static hook => "Manifest runtime script hook: " + hook),
-                compiledMethodDetails);
+                compiledMethodDetails,
+                snapshot);
             usesPowerShellRuntimeFallback = unitDispositionLedger.UsesPowerShellRuntimeFallback;
             failureMap = PowerShellCompilationDiagnosticsEvidenceBuilder.CreateFailureMap(
                 plan,
@@ -468,7 +467,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             try
             {
                 var stagedArtifact = CopyArtifact(spec, artifactName, generatedAssemblyName, publishDirectory,
-                    typed, usesPowerShellRuntimeFallback, artifactStagingDirectory, inputHashes);
+                    typed, usesPowerShellRuntimeFallback, artifactStagingDirectory, inputHashes, snapshot);
                 stagedArtifact = stagedArtifact.WithReplacementFiles(CopyProviderRuntimeAssemblies(
                     spec,
                     stagedArtifact.PrimaryPath,
@@ -688,7 +687,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                     PowerShellCompiledModuleManifest.GetProtectedSourceFiles(
                             spec.SourcePath,
                             spec.Kind == PowerShellCompilationArtifactKind.BinaryModule && spec.Mode == PowerShellCompilationMode.Hybrid,
-                            spec.ModuleManifestPath)
+                            spec.ModuleManifestPath, snapshot)
                         .Concat(compilationSourcePaths)
                         .Concat(dependencyPlan
                             .Where(static dependency => dependency.SourcePath is not null && dependency.Exists)

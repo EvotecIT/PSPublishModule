@@ -76,6 +76,9 @@ public sealed partial class PowerShellCompilationAnalyzer
             targetFramework: target?.TargetFramework ?? targetFramework ?? PowerShellCompilationTargetFrameworkPolicy.Default).TargetFramework;
         cancellationToken.ThrowIfCancellationRequested();
         beforeDependencyAnalysis?.Invoke();
+        var profile = target?.SemanticProfileId ?? _semanticProfileId;
+        input = input.ResolveForProfile(profile);
+        var snapshot = input.SourceSnapshot;
         var dependencyPlanner = new PowerShellCompilationDependencyPlanner();
         var dependencies = dependencyPlanner.Analyze(
             input,
@@ -84,7 +87,8 @@ public sealed partial class PowerShellCompilationAnalyzer
             includeResource,
             excludeResource,
             outputDirectory,
-            generatedOutputDirectories);
+            generatedOutputDirectories,
+            snapshot);
         var dependencyGraph = PowerShellCompilationDependencyGraphBuilder.Build(
             input.SourcePath,
             input.ModuleManifestPath,
@@ -93,7 +97,8 @@ public sealed partial class PowerShellCompilationAnalyzer
             capabilityMode,
             input.CompilationSourceFiles,
             dependencies,
-            normalizedTargetFramework);
+            normalizedTargetFramework,
+            snapshot: snapshot);
         if (target is not null)
         {
             dependencyGraph = PowerShellCompilationDependencyGraphBuilder.Build(
@@ -108,11 +113,13 @@ public sealed partial class PowerShellCompilationAnalyzer
                 target.RuntimeIdentifier,
                 includeRuntimePack: target.ArtifactKind == PowerShellCompilationArtifactKind.Executable &&
                                     target.Deployment != PowerShellCompilationDeploymentModel.FrameworkDependent,
-                nuGetPackageRoot);
+                nuGetPackageRoot,
+                snapshot);
         }
-        var nativeTypes = PowerShellNativeDependencyTypes.Create(input.ModuleManifestPath, dependencies, dependencyGraph, input.ModuleRoot);
-        var plan = new PowerShellCompilationAnalyzer(_commandRegistry, _semanticProfileId, nativeTypes).AnalyzeFiles(
-            target?.Mode ?? mode, input.CompilationSourceFiles, input.ModuleRoot, normalizedTargetFramework,
+        var nativeTypes = PowerShellNativeDependencyTypes.Create(input.ModuleManifestPath, dependencies, dependencyGraph, input.ModuleRoot, snapshot);
+        var documents = input.CompilationSourceFiles.Select(snapshot.Get).ToArray();
+        var plan = new PowerShellCompilationAnalyzer(_commandRegistry, profile, nativeTypes).AnalyzeDocuments(
+            target?.Mode ?? mode, documents, input.ModuleRoot, normalizedTargetFramework,
             PowerShellCompilationBuildSpec.GetCapabilities(input.Kind, capabilityMode), cancellationToken);
         var combined = new PowerShellCompilationPlan(
             plan.Mode,
@@ -120,10 +127,11 @@ public sealed partial class PowerShellCompilationAnalyzer
             plan.TargetFramework,
             dependencies,
             dependencyGraph,
-            target);
+            target,
+            profile);
         return input.Kind == PowerShellCompilationArtifactKind.Executable &&
                capabilityMode is PowerShellCompilationMode.Package or PowerShellCompilationMode.Hybrid
-            ? ApplyPackagedValidation(combined, input, normalizedTargetFramework ?? PowerShellCompilationTargetFrameworkPolicy.Default, capabilityMode)
+            ? ApplyPackagedValidation(combined, input, normalizedTargetFramework ?? PowerShellCompilationTargetFrameworkPolicy.Default, capabilityMode, snapshot)
             : combined;
     }
 
@@ -131,7 +139,8 @@ public sealed partial class PowerShellCompilationAnalyzer
         PowerShellCompilationPlan plan,
         PowerShellCompilationResolvedInput input,
         string targetFramework,
-        PowerShellCompilationMode mode)
+        PowerShellCompilationMode mode,
+        PowerShellSourceSnapshot snapshot)
     {
         try
         {
@@ -139,17 +148,18 @@ public sealed partial class PowerShellCompilationAnalyzer
                 .Select(Path.GetFullPath)
                 .Distinct(PowerShellCompilationPathSafety.PathComparer)
                 .ToArray();
+            var entry = snapshot.Get(input.SourcePath);
             if (mode == PowerShellCompilationMode.Hybrid)
-                PowerShellPackagedScriptRewriter.ValidateRetainedEntryRequirements(input.SourcePath, embeddedScripts);
+                PowerShellPackagedScriptRewriter.ValidateRetainedEntryRequirements(input.SourcePath, embeddedScripts, entry);
             else
             {
-                PowerShellPackagedParameterBindingPolicy.Generate(input.SourcePath, targetFramework);
-                _ = PowerShellPackagedScriptRewriter.Rewrite(input.SourcePath, embeddedScriptPaths: embeddedScripts);
+                PowerShellPackagedParameterBindingPolicy.Generate(input.SourcePath, targetFramework, document: entry);
+                _ = PowerShellPackagedScriptRewriter.Rewrite(input.SourcePath, embeddedScriptPaths: embeddedScripts, document: entry);
             }
             foreach (var dependency in embeddedScripts.Where(path =>
                          !PowerShellCompilationPathSafety.PathEquals(path, input.SourcePath)))
                 PowerShellPackagedScriptRewriter.ValidateDependency(
-                    dependency, embeddedScripts, allowDerivedPaths: mode == PowerShellCompilationMode.Hybrid);
+                    dependency, embeddedScripts, allowDerivedPaths: mode == PowerShellCompilationMode.Hybrid, document: snapshot.Get(dependency));
             return plan;
         }
         catch (InvalidOperationException exception)
@@ -172,7 +182,8 @@ public sealed partial class PowerShellCompilationAnalyzer
                     file.Units,
                     file.Diagnostics.Concat(new[] { diagnostic }).ToArray());
             }).ToArray();
-            return new PowerShellCompilationPlan(plan.Mode, files, plan.TargetFramework, plan.Dependencies, plan.DependencyGraph, plan.TargetContract);
+            return new PowerShellCompilationPlan(plan.Mode, files, plan.TargetFramework, plan.Dependencies, plan.DependencyGraph,
+                plan.TargetContract, plan.AnalysisSemanticProfileId);
         }
     }
 
@@ -186,6 +197,22 @@ public sealed partial class PowerShellCompilationAnalyzer
     {
         cancellationToken.ThrowIfCancellationRequested();
         var files = sourcePaths.Select(Path.GetFullPath).Distinct(PowerShellCompilationPathSafety.PathComparer).ToArray();
+        var documents = files.Select(file =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return PowerShellSourceParser.ParseFile(file, basePath, _semanticProfileId);
+        }).ToArray();
+        return AnalyzeDocuments(mode, documents, basePath, targetFramework, capabilities, cancellationToken);
+    }
+
+    internal PowerShellCompilationPlan AnalyzeDocuments(
+        PowerShellCompilationMode mode,
+        IReadOnlyList<ParsedSourceDocument> documents,
+        string basePath,
+        string? targetFramework,
+        PowerShellCompilationCapability capabilities,
+        CancellationToken cancellationToken = default)
+    {
         var analysisTargetFramework = mode == PowerShellCompilationMode.Package ? null : targetFramework;
         if (analysisTargetFramework is not null)
         {
@@ -193,18 +220,18 @@ public sealed partial class PowerShellCompilationAnalyzer
             PowerShellGeneratedReferenceAssemblyResolver.EnsureAvailable(analysisTargetFramework);
         }
         var localFunctionNames = capabilities.HasFlag(PowerShellCompilationCapability.LocalFunctionCalls)
-            ? PowerShellLocalFunctionDiscovery.DiscoverNames(files)
+            ? PowerShellLocalFunctionDiscovery.DiscoverNames(documents)
             : null;
-        var structural = files.Select(file =>
+        var structural = documents.Select(document =>
         {
             cancellationToken.ThrowIfCancellationRequested();
-            return AnalyzeFile(file, basePath, analysisTargetFramework, capabilities, localFunctionNames);
+            return AnalyzeFile(document, basePath, analysisTargetFramework, capabilities, localFunctionNames);
         }).ToArray();
         var analyzed = mode == PowerShellCompilationMode.Package
             ? structural
-            : ApplySemanticEvidence(structural, files, basePath, analysisTargetFramework, capabilities, _commandRegistry, _semanticProfileId,
+            : ApplySemanticEvidence(structural, documents, basePath, analysisTargetFramework, capabilities, _commandRegistry, _semanticProfileId,
                 _nativeDependencyTypes, cancellationToken);
-        return new PowerShellCompilationPlan(mode, analyzed, targetFramework);
+        return new PowerShellCompilationPlan(mode, analyzed, targetFramework, null, null, null, _semanticProfileId);
     }
 
     private static string[] DiscoverFiles(PowerShellCompilationSpec spec)
