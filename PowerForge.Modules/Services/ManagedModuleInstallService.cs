@@ -168,7 +168,8 @@ public sealed partial class ManagedModuleInstallService
     private async Task<ManagedModuleInstallResult> InstallAsync(
         ManagedModuleInstallRequest request,
         ManagedModuleInstallContext context,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Lazy<Task<IReadOnlyDictionary<string, ManagedModuleVersionInfo>?>>? batch = null)
     {
         Validate(request);
         ManagedModuleTrustEvaluator.ThrowIfRepositoryRejected(request.Repository, request.TrustPolicy);
@@ -286,7 +287,8 @@ public sealed partial class ManagedModuleInstallService
             using var requestScope = _repositoryClient.BeginRequestScope();
 
             var versionResolutionStopwatch = System.Diagnostics.Stopwatch.StartNew();
-            var versionInfo = await ResolveSelectedVersionInfoAsync(request, cancellationToken).ConfigureAwait(false);
+            var versionInfo = batch is null ? null : await GetBatchVersionAsync(batch, request.Name).ConfigureAwait(false);
+            versionInfo ??= await ResolveSelectedVersionInfoAsync(request, cancellationToken).ConfigureAwait(false);
             var version = versionInfo.Version;
             versionResolutionStopwatch.Stop();
 
