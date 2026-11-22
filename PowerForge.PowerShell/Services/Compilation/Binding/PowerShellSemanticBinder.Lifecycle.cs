@@ -113,12 +113,20 @@ internal sealed partial class PowerShellSemanticBinder
                 rawRecord.Span, sourceParameter.Symbol, PowerShellConversionSemanticBinder.BindClosedStringConversion(rawRecord)!);
             process = new PowerShellBoundBlock(process.Span, new PowerShellBoundStatement[] { normalize }.Concat(process.Statements).ToArray());
         }
-        if ((supportsOutputLimit || functions[function.Name].PipelineLifecycleCompositionMayStopEarly) && new[] { begin, process, end }.Any(block =>
+        var signature = functions[function.Name];
+        var clauses = new[] { begin, process, end };
+        var writesFinallyRecords = clauses.Any(block =>
                 PowerShellSemanticAnalyzer.EnumerateStatements(block, descendIntoCaptures: false).OfType<PowerShellBoundTryStatement>()
-                    .Any(attempt => attempt.FinallyBlock is { } cleanup && GetSuccessOutputs(cleanup).Length != 0)))
+                    .Any(attempt => attempt.FinallyBlock is { } cleanup && GetSuccessOutputs(cleanup).Length != 0));
+        if ((supportsOutputLimit || signature.PipelineLifecycleCompositionMayStopEarly) && writesFinallyRecords)
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2928", "Strict lifecycle early stopping cannot transfer control from finally output.", begin.Span));
             return null;
+        }
+        if (composition)
+        {
+            signature.PipelineLifecycleWritesFinallyRecords = writesFinallyRecords;
+            signature.PipelineLifecycleProvesTotalTransfer = clauses.All(IsTotalCompositionClause);
         }
         var beginOutputs = GetSuccessOutputs(begin);
         var processOutputs = strict ? beginOutputs.Concat(GetSuccessOutputs(process)).ToArray() : GetSuccessOutputs(process);

@@ -8,6 +8,50 @@ internal sealed partial class PowerShellSemanticBinder
     private sealed record ComposedLifecycle(CommandAst UpstreamCommand, PowerShellLocalCallSignature Upstream,
         CommandAst DownstreamCommand, PowerShellLocalCallSignature Downstream, int First);
 
+    private static bool IsTotalCompositionClause(PowerShellBoundBlock block)
+        => PowerShellSemanticAnalyzer.EnumerateStatements(block, descendIntoCaptures: false).All(static statement => statement switch
+        {
+            PowerShellBoundTryStatement => true,
+            PowerShellBoundIfStatement branch => branch.Clauses.All(static clause => IsTotalRecordExpression(clause.Condition)),
+            PowerShellBoundAssignmentStatement assignment => IsTotalRecordExpression(assignment.Value),
+            PowerShellBoundReturnStatement { Expression: null } => true,
+            _ => PowerShellSemanticAnalyzer.GetSuccessOutputExpression(statement) is { } output && IsTotalRecordExpression(output)
+        });
+
+    private static bool IsTotalRecordExpression(PowerShellBoundExpression expression)
+    {
+        if (expression is PowerShellBoundParameterPresenceExpression) return true;
+        var reads = PowerShellSemanticAnalyzer.EnumerateVariableReads(expression).ToArray();
+        if (reads.Any(static read => !PowerShellStableScalarTypePolicy.IsSupported(read.Type))) return false;
+        var variables = reads.Select(static read => read.Symbol).Distinct().Take(2).ToArray();
+        return variables.Length <= 1 && IsTotalStrictStageExpression(expression, variables.FirstOrDefault());
+    }
+
+    private static void ExcludeUnprovedFinallyCompositions(
+        List<PowerShellBoundFunction> functions,
+        IReadOnlyDictionary<string, PowerShellLocalCallSignature> signatures,
+        Dictionary<string, PowerShellSemanticDiagnostic[]> failures)
+        => functions.RemoveAll(function =>
+        {
+            foreach (var statement in PowerShellSemanticAnalyzer.EnumerateStatements(function.Body, descendIntoCaptures: false))
+            {
+                if (PowerShellSuccessOutputTypePolicy.GetStrictPipelineSink(statement) is not { } sink ||
+                    !signatures.TryGetValue(sink.Upstream.Name, out var upstream) ||
+                    !signatures.TryGetValue(sink.Downstream.Name, out var downstream) ||
+                    !(upstream.PipelineLifecycleWritesFinallyRecords || downstream.PipelineLifecycleWritesFinallyRecords) ||
+                    upstream.PipelineLifecycleProvesTotalTransfer && downstream.PipelineLifecycleProvesTotalTransfer)
+                    continue;
+                failures[function.Symbol.Name] = new[]
+                {
+                    new PowerShellSemanticDiagnostic("PSB2928",
+                        "Strict composition with stage-level finally output requires both stages to have no terminating error path during record transfer.",
+                        sink.Span)
+                };
+                return true;
+            }
+            return false;
+        });
+
     private bool TryDescribeComposedLifecycle(PipelineAst pipeline,
         IReadOnlyDictionary<string, PowerShellLocalCallSignature> functions, out ComposedLifecycle composition)
     {
