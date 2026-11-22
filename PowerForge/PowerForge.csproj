@@ -33,6 +33,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\PowerForge.Modules\PowerForge.Modules.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <None Remove="README.md" />
     <None Include="README.md" Pack="true" PackagePath="\" />
   </ItemGroup>

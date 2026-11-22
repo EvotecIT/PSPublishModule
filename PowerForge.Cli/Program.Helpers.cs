@@ -78,6 +78,10 @@ internal static partial class Program
       powerforge nuget <verify|publish> --manifest <path> --source-commit <sha> --author-fingerprints <sha256[,sha256]> [--api-key-env NUGET_API_KEY]
       powerforge install --name <ModuleName> --version <X.Y.Z> --staging <path> [--strategy exact|autorevision] [--keep N] [--root path]*
       powerforge install --config <InstallSpec.json>
+      powerforge module install <name> --destination <directory> [--version <exact-version>] [--source <feed-url-or-folder>]
+                                [--prerelease] [--plan] [--accept-license] [--allow-clobber] [--output json]
+      powerforge module restore --requirements <modules.json> --lock-file <modules.lock.json> --destination <directory>
+                                [--source <feed-url-or-folder>] [--write-lock] [--plan] [--accept-license] [--allow-clobber] [--output json]
       powerforge pipeline [--config <Pipeline.json>] [--project-root <path>] [--diagnostics-baseline <file>] [--diagnostics-baseline-generate] [--diagnostics-baseline-update] [--fail-on-new-diagnostics] [--fail-on-diagnostics-severity <Warning|Error>] [--output json]
       powerforge plan [--config <Pipeline.json>] [--project-root <path>] [--output json]
       powerforge find --name <Name>[,<Name>...] [--repo <Repo>] [--version <X.Y.Z>] [--prerelease]
@@ -122,167 +126,12 @@ internal static partial class Program
     ");
     }
 
-    static CliOptions ParseCliOptions(string[]? args, out string? error)
-    {
-        error = null;
-        if (args is null) return new CliOptions(verbose: false, quiet: false, diagnostics: false, noColor: false, view: ConsoleView.Auto);
-
-        bool verbose = false;
-        bool quiet = false;
-        bool diagnostics = false;
-        bool noColor = false;
-        ConsoleView view = ConsoleView.Auto;
-        bool viewExplicit = false;
-
-        for (int i = 0; i < args.Length; i++)
-        {
-            var a = args[i];
-            if (a == "--") break;
-            if (a.Equals("-Verbose", StringComparison.OrdinalIgnoreCase) || a.Equals("--verbose", StringComparison.OrdinalIgnoreCase))
-            {
-                verbose = true;
-                continue;
-            }
-
-            if (a.Equals("--quiet", StringComparison.OrdinalIgnoreCase) || a.Equals("-q", StringComparison.OrdinalIgnoreCase))
-            {
-                quiet = true;
-                continue;
-            }
-
-            if (a.Equals("--diagnostics", StringComparison.OrdinalIgnoreCase) || a.Equals("--diag", StringComparison.OrdinalIgnoreCase))
-            {
-                diagnostics = true;
-                continue;
-            }
-
-            if (a.Equals("--no-color", StringComparison.OrdinalIgnoreCase) || a.Equals("--nocolor", StringComparison.OrdinalIgnoreCase))
-            {
-                noColor = true;
-                continue;
-            }
-
-            if (a.Equals("--view", StringComparison.OrdinalIgnoreCase))
-            {
-                viewExplicit = true;
-                if (++i >= args.Length)
-                {
-                    error = "Missing value for --view. Expected: auto|standard|ansi.";
-                    return new CliOptions(verbose, quiet, diagnostics, noColor, view);
-                }
-
-                if (!TryParseConsoleView(args[i], out view))
-                {
-                    error = $"Invalid value for --view: '{args[i]}'. Expected: auto|standard|ansi.";
-                    return new CliOptions(verbose, quiet, diagnostics, noColor, view);
-                }
-
-                continue;
-            }
-        }
-
-        if (!viewExplicit)
-        {
-            var envView = Environment.GetEnvironmentVariable("POWERFORGE_VIEW");
-            if (!string.IsNullOrWhiteSpace(envView) && TryParseConsoleView(envView, out var parsed))
-            {
-                view = parsed;
-            }
-        }
-
-        return new CliOptions(verbose, quiet, diagnostics, noColor, view);
-    }
-
-    static string[] StripGlobalArgs(string[] args)
-    {
-        if (args is null || args.Length == 0) return Array.Empty<string>();
-
-        var list = new List<string>(args.Length);
-        for (int i = 0; i < args.Length; i++)
-        {
-            var a = args[i];
-            if (a == "--")
-            {
-                list.AddRange(args.Skip(i));
-                break;
-            }
-            if (IsGlobalArg(a)) continue;
-
-            if (a.Equals("--view", StringComparison.OrdinalIgnoreCase))
-            {
-                i++; // skip value
-                continue;
-            }
-
-            list.Add(a);
-        }
-        return list.ToArray();
-    }
-
-    static bool IsVersionInvocation(string[] args)
-    {
-        if (args is null || args.Length == 0) return false;
-
-        var remaining = new List<string>(args.Length);
-        for (var i = 0; i < args.Length; i++)
-        {
-            var argument = args[i];
-            if (IsGlobalArg(argument) ||
-                argument.Equals("--output-json", StringComparison.OrdinalIgnoreCase) ||
-                argument.Equals("--json", StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-
-            if (argument.Equals("--view", StringComparison.OrdinalIgnoreCase) ||
-                argument.Equals("--output", StringComparison.OrdinalIgnoreCase))
-            {
-                if (++i < args.Length)
-                    continue;
-
-                return false;
-            }
-
-            remaining.Add(argument);
-        }
-
-        return remaining.Count == 1 &&
-               remaining[0].Equals("--version", StringComparison.OrdinalIgnoreCase);
-    }
-
-    static bool IsGlobalArg(string arg)
-    {
-        if (string.IsNullOrWhiteSpace(arg)) return false;
-
-        return arg.Equals("-Verbose", StringComparison.OrdinalIgnoreCase) ||
-               arg.Equals("--verbose", StringComparison.OrdinalIgnoreCase) ||
-               arg.Equals("--quiet", StringComparison.OrdinalIgnoreCase) ||
-               arg.Equals("-q", StringComparison.OrdinalIgnoreCase) ||
-               arg.Equals("--diagnostics", StringComparison.OrdinalIgnoreCase) ||
-               arg.Equals("--diag", StringComparison.OrdinalIgnoreCase) ||
-               arg.Equals("--no-color", StringComparison.OrdinalIgnoreCase) ||
-               arg.Equals("--nocolor", StringComparison.OrdinalIgnoreCase);
-    }
-
     static ILogger CreateTextLogger(CliOptions cli)
     {
         // --no-color is applied through NO_COLOR at startup, so one logger serves both.
         ILogger baseLogger = new PowerForge.ConsoleUi.ConsoleOutputLogger { IsVerbose = cli.Verbose };
 
         return cli.Quiet ? new QuietLogger(baseLogger) : baseLogger;
-    }
-
-    static (ILogger Logger, BufferedLogger? Buffer) CreateCommandLogger(bool outputJson, CliOptions cli, ILogger textLogger)
-    {
-        if (!outputJson) return (textLogger, null);
-
-        if (cli.Diagnostics)
-        {
-            var buffer = new BufferedLogger { IsVerbose = cli.Verbose };
-            return (buffer, buffer);
-        }
-
-        return (new NullLogger { IsVerbose = cli.Verbose }, null);
     }
 
     static void WritePipelineSummary(ModulePipelineResult res, CliOptions cli, ILogger logger)

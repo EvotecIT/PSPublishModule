@@ -259,12 +259,12 @@ public sealed class InstallManagedModuleCommand : AsyncPSCmdlet
             ProfileName,
             MyInvocation.BoundParameters.ContainsKey("Repository"));
 
-        foreach (var target in targets)
+        ManagedModuleInstallRequest CreateRequest(ManagedModuleRequiredResourceTarget target)
         {
             var repository = target.ResolvedRepository ?? (string.IsNullOrWhiteSpace(target.Repository)
                 ? defaultRepository
                 : ManagedModuleCommandSupport.CreateRepository(this, target.Repository!, target.Repository!));
-            var request = new ManagedModuleInstallRequest
+            return new ManagedModuleInstallRequest
             {
                 Repository = repository,
                 Name = target.Name,
@@ -287,7 +287,28 @@ public sealed class InstallManagedModuleCommand : AsyncPSCmdlet
                 AuthenticodeCheck = AuthenticodeCheck.IsPresent,
                 SkipDependencyCheck = target.SkipDependencyCheck
             };
+        }
 
+        bool Approve(ManagedModuleInstallRequest request)
+            => ShouldProcess(request.Name, $"Install managed module from repository '{request.Repository.Name}'");
+
+        void Report(ManagedModuleInstallResult result)
+        {
+            WriteObject(result);
+            if (writeSummary)
+                ManagedModuleSummaryWriter.Write(result);
+        }
+
+        if (CanBatchInstalls(targets.Count) && ManagedModuleRepositoryClient.SupportsOfficialGalleryBatch(defaultRepository))
+        {
+            var requests = targets.Select(CreateRequest).ToArray();
+            await service.InstallBatchAsync(requests, Report, CancelToken, Approve).ConfigureAwait(false);
+            return;
+        }
+
+        foreach (var target in targets)
+        {
+            var request = CreateRequest(target);
             if (Plan.IsPresent)
             {
                 var plan = await service.PlanInstallAsync(request, CancelToken).ConfigureAwait(false);
@@ -297,15 +318,29 @@ public sealed class InstallManagedModuleCommand : AsyncPSCmdlet
                 continue;
             }
 
-            if (!ShouldProcess(target.Name, $"Install managed module from repository '{repository.Name}'"))
+            if (!Approve(request))
                 continue;
 
             var result = await service.InstallAsync(request, CancelToken).ConfigureAwait(false);
-
-            WriteObject(result);
-            if (writeSummary)
-                ManagedModuleSummaryWriter.Write(result);
+            Report(result);
         }
+    }
+
+    // Only look ahead at other names' metadata when no prompt can change the
+    // selection. Each install still crosses ShouldProcess in pipeline order.
+    private bool CanBatchInstalls(int targetCount)
+    {
+        if (targetCount < 2 || Plan.IsPresent || ParameterSetName != NameParameterSet)
+            return false;
+
+        var parameters = MyInvocation.BoundParameters;
+        var whatIfDisabled = parameters.TryGetValue("WhatIf", out var whatIf)
+            ? whatIf is SwitchParameter { IsPresent: false }
+            : SessionState.PSVariable.GetValue("WhatIfPreference") is false;
+        var confirmationDisabled = parameters.TryGetValue("Confirm", out var confirm)
+            ? confirm is SwitchParameter { IsPresent: false }
+            : SessionState.PSVariable.GetValue("ConfirmPreference") is ConfirmImpact.High or ConfirmImpact.None;
+        return whatIfDisabled && confirmationDisabled;
     }
 
     /// <summary>Validates and executes hash-constrained pipeline input after every target is known.</summary>

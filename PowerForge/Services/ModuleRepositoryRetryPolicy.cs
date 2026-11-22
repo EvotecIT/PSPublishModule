@@ -18,11 +18,10 @@ internal sealed class ModuleRepositoryRetryPolicy
     }
 
     internal static bool IsTransientStatus(HttpStatusCode status, bool includeNotFound = true)
-        => (includeNotFound && status == HttpStatusCode.NotFound) ||
-           status == HttpStatusCode.RequestTimeout || (int)status == 429 || (int)status >= 500;
+        => RepositoryRetryTiming.IsTransientStatus(status, includeNotFound);
 
     internal static TimeSpan Backoff(TimeSpan initialDelay, int attempt)
-        => TimeSpan.FromMilliseconds(Math.Min(30000, Math.Max(0, initialDelay.TotalMilliseconds) * Math.Pow(2, Math.Min(attempt - 1, 10))));
+        => RepositoryRetryTiming.Backoff(initialDelay, attempt);
 
     /// <summary>Retries the existing child-process protocol without retrying missing tools or user cancellation.</summary>
     internal PowerShellRunResult RunPowerShell(string operation, Func<PowerShellRunResult> run)

@@ -102,7 +102,7 @@ public sealed class MissingFunctionsAnalyzerBoundSourceTests
     }
 
     [Fact]
-    public void Analyze_RecursiveDonorAnalysisPrefersDonorHelperOverSameNamedConsumerFunction()
+    public void Analyze_RejectsDonorHelperThatWouldBindToSameNamedConsumerFunction()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
@@ -123,10 +123,10 @@ public sealed class MissingFunctionsAnalyzerBoundSourceTests
                     includeFunctionsRecursively: true,
                     approvedModuleSources: new[] { new ApprovedModuleSource(moduleName, "2.0.0", modulePath) }));
 
-            Assert.Equal(2, result.Functions.Length);
-            Assert.Contains(result.Functions, function => function.Contains("donor-helper", StringComparison.Ordinal));
-            Assert.DoesNotContain(result.Functions, function => function.Contains("consumer-helper", StringComparison.Ordinal));
-            Assert.Equal(new[] { moduleName }, result.FullyInlinedApprovedModules);
+            Assert.Empty(result.Functions);
+            Assert.Contains(result.Summary, command => command.Name == "Get-CollidingHelper" &&
+                command.Source == moduleName && command.Error.Contains("name conflict", StringComparison.OrdinalIgnoreCase));
+            Assert.Empty(result.FullyInlinedApprovedModules);
         }
         finally
         {
@@ -854,6 +854,53 @@ public sealed class MissingFunctionsAnalyzerBoundSourceTests
         Assert.True(process.ExitCode == 0, stdout + Environment.NewLine + stderr);
         return Path.Combine(projectRoot, "bin", "Release", "net8.0", assemblyName + ".dll");
     }
+
+    [Theory]
+    [InlineData("1.0.0", true)]
+    [InlineData("2.0.0", false)]
+    public void Analyze_PreservesTheExactVersionResolvedInsideAnApprovedDonor(string approvedVersion, bool canMerge)
+    {
+        string root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        const string first = "PowerForge.ObservedDonor";
+        const string dependency = "PowerForge.ObservedDependency";
+        try
+        {
+            var older = WriteModuleBody(root, dependency, "1.0.0", "function Get-ObservedValue { 'one' }",
+                functionsToExport: new[] { "Get-ObservedValue" });
+            var newer = WriteModuleBody(root, dependency, "2.0.0", "function Get-ObservedValue { 'two' }",
+                functionsToExport: new[] { "Get-ObservedValue" });
+            var caller = WriteModuleBody(root, first, "1.0.0",
+                $"Import-Module -FullyQualifiedName @{{ModuleName='{dependency}'; RequiredVersion='1.0.0'}}; " +
+                "function Get-ObservedEntry { Get-ObservedValue }",
+                functionsToExport: new[] { "Get-ObservedEntry" });
+            var options = new MissingFunctionsOptions(approvedModules: new[] { first, dependency },
+                includeFunctionsRecursively: true, approvedModuleSources: new[]
+                {
+                    new ApprovedModuleSource(first, "1.0.0", caller, moduleSearchRoot: root),
+                    new ApprovedModuleSource(dependency, approvedVersion, canMerge ? older : newer, moduleSearchRoot: root)
+                }, requireApprovedModuleSources: true);
+
+            var result = new PowerShellMissingFunctionAnalysisService().Analyze(null, "Get-ObservedEntry", options);
+            if (canMerge)
+            {
+                Assert.Empty(result.ApprovedModuleMergeErrors);
+                Assert.Contains(result.Functions, definition => definition.Contains("'one'", StringComparison.Ordinal));
+            }
+            else
+            {
+                var command = Assert.Single(result.Summary, item => item.Name == "Get-ObservedValue");
+                Assert.Contains("approved source", command.Error);
+                Assert.Contains("1.0.0", command.Error);
+                Assert.Contains("2.0.0", command.Error);
+                Assert.DoesNotContain(result.Functions, definition => definition.Contains("'two'", StringComparison.Ordinal));
+            }
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
 
     private static string WriteModuleBody(
         string root,

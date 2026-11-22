@@ -1,3 +1,4 @@
+using System.Management.Automation;
 using System.Management.Automation.Language;
 
 namespace PowerForge;
@@ -16,6 +17,64 @@ internal static class PowerShellAliasDefinitionPolicy
                name.Equals("sal", StringComparison.OrdinalIgnoreCase) ||
                name.Equals("New-Alias", StringComparison.OrdinalIgnoreCase) ||
                name.Equals("nal", StringComparison.OrdinalIgnoreCase);
+    }
+
+    internal static bool MayWriteOutsideLocalScope(CommandAst command)
+    {
+        if (!IsAliasDefinitionCommand(command))
+            return false;
+        var elements = command.CommandElements;
+        for (int i = 1; i < elements.Count; i++)
+        {
+            if (elements[i] is VariableExpressionAst { Splatted: true })
+                return true;
+            if (elements[i] is not CommandParameterAst parameter ||
+                !MatchesParameter(parameter.ParameterName, "Scope"))
+                continue;
+            var argument = parameter.Argument ?? (i + 1 < elements.Count ? elements[i + 1] as ExpressionAst : null);
+            return argument switch
+            {
+                StringConstantExpressionAst literal => !literal.Value.Equals("Local", StringComparison.OrdinalIgnoreCase) &&
+                                                       !literal.Value.Equals("Private", StringComparison.OrdinalIgnoreCase) &&
+                                                       !literal.Value.Equals("0", StringComparison.Ordinal),
+                ConstantExpressionAst { Value: int scope } => scope != 0,
+                _ => true
+            };
+        }
+        return false;
+    }
+
+    internal static bool MaySkipThroughShouldProcess(CommandAst command)
+        => command.CommandElements.OfType<CommandParameterAst>().Any(parameter =>
+            (MatchesParameter(parameter.ParameterName, "WhatIf") || MatchesParameter(parameter.ParameterName, "Confirm") ||
+             parameter.ParameterName.Equals("wi", StringComparison.OrdinalIgnoreCase) ||
+             parameter.ParameterName.Equals("cf", StringComparison.OrdinalIgnoreCase)) &&
+            !IsDisabledSwitch(parameter.Argument));
+
+    private static bool IsDisabledSwitch(ExpressionAst? argument)
+        => argument is VariableExpressionAst flag && flag.VariablePath.IsUnqualified &&
+           flag.VariablePath.UserPath.Equals("false", StringComparison.OrdinalIgnoreCase);
+
+    internal static bool MayShareAliasWithChildScopes(CommandAst command)
+    {
+        for (int i = 1; i < command.CommandElements.Count; i++)
+        {
+            if (command.CommandElements[i] is not CommandParameterAst parameter ||
+                !MatchesParameter(parameter.ParameterName, "Option"))
+                continue;
+            var argument = parameter.Argument ?? (i + 1 < command.CommandElements.Count ? command.CommandElements[i + 1] as ExpressionAst : null);
+            return argument is ArrayLiteralAst array ? array.Elements.Any(MayBeAllScope) : MayBeAllScope(argument);
+        }
+        return false;
+    }
+
+    private static bool MayBeAllScope(ExpressionAst? argument)
+    {
+        if (argument is ConstantExpressionAst { Value: int integer })
+            return ((ScopedItemOptions)integer & ScopedItemOptions.AllScope) != 0;
+        return argument is not StringConstantExpressionAst literal ||
+               !Enum.TryParse(literal.Value, ignoreCase: true, out ScopedItemOptions options) ||
+               (options & ScopedItemOptions.AllScope) != 0;
     }
 
     internal static bool TryGetLiteralDefinition(CommandAst command, out string aliasName, out string targetName)

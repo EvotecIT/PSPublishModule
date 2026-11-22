@@ -1,0 +1,34 @@
+{
+  "$schema": "https://raw.githubusercontent.com/EvotecIT/PSPublishModule/main/Schemas/powerforge.release.schema.json",
+  "SchemaVersion": 1,
+  "Tools": {
+    "ProjectRoot": "..",
+    "Configuration": "Release",
+    "Targets": [
+      {
+        "Name": "PowerForgeNative",
+        "ProjectPath": "PowerForge.Cli.Native/PowerForge.Cli.Native.csproj",
+        "OutputName": "powerforge",
+        "Runtimes": [ "win-x64", "linux-x64" ],
+        "Frameworks": [ "net10.0" ],
+        "Flavor": "Portable",
+        "ArtifactRootPath": "Artifacts/Preview/PowerForgeNative",
+        "ZipNameTemplate": "PowerForgeNative-{version}-{rid}.zip",
+        "CreateCommandAliasOnUnix": false,
+        "MsBuildProperties": {
+          "PublishAot": "true",
+          "PublishTrimmed": "true"
+        }
+      }
+    ],
+    "GitHub": {
+      "Publish": false,
+      "Owner": "EvotecIT",
+      "Repository": "PSPublishModule",
+      "GenerateReleaseNotes": true,
+      "IsPreRelease": true,
+      "TagTemplate": "{Target}-v{Version}-preview",
+      "ReleaseNameTemplate": "{Target} {Version} Preview"
+    }
+  }
+}

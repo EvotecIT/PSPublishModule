@@ -3,6 +3,8 @@ using PowerForge;
 
 namespace PowerForge.Tests;
 
+// The parallel preflight assertion requires an uncontended process-wide extraction slot.
+[Collection(ProcessEnvironmentCollection.Name)]
 public sealed class ManagedModuleArchiveExtractorTests
 {
     [Fact]
@@ -124,6 +126,71 @@ public sealed class ManagedModuleArchiveExtractorTests
             new ManagedModuleArchiveExtractor().ExtractPackageAsync(stream, destination, cancellation.Token));
 
         Assert.Empty(Directory.EnumerateFiles(destination, "*", SearchOption.AllDirectories));
+    }
+
+    [Fact]
+    public async Task ExtractPackageAsync_checks_parallel_payload_paths_before_writing()
+    {
+        using var temp = new TemporaryDirectory();
+        using var stream = CreateGraphSizedBufferedArchive(includeInvalidPath: true);
+        var destination = Path.Combine(temp.Path, "stage");
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            new ManagedModuleArchiveExtractor().ExtractPackageAsync(stream, destination, "Company.Tools", CancellationToken.None));
+
+        Assert.Contains("unsafe path", error.Message, StringComparison.Ordinal);
+        Assert.False(File.Exists(Path.Combine(temp.Path, "outside.txt")));
+        if (Environment.ProcessorCount > 1)
+            Assert.False(Directory.Exists(destination));
+    }
+
+    [Fact]
+    public async Task ExtractPackageAsync_preserves_graph_sized_payload_from_a_buffer_slice()
+    {
+        using var temp = new TemporaryDirectory();
+        using var package = CreateGraphSizedBufferedArchive(includeInvalidPath: false);
+        var bytes = package.ToArray();
+        const int archiveOffset = 11;
+        var buffer = new byte[archiveOffset + bytes.Length + 13];
+        bytes.CopyTo(buffer, archiveOffset);
+        using var stream = new MemoryStream(buffer, archiveOffset, bytes.Length, writable: false, publiclyVisible: true);
+        var destination = Path.Combine(temp.Path, "stage");
+
+        var result = await new ManagedModuleArchiveExtractor().ExtractPackageAsync(
+            stream, destination, "Company.Tools", CancellationToken.None);
+
+        Assert.Equal(8, result.FileCount);
+        Assert.Equal(32L * 1024 * 1024, result.BytesWritten);
+        for (var index = 0; index < 8; index++)
+        {
+            using var file = File.OpenRead(Path.Combine(destination, "payload", $"file-{index}.bin"));
+            Assert.Equal(4L * 1024 * 1024, file.Length);
+            Assert.Equal(index, file.ReadByte());
+            file.Seek(-1, SeekOrigin.End);
+            Assert.Equal(8 - index, file.ReadByte());
+        }
+    }
+
+    private static MemoryStream CreateGraphSizedBufferedArchive(bool includeInvalidPath)
+    {
+        var stream = new MemoryStream();
+        using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            var payload = new byte[4 * 1024 * 1024];
+            for (var index = 0; index < 8; index++)
+            {
+                payload[0] = (byte)index;
+                payload[payload.Length - 1] = (byte)(8 - index);
+                using var file = archive.CreateEntry($"payload/file-{index}.bin").Open();
+                file.Write(payload, 0, payload.Length);
+            }
+
+            if (includeInvalidPath)
+                AddEntry(archive, "../outside.txt", "must stay inside staging");
+        }
+
+        stream.Position = 0;
+        return stream;
     }
 
     [Fact]

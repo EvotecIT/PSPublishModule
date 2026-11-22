@@ -105,6 +105,49 @@ the process module path. Validation requires exactly one requested module
 manifest with the exact requested version, and the artifacts record installed
 file count and bytes alongside timing.
 
+## Standalone CLI comparison
+
+`module-cli.benchmark.ps1` compares the PowerForge self-contained Linux x64
+CLI with the ModuleFast 1.0.0 Native AOT executable. Both install from the same
+loopback NuGet v3 feed, with a fresh destination for every sample. The feed
+generator checks the SHA-256 of each pinned PowerShell Gallery package before
+serving it. The benchmark checks the installed module count and each module's
+manifest bytes, including Microsoft.Graph.Authentication in the Graph Users case.
+
+On Linux x64, put the PowerForge executable under test and the ModuleFast
+executable from the [v1.0.0 release](https://github.com/JustinGrote/ModuleFast/releases/tag/v1.0.0)
+in a scratch directory. The ModuleFast asset SHA-256 is
+`925a5b2b93bfeb971898699535d28c72a121ec3904f7bc549d5e5ee68edad9cf`.
+Use Python 3 to prepare the packages and serve only the generated feed.
+
+```bash
+python3 Benchmarks/ManagedModules/module-cli-feed.py "$BENCH_ROOT" --port 8173
+python3 -m http.server 8173 --bind 127.0.0.1 --directory "$BENCH_ROOT/feed"
+```
+
+In another shell, set `BENCH_ROOT` to the same directory, then run the wrapper
+from PowerShell with PSPublishModule available. The wrapper uses a separate
+work directory for each run and removes it after all samples finish, including
+warmups. Benchmark results stay under OutputRoot.
+
+```powershell
+./Benchmarks/ManagedModules/Invoke-ModuleCliBenchmark.ps1 -Variable @{
+    PowerForgePath   = Join-Path $env:BENCH_ROOT 'powerforge'
+    ModuleFastPath   = Join-Path $env:BENCH_ROOT 'modulefast'
+    Source           = 'http://127.0.0.1:8173/index.json'
+    PackageProofPath = Join-Path $env:BENCH_ROOT 'proof.json'
+    WorkRoot         = Join-Path $env:BENCH_ROOT 'work'
+    OutputRoot       = Join-Path $env:BENCH_ROOT 'results'
+}
+```
+
+The startup case launches a new process with a shared bundle extraction
+directory. First bundle use gives each sample an empty extraction directory.
+Both time command help and make no feed request. The install cases include
+process startup, dependency resolution, download, and disk writes. The runner
+rotates engine order, keeps all samples, and writes JSON, CSV, and Markdown
+results. Neither executable can find `pwsh` on its launch `PATH`.
+
 ## ModuleFast 1.0.0-beta1 Results
 
 These results answer two different questions. The controlled comparison uses an

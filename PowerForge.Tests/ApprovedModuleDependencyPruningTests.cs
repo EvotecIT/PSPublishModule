@@ -242,6 +242,24 @@ public sealed class ApprovedModuleDependencyPruningTests
     [InlineData("function Get-SharedAliasTarget { 'alias-target' }; Set-Alias SharedAlias Get-SharedAliasTarget", "nested consumer function")]
     [InlineData("function Get-SharedAliasTarget { 'alias-target' }; Set-Alias SharedAlias Get-SharedAliasTarget", "nested donor function")]
     [InlineData("filter Convert-DonorItem { \"alias-$_\" }; Set-Alias SharedAlias Convert-DonorItem", "filter")]
+    [InlineData("function Get-SharedAliasTarget { 'alias-target' }; Set-Alias SharedAlias Get-SharedAliasTarget", "nested local alias")]
+    [InlineData("function Get-SharedAliasTarget { $MyInvocation.MyCommand.Name }; Set-Alias SharedAlias Get-SharedAliasTarget", "current function name")]
+    [InlineData("$sharedValue='module'; $parameterValue='module'; function Get-SharedAliasTarget { param($parameterValue='parameter') $sharedValue = 'local'; $sharedValue; $parameterValue }; Set-Alias SharedAlias Get-SharedAliasTarget", "local bindings")]
+    [InlineData("function Get-PrivateAliasTarget { 'alias-target' }; function Get-SharedAliasTarget { Set-Alias Get-Date Get-PrivateAliasTarget; Get-Date }; Set-Alias SharedAlias Get-SharedAliasTarget", "local alias target")]
+    [InlineData("function Get-SharedAliasTarget { Set-Alias LocalDate Get-Date -Scope Private; if ((LocalDate) -is [datetime]) { 'alias-target' } }; Set-Alias SharedAlias Get-SharedAliasTarget", "private scope alias")]
+    [InlineData("$value='module'; function Get-SharedAliasTarget { param($value='alias-target', $result=$value) $result }; Set-Alias SharedAlias Get-SharedAliasTarget", "parameter default")]
+    [InlineData("$value='module'; function Get-SharedAliasTarget { param($value='alias-target') 1 | ForEach-Object { $value } }; Set-Alias SharedAlias Get-SharedAliasTarget", "synchronous callback")]
+    [InlineData("$PSBoundParameters=@{value='module'}; function Get-SharedAliasTarget { param($value) $PSBoundParameters['value'] }; Set-Alias SharedAlias Get-SharedAliasTarget", "invocation parameters")]
+    [InlineData("function Get-SharedAliasTarget { Set-Alias LocalDate Get-Date; (LocalDate) -is [datetime] }; Set-Alias SharedAlias Get-SharedAliasTarget", "shadowed consumer alias")]
+    [InlineData("$value='module'; function Get-SharedAliasTarget { param($value='alias-target') $temporary=1; Remove-Variable temporary; $value }; Set-Alias SharedAlias Get-SharedAliasTarget", "unrelated removal")]
+    [InlineData("$value='module'; function Get-SharedAliasTarget { param($value='alias-target') $value; Remove-Variable value }; Set-Alias SharedAlias Get-SharedAliasTarget", "later removal")]
+    [InlineData("function Get-PrivateAliasTarget { 'alias-target' }; function Get-SharedAliasTarget { Set-Alias InnerAlias Get-PrivateAliasTarget; Set-Alias OuterAlias InnerAlias; OuterAlias }; Set-Alias SharedAlias Get-SharedAliasTarget", "local alias chain")]
+    [InlineData("$value='module'; function Get-SharedAliasTarget { param($value='alias-target') function Get-Nested { $value }; Get-Nested }; Set-Alias SharedAlias Get-SharedAliasTarget", "nested parameter")]
+    [InlineData("$value='module'; function Get-SharedAliasTarget { param($value='alias-target') function Get-Nested { $value }; 1 | ForEach-Object { Get-Nested } }; Set-Alias SharedAlias Get-SharedAliasTarget", "nested callback")]
+    [InlineData("$value='module'; function Get-SharedAliasTarget { param($value='alias-target') Get-Variable value -ValueOnly }; Set-Alias SharedAlias Get-SharedAliasTarget", "local variable lookup")]
+    [InlineData("$value='module'; function Get-SharedAliasTarget { Microsoft.PowerShell.Utility\\Set-Variable -Name value -Value 'alias-target' -Scope Local; $value }; Set-Alias SharedAlias Get-SharedAliasTarget", "explicit local setter")]
+    [InlineData("$value='module'; function Get-SharedAliasTarget { Microsoft.PowerShell.Utility\\New-Variable -Name value -Value 'alias-target' -Scope 0; $value }; Set-Alias SharedAlias Get-SharedAliasTarget", "explicit local creator")]
+    [InlineData("function Get-SharedAliasTarget { 'alias-target' }; Set-Alias SharedAlias Get-SharedAliasTarget", "marked single root")]
     public void Run_PackagesApprovedDonorAliasOrReportsANameConflict(string aliasDeclaration, string? conflictScope)
     {
         var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
@@ -267,6 +285,9 @@ public sealed class ApprovedModuleDependencyPruningTests
                 "consumer" => "function Get-SharedAliasTarget { 'consumer' }; ",
                 "consumer alias" => "function Get-LocalTarget { 'consumer' }; Set-Alias SharedAlias Get-LocalTarget; ",
                 "nested consumer function" => "function Invoke-DonorAlias { SharedAlias }; ",
+                "nested local alias" => "function Initialize-LocalAlias { Set-Alias SharedAlias Get-ParentThing -Scope Local }; Initialize-LocalAlias; ",
+                "shadowed consumer alias" => "Set-Alias LocalDate Get-Item; ",
+                "marked single root" => "# Auto-generated by PowerForge. Do not edit.\n",
                 _ => string.Empty
             };
             string consumerSetup = conflictScope switch
@@ -281,15 +302,21 @@ public sealed class ApprovedModuleDependencyPruningTests
                 "additional alias" => "SharedAlias; (Get-Alias -Name Get-AdditionalFixture).Definition; ",
                 "nested consumer function" => "Invoke-DonorAlias; ",
                 "filter" => "1,2 | SharedAlias; ",
+                "invocation parameters" => "SharedAlias -Value 'bound'; ",
+                "shadowed consumer alias" => "SharedAlias; (Get-Alias LocalDate).Definition; ",
                 _ => "SharedAlias; "
             };
             WriteModule(root, "source",
                 consumerPrefix +
-                "function Get-ConsumerThing { param([string]$ProviderName='PnP.PowerShell'); " + consumerSetup +
-                "Get-ParentThing; " + aliasCall + "Get-Module -Name $ProviderName | Out-Null }; Export-ModuleMember Get-ConsumerThing");
+                "function Get-ConsumerThing { " + consumerSetup +
+                "Get-ParentThing; " + aliasCall + "}; Export-ModuleMember Get-ConsumerThing");
             File.WriteAllText(Path.Combine(source, "Consumer.format.ps1xml"),
                 "<Configuration><ViewDefinitions><View><Name>Consumer</Name><ViewSelectedBy><TypeName>System.String</TypeName></ViewSelectedBy><TableControl><TableRowEntries><TableRowEntry><TableColumnItems><TableColumnItem><PropertyName>Length</PropertyName></TableColumnItem></TableColumnItems></TableRowEntry></TableRowEntries></TableControl></View></ViewDefinitions></Configuration>");
             Assert.True(ManifestEditor.TrySetTopLevelStringArray(Path.Combine(source, "source.psd1"), "FormatsToProcess", new[] { "Consumer.format.ps1xml" }));
+            string hooks = Path.Combine(source, "Hooks");
+            Directory.CreateDirectory(hooks);
+            File.WriteAllText(Path.Combine(hooks, "Initialize.ps1"), "$null = 1");
+            Assert.True(ManifestEditor.TrySetTopLevelStringArray(Path.Combine(source, "source.psd1"), "ScriptsToProcess", new[] { "Hooks/Initialize.ps1" }));
             // WriteModule uses the directory name as identity; the consumer has a normal manifest.
             var segments = new List<IConfigurationSegment>
             {
@@ -327,7 +354,12 @@ public sealed class ApprovedModuleDependencyPruningTests
             var runner = new ModulePipelineRunner(new NullLogger(), powerShellRunner: null,
                 moduleDependencyMetadataProvider: new FixtureMetadataProvider(modules),
                 missingFunctionAnalysisService: new PowerShellMissingFunctionAnalysisService());
-            if (conflictScope is not (null or "qualified cmdlet" or "additional alias" or "filter"))
+            if (conflictScope is not (null or "qualified cmdlet" or "additional alias" or "filter" or "nested local alias"
+                or "current function name" or "local bindings" or "local alias target" or "private scope alias"
+                or "parameter default" or "synchronous callback" or "invocation parameters" or "shadowed consumer alias"
+                or "unrelated removal" or "later removal" or "local alias chain" or "nested parameter"
+                or "marked single root" or "nested callback" or "local variable lookup" or "explicit local setter"
+                or "explicit local creator"))
             {
                 var error = Assert.Throws<InvalidOperationException>(() => runner.Run(spec, runner.Plan(spec)));
                 Assert.Contains("SharedAlias", error.Message);
@@ -366,6 +398,10 @@ public sealed class ApprovedModuleDependencyPruningTests
             {
                 "additional alias" => new[] { "parent-copy", "alias-target", "Get-SharedAliasTarget" },
                 "filter" => new[] { "parent-copy", "alias-1", "alias-2" },
+                "current function name" => new[] { "parent-copy", "Get-SharedAliasTarget" },
+                "local bindings" => new[] { "parent-copy", "local", "parameter" },
+                "invocation parameters" => new[] { "parent-copy", "bound" },
+                "shadowed consumer alias" => new[] { "parent-copy", "True", "Get-Item" },
                 _ => new[] { "parent-copy", "alias-target" }
             };
             Assert.Equal(expected, output.Select(item => item.BaseObject.ToString()));
@@ -381,6 +417,177 @@ public sealed class ApprovedModuleDependencyPruningTests
             Directory.Delete(root, recursive: true);
         }
     }
+
+    [Theory]
+    [InlineData("consumer function", "Get-SharedHelper", "name conflict")]
+    [InlineData("sibling donor", "Get-SharedHelper", "name conflict")]
+    [InlineData("consumer cmdlet", "Get-Date", "name conflict")]
+    [InlineData("computed consumer alias", "Get-SharedAlias", "consumer alias declaration")]
+    [InlineData("nested script alias", "Get-SharedHelper", "name conflict")]
+    [InlineData("unqualified state", "Get-SharedEntry", "SharedValue")]
+    [InlineData("donor alias write", "Get-SharedEntry", "donor alias scope")]
+    [InlineData("qualified call", "Get-SharedEntry", "referenced at runtime")]
+    [InlineData("dynamic call", "SharedHelpers", "dynamic command")]
+    [InlineData("unbound runtime import", "SharedHelpers", "referenced at runtime")]
+    [InlineData("merge disabled", "Get-SharedEntry", "without merging")]
+    [InlineData("script state", "Get-SharedEntry", "script:SharedValue")]
+    [InlineData("relative file", "Get-SharedEntry", "PSScriptRoot")]
+    [InlineData("scoped path", "Get-SharedEntry", "PSScriptRoot")]
+    [InlineData("computed local alias", "Get-SharedEntry", "alias whose name or target")]
+    [InlineData("forward parameter default", "Get-SharedEntry", "SharedValue")]
+    [InlineData("function header default", "Get-SharedEntry", "SharedValue")]
+    [InlineData("module state in callback", "Get-SharedEntry", "SharedValue")]
+    [InlineData("escaping callback", "Get-SharedEntry", "SharedValue")]
+    [InlineData("removed local binding", "Get-SharedEntry", "SharedValue")]
+    [InlineData("provider removal", "Get-SharedEntry", "SharedValue")]
+    [InlineData("conditional alias", "Get-SharedEntry", "WhatIf or Confirm")]
+    [InlineData("shared consumer alias", "Get-SharedEntry", "shared with child scopes")]
+    [InlineData("local alias cycle", "Get-SharedEntry", "function-local binding is ambiguous")]
+    [InlineData("script removal", "Get-SharedEntry", "outside the function's local scope")]
+    [InlineData("global removal", "Get-SharedEntry", "outside the function's local scope")]
+    [InlineData("script variable cmdlet", "Get-SharedEntry", "outside the function's local scope")]
+    [InlineData("escaped nested function", "Get-SharedEntry", "SharedValue")]
+    [InlineData("authored root without merging", "Get-SharedEntry", "without merging")]
+    [InlineData("unloaded configured function", "Get-SharedEntry", "without merging")]
+    [InlineData("regenerated loader", "source", "will be regenerated")]
+    [InlineData("ambient variable lookup", "Get-SharedEntry", "SharedValue")]
+    [InlineData("conditional local setter", "Get-SharedEntry", "SharedValue")]
+    [InlineData("retained alias lookup", "SharedHelpers", "retained manifest-loaded files")]
+    public void Run_RejectsUnpreservableApprovedDonorCommands(
+        string scenario, string commandOrModule, string reason)
+    {
+        string root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        try
+        {
+            string installed = Path.Combine(root, "installed");
+            string donor = scenario switch
+            {
+                "consumer cmdlet" => "function Get-Date { 'private' }; function Get-SharedEntry { Get-Date }",
+                "computed consumer alias" =>
+                    "function Get-SharedHelper { 'donor' }; Set-Alias Get-SharedAlias Get-SharedHelper; function Get-SharedEntry { Get-SharedAlias }",
+                "script state" => "$script:SharedValue = 'donor'; function Get-SharedEntry { $script:SharedValue }",
+                "unqualified state" => "$SharedValue = 'donor'; function Get-SharedEntry { $SharedValue }",
+                "donor alias write" => "function Get-SharedHelper { 'donor' }; function Get-SharedEntry { Set-Alias Get-SharedAlias Get-SharedHelper -Scope Script }",
+                "relative file" => "function Get-SharedEntry { Get-Content (Join-Path $PSScriptRoot 'data.txt') }",
+                "scoped path" => "function Get-SharedEntry { $local:PSScriptRoot }",
+                "computed local alias" => "function Get-PrivateAliasTarget { 'donor' }; function Get-SharedEntry { $name = 'Get-PrivateAliasTarget'; Set-Alias Get-Date $name; Get-Date }",
+                "forward parameter default" => "$SharedValue = 'donor'; function Get-SharedEntry { param($other=$SharedValue, $SharedValue='local') $other }",
+                "function header default" => "$SharedValue = 'donor'; function Get-SharedEntry($other=$SharedValue) { $other }",
+                "module state in callback" => "$SharedValue = 'donor'; function Get-SharedEntry { 1 | ForEach-Object { $SharedValue } }",
+                "escaping callback" => "$SharedValue = 'donor'; function Get-SharedEntry { param($SharedValue='local') { $SharedValue } }",
+                "removed local binding" => "$SharedValue = 'donor'; function Get-SharedEntry { param($SharedValue='local') Remove-Variable SharedValue; 1 | ForEach-Object { $SharedValue } }",
+                "provider removal" => "$SharedValue = 'donor'; function Get-SharedEntry { param($SharedValue='local') . Remove-Item -LiteralPath Variable:SharedValue; $SharedValue }",
+                "conditional alias" => "function Get-PrivateAliasTarget { 'donor' }; function Get-SharedEntry { Set-Alias Get-Date Get-PrivateAliasTarget -wi; Get-Date }",
+                "shared consumer alias" => "function Get-SharedEntry { Set-Alias LocalDate Get-Date; (LocalDate) -is [datetime] }",
+                "local alias cycle" => "function Get-SharedEntry { Set-Alias FirstAlias SecondAlias; Set-Alias SecondAlias FirstAlias; FirstAlias }",
+                "script removal" => "function Get-SharedEntry { Remove-Variable -Name SharedValue -Scope Script }",
+                "global removal" => "function Get-SharedEntry { Remove-Variable -Name SharedValue -Scope Global }",
+                "script variable cmdlet" => "$SharedValue = 'donor'; function Get-SharedEntry { Get-Variable -Name SharedValue -Scope Script -ValueOnly }",
+                "ambient variable lookup" => "$SharedValue = 'donor'; function Get-SharedEntry { Get-Variable -Name SharedValue -ValueOnly }",
+                "conditional local setter" => "$SharedValue = 'donor'; function Get-SharedEntry { if ($false) { Microsoft.PowerShell.Utility\\Set-Variable SharedValue 'local' -Scope Local }; $SharedValue }",
+                "retained alias lookup" => "function Get-SharedEntry { 'donor' }; Set-Alias SharedAlias Get-SharedEntry",
+                "escaped nested function" => "$SharedValue = 'donor'; function Get-SharedEntry { param($SharedValue='local') function Get-Nested { $SharedValue }; Get-Nested; ${function:Get-Nested} }",
+                _ => "function Get-SharedHelper { 'donor' }; function Get-SharedEntry { Get-SharedHelper }"
+            };
+            if (scenario != "unbound runtime import")
+            {
+                var aliasExport = scenario == "retained alias lookup" ? " -Alias SharedAlias" : string.Empty;
+                WriteModule(installed, "SharedHelpers", donor + "; Export-ModuleMember -Function Get-SharedEntry" + aliasExport);
+            }
+            string consumer = scenario switch
+            {
+                "consumer function" =>
+                    "function Get-SharedHelper { 'consumer' }; function Get-ConsumerThing { Get-SharedHelper; Get-SharedEntry }",
+                "nested script alias" =>
+                    "function Get-LocalEntry { 'consumer' }; function Initialize-SharedAliases { Set-Alias Get-SharedHelper Get-LocalEntry -Scope Script }; Initialize-SharedAliases; function Get-ConsumerThing { Get-SharedEntry }",
+                "shared consumer alias" => "Set-Alias LocalDate Get-Item -Option AllScope; function Get-ConsumerThing { Get-SharedEntry }",
+                "computed consumer alias" =>
+                    "function Get-LocalEntry { [Alias(('Get-' + 'SharedAlias'))] param() 'consumer' }; function Get-ConsumerThing { Get-SharedAlias; Get-SharedEntry }",
+                "consumer cmdlet" => "function Get-ConsumerThing { Get-Date | Out-Null; Get-SharedEntry }",
+                "qualified call" => "function Get-ConsumerThing { SharedHelpers\\Get-SharedEntry }",
+                "dynamic call" => "function Get-ConsumerThing { $name = 'Get-SharedEntry'; & $name }",
+                "unbound runtime import" => "function Get-ConsumerThing { Import-Module SharedHelpers }",
+                "sibling donor" => "function Get-ConsumerThing { Get-SharedEntry; Get-SiblingEntry }",
+                _ => "function Get-ConsumerThing { Get-SharedEntry }"
+            };
+            WriteModule(root, "source", consumer + "; Export-ModuleMember -Function Get-ConsumerThing");
+            if (scenario == "retained alias lookup")
+            {
+                string hook = Path.Combine(root, "source", "BeforeImport.ps1");
+                File.WriteAllText(hook, "$null = Get-Alias SharedAlias -ErrorAction Stop");
+                Assert.True(ManifestEditor.TrySetTopLevelStringArray(
+                    Path.Combine(root, "source", "source.psd1"), "ScriptsToProcess", new[] { "BeforeImport.ps1" }));
+            }
+            if (scenario is "authored root without merging" or "unloaded configured function")
+            {
+                string custom = Path.Combine(root, "source", "Custom");
+                Directory.CreateDirectory(custom);
+                var name = scenario == "unloaded configured function" ? "Get-SharedEntry" : "Get-Unrelated";
+                File.WriteAllText(Path.Combine(custom, "Helper.ps1"), "function " + name + " { 'helper' }");
+            }
+            if (scenario == "regenerated loader")
+            {
+                string publicScripts = Path.Combine(root, "source", "Public");
+                Directory.CreateDirectory(publicScripts);
+                File.WriteAllText(Path.Combine(publicScripts, "Get-ConsumerThing.ps1"), consumer);
+            }
+            if (scenario == "sibling donor")
+                WriteModule(installed, "SiblingHelpers",
+                    "function Get-SharedHelper { 'sibling' }; function Get-SiblingEntry { Get-SharedHelper }; Export-ModuleMember -Function Get-SiblingEntry");
+            if (scenario == "relative file")
+                File.WriteAllText(Path.Combine(installed, "SharedHelpers", "data.txt"), "donor asset");
+
+            string packed = Path.Combine(root, "packed");
+            var segments = new List<IConfigurationSegment>
+            {
+                new ConfigurationBuildSegment
+                {
+                    BuildModule = new BuildModuleConfiguration
+                    {
+                        Merge = scenario is not ("merge disabled" or "authored root without merging" or "unloaded configured function" or "regenerated loader"),
+                        MergeMissing = scenario is not ("merge disabled" or "authored root without merging" or "unloaded configured function"),
+                    }
+                },
+                new ConfigurationArtefactSegment { ArtefactType = ArtefactType.Packed, Configuration = new ArtefactConfiguration { Enabled = true, Path = packed } }
+            };
+            if (scenario is "authored root without merging" or "unloaded configured function")
+            {
+                segments.Add(new ConfigurationInformationSegment
+                {
+                    Configuration = new InformationConfiguration { IncludePS1 = new[] { "Custom" } }
+                });
+            }
+            foreach (string name in scenario == "sibling donor" ? new[] { "SharedHelpers", "SiblingHelpers" } : new[] { "SharedHelpers" })
+            {
+                segments.Add(new ConfigurationModuleSegment
+                {
+                    Kind = ModuleDependencyKind.ApprovedModule,
+                    Configuration = new ModuleDependencyConfiguration { ModuleName = name, VersionSource = ModuleDependencyVersionSource.Installed }
+                });
+            }
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec { Name = "source", SourcePath = Path.Combine(root, "source"), Version = "1.0.0" },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = segments.ToArray()
+            };
+            var runner = new ModulePipelineRunner(new NullLogger(), powerShellRunner: null,
+                moduleDependencyMetadataProvider: new FixtureMetadataProvider(installed),
+                missingFunctionAnalysisService: new PowerShellMissingFunctionAnalysisService());
+
+            var error = Assert.Throws<InvalidOperationException>(() => runner.Run(spec, runner.Plan(spec)));
+            Assert.Contains("SharedHelpers", error.Message);
+            Assert.Contains(commandOrModule, error.Message);
+            Assert.Contains(reason, error.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.False(File.Exists(Path.Combine(packed, "source.zip")));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
 
     [Fact]
     public void Analyze_PrunesApprovedDependencyWhoseHelperIsAlreadyLocal()
@@ -462,7 +669,8 @@ public sealed class ApprovedModuleDependencyPruningTests
             => GetLatestInstalledModules(references.Select(reference => reference.ModuleName).ToArray());
 
         public IReadOnlyDictionary<string, InstalledModuleMetadata> GetLatestInstalledModules(IReadOnlyList<string> names)
-            => names.ToDictionary(name => name, name => new InstalledModuleMetadata(name, "1.0.0", null, Path.Combine(modulesRoot, name)), StringComparer.OrdinalIgnoreCase);
+            => names.Where(name => Directory.Exists(Path.Combine(modulesRoot, name)))
+                .ToDictionary(name => name, name => new InstalledModuleMetadata(name, "1.0.0", null, Path.Combine(modulesRoot, name)), StringComparer.OrdinalIgnoreCase);
 
         public IReadOnlyList<RequiredModuleReference> GetRequiredModulesForInstalledModule(string moduleName)
             => Array.Empty<RequiredModuleReference>();

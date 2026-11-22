@@ -174,7 +174,7 @@ try {
 
             var created = new ModuleScopeSession(
                 runspace,
-                imported.ModuleBase,
+                imported,
                 imported.ExportedCommands.Keys,
                 HasNonFunctionRuntimeSurface(imported));
             _moduleScopeSessions[key] = created;
@@ -296,18 +296,20 @@ try {
     private sealed class ModuleScopeSession
     {
         internal Runspace Runspace { get; }
-        internal string ModuleBase { get; }
+        internal PSModuleInfo Module { get; }
+        internal string ModuleBase => Module.ModuleBase;
+        internal HashSet<string>? ScriptVariableNames { get; set; }
         internal HashSet<string> ExportedCommandNames { get; }
         internal bool HasNonFunctionRuntimeSurface { get; }
 
         internal ModuleScopeSession(
             Runspace runspace,
-            string moduleBase,
+            PSModuleInfo module,
             IEnumerable<string> exportedCommandNames,
             bool hasNonFunctionRuntimeSurface)
         {
             Runspace = runspace;
-            ModuleBase = moduleBase;
+            Module = module;
             HasNonFunctionRuntimeSurface = hasNonFunctionRuntimeSurface;
             ExportedCommandNames = new HashSet<string>(
                 exportedCommandNames ?? Array.Empty<string>(),

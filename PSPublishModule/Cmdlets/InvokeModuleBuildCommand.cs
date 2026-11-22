@@ -589,8 +589,9 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
                 runInteractive: (spec, plan, configLabel) =>
                 {
                     interactiveLogger = new CmdletWarningLogger(this, outputLogger);
+                    var runner = new ModulePipelineRunner(interactiveLogger);
                     return ModulePipelineConsoleUi.RunInteractive(
-                        runner: new ModulePipelineRunner(interactiveLogger), spec: spec, plan: plan, configLabel: configLabel);
+                        plan, configLabel, progress => runner.Run(spec, plan, progress));
                 },
                 writeSummary: Quiet.IsPresent ? null : ModulePipelineSummary.Write)
                 .Execute(preparation, interactive, preparation.ConfigLabel);

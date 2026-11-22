@@ -24,6 +24,10 @@ public sealed class MissingFunctionAnalysisResult
     /// </summary>
     public string[] FullyInlinedApprovedModules { get; }
 
+    internal string[]? ApprovedModulesUnusedInInput { get; set; }
+
+    internal string[] ApprovedModuleMergeErrors { get; set; } = System.Array.Empty<string>();
+
     /// <summary>
     /// Creates a new <see cref="MissingFunctionAnalysisResult"/> instance.
     /// </summary>
