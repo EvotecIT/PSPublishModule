@@ -360,6 +360,67 @@ public sealed partial class PowerForgeReleaseServiceTests
         }
     }
 
+    [Theory]
+    [InlineData("PowerForgeWeb", "linux-x64", false)]
+    [InlineData("PowerForge", "osx-arm64", false)]
+    [InlineData("PowerForgeWeb", "linux-x64", true)]
+    [InlineData("PowerForge", "osx-arm64", true)]
+    public void Execute_ConfiguredNativeArchivesFollowTheSelectedStandaloneTool(string target, string runtime, bool explicitArchiveRoot)
+    {
+        using var root = new TemporaryDirectory();
+        var service = CreateService(_ => new PowerForgeToolReleasePlan
+        {
+            ProjectRoot = root.Path,
+            Targets =
+            [
+                new PowerForgeToolReleaseTargetPlan
+                {
+                    Name = target,
+                    Version = "3.0.110",
+                    Combinations =
+                    [
+                        new PowerForgeToolReleaseCombinationPlan
+                        {
+                            Runtime = runtime,
+                            Framework = "net10.0",
+                            Flavor = PowerForgeToolReleaseFlavor.SingleContained
+                        }
+                    ]
+                }
+            ]
+        });
+        var spec = new PowerForgeReleaseSpec
+        {
+            Tools = new PowerForgeToolReleaseSpec
+            {
+                Targets = [new PowerForgeToolReleaseTarget { Name = target }]
+            },
+            Outputs = new PowerForgeReleaseOutputsOptions
+            {
+                NativePowerForgeArchivePaths = new() { ["linux-x64"] = "missing-linux-archive.zip" }
+            }
+        };
+        var request = new PowerForgeReleaseRequest
+        {
+            ConfigPath = Path.Combine(root.Path, "release.json"),
+            Targets = [target],
+            ToolsOnly = true,
+            PlanOnly = true,
+            NativeArchiveRoot = explicitArchiveRoot ? root.Path : null
+        };
+
+        if (explicitArchiveRoot)
+        {
+            Assert.Throws<ArgumentException>(() => service.Execute(spec, request));
+            return;
+        }
+
+        var result = service.Execute(spec, request);
+
+        Assert.True(result.Success, result.ErrorMessage);
+        Assert.Equal(runtime, Assert.Single(Assert.Single(result.ToolPlan!.Targets).Combinations).Runtime);
+    }
+
     [Fact]
     public void Execute_DotNetPublishWritesConsumerToolManifest()
     {

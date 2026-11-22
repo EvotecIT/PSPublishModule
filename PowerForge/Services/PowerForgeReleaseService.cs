@@ -545,25 +545,45 @@ internal sealed partial class PowerForgeReleaseService
 
         PowerForgeToolReleasePlan? preparedNativeToolPlan = null;
         PowerForgeReleaseAssetEntry[] nativeArchives = Array.Empty<PowerForgeReleaseAssetEntry>();
-        if (!string.IsNullOrWhiteSpace(request.NativeArchiveRoot) || spec.Outputs?.NativePowerForgeArchivePaths?.Count > 0)
+        var explicitNativeArchives = !string.IsNullOrWhiteSpace(request.NativeArchiveRoot);
+        var nativeToolLaneSelected = willRunTools &&
+                                     selectedToolOutputs.Contains(PowerForgeReleaseToolOutputKind.Tool) &&
+                                     !UsesDotNetToolWorkflow(spec.Tools!) &&
+                                     (selectedTargets.Length == 0 ||
+                                      toolTargetMatches.Contains("PowerForge", StringComparer.OrdinalIgnoreCase));
+        if (explicitNativeArchives && !nativeToolLaneSelected)
+            throw new ArgumentException("Native archives require the standalone PowerForge tool output.");
+
+        if (nativeToolLaneSelected && (explicitNativeArchives || spec.Outputs?.NativePowerForgeArchivePaths?.Count > 0))
         {
-            if (result.PublishesFromSelectedLanes)
-                throw new ArgumentException("Native PowerForge archives can only be staged in a build without publishing.");
-
-            if (!willRunTools || !selectedToolOutputs.Contains(PowerForgeReleaseToolOutputKind.Tool) ||
-                UsesDotNetToolWorkflow(spec.Tools!) || ((runModule || runPackages) && !coordinateModuleAndPackageVersions))
-            {
-                throw new ArgumentException(
-                    "Native archives require a standalone PowerForge tool-only plan or a module-and-package plan with a shared version resolved before building.");
-            }
-
             var legacyTargets = GetSectionSelectedTargets(selectedTargets, toolTargetMatches, runAppleApps, appleTargetMatches);
-            preparedNativeToolPlan = WithRequestTargets(request, legacyTargets, () => _planTools(spec.Tools!, configPath, request));
-            var powerForgeTarget = preparedNativeToolPlan.Targets.SingleOrDefault(target =>
-                target.Name.Equals("PowerForge", StringComparison.OrdinalIgnoreCase)) ??
+            var plan = WithRequestTargets(request, legacyTargets, () => _planTools(spec.Tools!, configPath, request));
+            var powerForgeTarget = plan.Targets.SingleOrDefault(target =>
+                target.Name.Equals("PowerForge", StringComparison.OrdinalIgnoreCase));
+            if (explicitNativeArchives && powerForgeTarget is null)
                 throw new ArgumentException("Native archives require the PowerForge tool target.");
-            nativeArchives = ResolveNativePowerForgeArchives(spec, configDirectory, powerForgeTarget,
-                request.NativeArchiveRoot, temporaryReleaseDirectory);
+
+            if (powerForgeTarget is not null)
+            {
+                var inputs = SelectNativePowerForgeArchives(spec, powerForgeTarget, request.NativeArchiveRoot);
+                if (explicitNativeArchives && inputs.Length == 0)
+                    throw new ArgumentException("The PowerForge tool plan has no matching native standalone archive combinations.");
+
+                if (inputs.Length > 0)
+                {
+                    if (result.PublishesFromSelectedLanes)
+                        throw new ArgumentException("Native PowerForge archives can only be staged in a build without publishing.");
+                    if ((runModule || runPackages) && !coordinateModuleAndPackageVersions)
+                    {
+                        throw new ArgumentException(
+                            "Native archives require a standalone PowerForge tool-only plan or a module-and-package plan with a shared version resolved before building.");
+                    }
+
+                    nativeArchives = ResolveNativePowerForgeArchives(spec, configDirectory, powerForgeTarget,
+                        inputs, temporaryReleaseDirectory);
+                    preparedNativeToolPlan = plan;
+                }
+            }
         }
 
         if (runModule)

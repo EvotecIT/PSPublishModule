@@ -22,27 +22,31 @@ internal sealed partial class PowerForgeReleaseService
         }
     }
 
-    private static PowerForgeReleaseAssetEntry[] ResolveNativePowerForgeArchives(
-        PowerForgeReleaseSpec spec,
-        string configDirectory,
-        PowerForgeToolReleaseTargetPlan target,
-        string? archiveRoot,
-        TemporaryReleaseDirectory temporaryReleaseDirectory)
+    private static KeyValuePair<string, string>[] SelectNativePowerForgeArchives(
+        PowerForgeReleaseSpec spec, PowerForgeToolReleaseTargetPlan target, string? archiveRoot)
     {
-        var version = target.Version;
-        if (string.IsNullOrWhiteSpace(spec.Outputs?.PowerForgeToolManifestPath) ||
-            !Regex.IsMatch(version, "^\\d+\\.\\d+\\.\\d+$", RegexOptions.CultureInvariant))
-            throw new InvalidOperationException("Native PowerForge archives require a tool manifest and an exact release version.");
-
         var eligibleRuntimes = target.Combinations.Where(combination =>
                 combination.Framework.Equals("net10.0", StringComparison.OrdinalIgnoreCase) &&
                 IsStandalonePowerForgeArtifactStyle(combination.Flavor.ToString()))
             .Select(combination => combination.Runtime.ToLowerInvariant())
             .Where(runtime => runtime is "win-x64" or "linux-x64").Distinct().ToArray();
-        var inputs = string.IsNullOrWhiteSpace(archiveRoot)
-            ? spec.Outputs!.NativePowerForgeArchivePaths.Where(pair => eligibleRuntimes.Contains(pair.Key, StringComparer.OrdinalIgnoreCase))
+        return string.IsNullOrWhiteSpace(archiveRoot)
+            ? spec.Outputs!.NativePowerForgeArchivePaths.Where(pair => eligibleRuntimes.Contains(pair.Key, StringComparer.OrdinalIgnoreCase)).ToArray()
             : eligibleRuntimes.Select(rid => new KeyValuePair<string, string>(rid,
-                Path.Combine(archiveRoot!, $"PowerForgeNative-{version}-{rid}.zip")));
+                Path.Combine(archiveRoot!, $"PowerForgeNative-{target.Version}-{rid}.zip"))).ToArray();
+    }
+
+    private static PowerForgeReleaseAssetEntry[] ResolveNativePowerForgeArchives(
+        PowerForgeReleaseSpec spec,
+        string configDirectory,
+        PowerForgeToolReleaseTargetPlan target,
+        KeyValuePair<string, string>[] inputs,
+        TemporaryReleaseDirectory temporaryReleaseDirectory)
+    {
+        var version = target.Version;
+        if (string.IsNullOrWhiteSpace(spec.Outputs?.PowerForgeToolManifestPath) ||
+            !Regex.IsMatch(version, @"^\d+\.\d+\.\d+$", RegexOptions.CultureInvariant))
+            throw new InvalidOperationException("Native PowerForge archives require a tool manifest and an exact release version.");
 
         var archives = inputs.Select(pair =>
         {
@@ -88,8 +92,6 @@ internal sealed partial class PowerForgeReleaseService
                 StagedSha256 = ComputeSha256(path)
             };
         }).ToArray();
-        if (archives.Length == 0)
-            throw new ArgumentException("The PowerForge tool plan has no matching native standalone archive combinations.");
         return archives;
     }
 
