@@ -11,6 +11,7 @@ $proofPath = Get-BenchmarkInput PackageProofPath
 $workRoot = Get-BenchmarkInput WorkRoot
 $outputRoot = Get-BenchmarkInput OutputRoot
 $processorSet = Get-BenchmarkInput ProcessorSet 'Host default'
+$baseline = Get-BenchmarkInput ComparisonBaseline $(if ($psResourceGet) { 'PowerForge' } else { 'ModuleFast' })
 
 foreach ($path in @($powerForge, $moduleFast, $proofPath)) {
     if (-not $path -or -not (Test-Path -LiteralPath $path -PathType Leaf)) {
@@ -52,7 +53,7 @@ New-BenchmarkSuite 'managed-module-cli' -OutputRoot $outputRoot {
     Add-BenchmarkSkipRule {
         param($case)
         ($case.Action -and $case.Engine -eq 'ModuleFast') -or
-            ($case.Scenario -eq 'FirstBundleUse' -and $case.Engine -eq 'PSResourceGet')
+            ($case.Scenario -eq 'FirstBundleUse' -and ($case.Engine -eq 'PSResourceGet' -or $baseline -eq 'PSResourceGet'))
     }
 
     Set-BenchmarkSetup {
@@ -118,14 +119,19 @@ New-BenchmarkSuite 'managed-module-cli' -OutputRoot $outputRoot {
         param($case, $run)
 
         [string[]] $arguments = @($run.Arguments)
-        if ($case.Engine -eq 'PSResourceGet') {
-            $environment = @('-u', 'PSModulePath', "HOME=$($run.IsolatedHome)", "XDG_DATA_HOME=$($run.Data)",
-                "XDG_CACHE_HOME=$($run.Scratch)/cache", "XDG_CONFIG_HOME=$($run.Scratch)/config")
-            & /usr/bin/env @environment $run.Executable @arguments > $run.Log 2>&1
-        } else {
-            & /usr/bin/env -u PSModulePath 'PATH=/nonexistent' "DOTNET_BUNDLE_EXTRACT_BASE_DIR=$($run.BundleRoot)" $run.Executable @arguments > $run.Log 2>&1
+        try {
+            if ($case.Engine -eq 'PSResourceGet') {
+                $environment = @('-u', 'PSModulePath', "HOME=$($run.IsolatedHome)", "XDG_DATA_HOME=$($run.Data)",
+                    "XDG_CACHE_HOME=$($run.Scratch)/cache", "XDG_CONFIG_HOME=$($run.Scratch)/config")
+                & /usr/bin/env @environment $run.Executable @arguments > $run.Log 2>&1
+            } else {
+                & /usr/bin/env -u PSModulePath 'PATH=/nonexistent' "DOTNET_BUNDLE_EXTRACT_BASE_DIR=$($run.BundleRoot)" $run.Executable @arguments > $run.Log 2>&1
+            }
+            $run.ExitCode = $LASTEXITCODE
+        } catch {
+            $diagnostics = Get-Content -LiteralPath $run.Log -Raw -ErrorAction SilentlyContinue
+            throw "$($case.Engine) failed: $diagnostics `n$_"
         }
-        $run.ExitCode = $LASTEXITCODE
     }
 
     Add-BenchmarkEngine PowerForge {
@@ -188,7 +194,6 @@ New-BenchmarkSuite 'managed-module-cli' -OutputRoot $outputRoot {
         }
     }
 
-    $baseline = Get-BenchmarkInput ComparisonBaseline $(if ($psResourceGet) { 'PowerForge' } else { 'ModuleFast' })
     Add-BenchmarkComparison Engine -Baseline $baseline -Metric MedianMs
     Set-BenchmarkArtifacts Json, Csv, Markdown
 }

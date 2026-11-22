@@ -352,7 +352,17 @@ internal sealed class ModuleRepositoryProfileStore
     private IDisposable AcquireWriteLock()
     {
         Directory.CreateDirectory(System.IO.Path.GetDirectoryName(_path)!);
-        return ManagedModuleInstallLock.AcquireFile(_path + ".lock", CancellationToken.None);
+        var lockPath = _path + ".lock";
+        RejectLinkedFile(_path);
+        RejectLinkedFile(lockPath);
+        return ManagedModuleInstallLock.AcquireFile(lockPath, CancellationToken.None, writeMarker: false);
+    }
+
+    private static void RejectLinkedFile(string path)
+    {
+        var attributes = new FileInfo(path).Attributes;
+        if (attributes != (FileAttributes)(-1) && (attributes & FileAttributes.ReparsePoint) != 0)
+            throw new IOException($"Repository profiles cannot be changed through a symbolic link: {path}");
     }
 
     private ModuleRepositoryProfileDocument ReadDocument(bool forWrite = false)

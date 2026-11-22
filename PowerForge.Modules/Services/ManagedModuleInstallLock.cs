@@ -22,7 +22,7 @@ internal sealed class ManagedModuleInstallLock : IDisposable
         return AcquireFile(System.IO.Path.Combine(lockDirectory, Sanitize(moduleName) + ".lock"), cancellationToken);
     }
 
-    internal static ManagedModuleInstallLock AcquireFile(string lockPath, CancellationToken cancellationToken)
+    internal static ManagedModuleInstallLock AcquireFile(string lockPath, CancellationToken cancellationToken, bool writeMarker = true)
     {
         var deadline = DateTimeOffset.UtcNow.Add(Timeout);
 
@@ -32,6 +32,8 @@ internal sealed class ManagedModuleInstallLock : IDisposable
             try
             {
                 var stream = new FileStream(lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+                if (!writeMarker)
+                    return new ManagedModuleInstallLock(lockPath, stream);
                 try
                 {
                     stream.SetLength(0);

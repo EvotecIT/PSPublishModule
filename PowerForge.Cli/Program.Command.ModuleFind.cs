@@ -5,7 +5,7 @@ using PowerForge.Cli;
 internal static partial class Program
 {
     private const string ModuleFindUsage =
-        "Usage: powerforge module find --name <id-or-pattern> [--source <feed-url-or-folder>] [--version <exact-version>] [--prerelease] [--limit <count>] [--output json]";
+        "Usage: powerforge module find --name <id-or-pattern> [--source <feed-url-or-folder> | --profile <name>] [--version <exact-version>] [--prerelease] [--limit <count>] [--output json]";
 
     private static int FindModules(string[] args, ILogger logger, BufferedLogger? logBuffer, bool outputJson,
         CancellationToken cancellationToken)

@@ -5,7 +5,7 @@ using PowerForge.Cli;
 internal static partial class Program
 {
     private const string ModuleRestoreUsage =
-        "Usage: powerforge module restore --requirements <modules.json> --lock-file <modules.lock.json> --destination <directory> [--source <feed-url-or-folder>] [--write-lock] [--plan] [--accept-license] [--allow-clobber] [--output json]";
+        "Usage: powerforge module restore --requirements <modules.json> --lock-file <modules.lock.json> --destination <directory> [--source <feed-url-or-folder> | --profile <name>] [--write-lock] [--plan] [--accept-license] [--allow-clobber] [--output json]";
 
     private static bool IsModuleAction(string action) => action is "install" or "restore" or "manifest" or "find" or "save" or "update" or "uninstall" or "pack" or "list" or "repository";
 
