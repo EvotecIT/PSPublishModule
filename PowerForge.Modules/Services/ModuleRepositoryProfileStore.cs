@@ -83,8 +83,25 @@ internal sealed class ModuleRepositoryProfileStore
     {
         if (profile is null) throw new ArgumentNullException(nameof(profile));
 
+        using var writeLock = AcquireWriteLock();
+        return SaveProfile(ReadDocument(forWrite: true), profile);
+    }
+
+    internal ModuleRepositoryProfile UpdateProfile(string name, Action<ModuleRepositoryProfile> update)
+    {
+        var normalizedName = NormalizeName(name);
+        using var writeLock = AcquireWriteLock();
+        var document = ReadDocument(forWrite: true);
+        var profile = document.Profiles.FirstOrDefault(item =>
+            item is not null && string.Equals(item.Name, normalizedName, StringComparison.OrdinalIgnoreCase))
+            ?? throw new InvalidOperationException($"Repository profile '{name}' was not found in the {_scope} store.");
+        update(profile);
+        return SaveProfile(document, profile);
+    }
+
+    private ModuleRepositoryProfile SaveProfile(ModuleRepositoryProfileDocument document, ModuleRepositoryProfile profile)
+    {
         var normalized = Normalize(profile);
-        var document = ReadDocument();
         var profiles = document.Profiles
             .Where(existing => existing is not null && !string.IsNullOrWhiteSpace(existing.Name))
             .Where(existing => !string.Equals(existing.Name, normalized.Name, StringComparison.OrdinalIgnoreCase))
@@ -106,23 +123,26 @@ internal sealed class ModuleRepositoryProfileStore
         return normalized;
     }
 
-    public bool RemoveProfile(string name)
+    public bool RemoveProfile(string name) => RemoveProfileAndRead(name) is not null;
+
+    internal ModuleRepositoryProfile? RemoveProfileAndRead(string name)
     {
         var normalizedName = NormalizeName(name);
-        var document = ReadDocument();
+        using var writeLock = AcquireWriteLock();
+        var document = ReadDocument(forWrite: true);
         var existing = document.Profiles
             .Where(static profile => profile is not null && !string.IsNullOrWhiteSpace(profile.Name))
             .ToArray();
-        var kept = existing
+        var removed = existing.FirstOrDefault(profile =>
+            string.Equals(profile.Name, normalizedName, StringComparison.OrdinalIgnoreCase));
+        if (removed is null)
+            return null;
+
+        document.Profiles = existing
             .Where(profile => !string.Equals(profile.Name, normalizedName, StringComparison.OrdinalIgnoreCase))
             .ToArray();
-
-        if (kept.Length == existing.Length)
-            return false;
-
-        document.Profiles = kept;
         WriteDocument(document);
-        return true;
+        return removed;
     }
 
     public ModuleRepositoryProfile[] ImportProfiles(IEnumerable<ModuleRepositoryProfile> profiles, bool overwrite)
@@ -137,7 +157,8 @@ internal sealed class ModuleRepositoryProfileStore
         if (normalizedProfiles.Length == 0)
             return Array.Empty<ModuleRepositoryProfile>();
 
-        var document = ReadDocument();
+        using var writeLock = AcquireWriteLock();
+        var document = ReadDocument(forWrite: true);
         var existingProfiles = document.Profiles
             .Where(static profile => profile is not null && !string.IsNullOrWhiteSpace(profile.Name))
             .Select(Normalize)
@@ -189,6 +210,7 @@ internal sealed class ModuleRepositoryProfileStore
             profile.UpdatedAtUtc = now;
         }
 
+        using var writeLock = AcquireWriteLock();
         WriteDocument(new ModuleRepositoryProfileDocument
         {
             Profiles = normalizedProfiles
@@ -327,12 +349,20 @@ internal sealed class ModuleRepositoryProfileStore
         return name.Trim();
     }
 
-    private ModuleRepositoryProfileDocument ReadDocument()
+    private IDisposable AcquireWriteLock()
+    {
+        Directory.CreateDirectory(System.IO.Path.GetDirectoryName(_path)!);
+        return ManagedModuleInstallLock.AcquireFile(_path + ".lock", CancellationToken.None);
+    }
+
+    private ModuleRepositoryProfileDocument ReadDocument(bool forWrite = false)
     {
         if (!File.Exists(_path))
             return new ModuleRepositoryProfileDocument();
 
-        var json = File.ReadAllText(_path);
+        using var stream = new FileStream(_path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
+        using var reader = new StreamReader(stream);
+        var json = reader.ReadToEnd();
         if (string.IsNullOrWhiteSpace(json))
             return new ModuleRepositoryProfileDocument();
 
@@ -340,7 +370,7 @@ internal sealed class ModuleRepositoryProfileStore
         {
             return NormalizeDocument(JsonSerializer.Deserialize(json, ModuleRepositoryProfileJson.Default.ModuleRepositoryProfileDocument));
         }
-        catch (JsonException)
+        catch (JsonException) when (!forWrite)
         {
             return new ModuleRepositoryProfileDocument();
         }
@@ -363,7 +393,19 @@ internal sealed class ModuleRepositoryProfileStore
             Directory.CreateDirectory(directory!);
 
         var json = JsonSerializer.Serialize(document, ModuleRepositoryProfileJson.Default.ModuleRepositoryProfileDocument) + Environment.NewLine;
-        File.WriteAllText(path, json);
+        var temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        try
+        {
+            File.WriteAllText(temporary, json);
+            if (File.Exists(path))
+                File.Replace(temporary, path, null);
+            else
+                File.Move(temporary, path);
+        }
+        finally
+        {
+            File.Delete(temporary);
+        }
     }
 
     internal static ModuleRepositoryProfileStore[] GetStores(ModuleRepositoryProfileScope scope)

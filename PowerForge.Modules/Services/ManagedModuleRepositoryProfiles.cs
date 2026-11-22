@@ -47,23 +47,27 @@ public static class ManagedModuleRepositoryProfiles
         ModuleRepositoryProfileScope scope = ModuleRepositoryProfileScope.User)
     {
         var store = new ModuleRepositoryProfileStore(scope);
-        var profile = store.GetProfile(name)
-            ?? throw new InvalidOperationException($"Repository profile '{name}' was not found in the {scope} store.");
-        if (source is not null)
+        var updated = store.UpdateProfile(name, profile =>
         {
-            if (profile.Provider != PrivateGalleryProvider.NuGet)
-                throw new InvalidOperationException("Change provider-specific endpoints with Set-ManagedModuleRepository.");
-            var previousSource = profile.ReadSource;
-            var replacement = ManagedModuleStandaloneInput.ResolveRepository(source, name).Source;
-            profile.RepositoryUri = replacement;
-            // Preserve independently configured read and publish endpoints.
-            if (string.Equals(profile.RepositorySourceUri, previousSource, StringComparison.OrdinalIgnoreCase))
-                profile.RepositorySourceUri = replacement;
-            if (string.Equals(profile.RepositoryPublishUri, previousSource, StringComparison.OrdinalIgnoreCase))
-                profile.RepositoryPublishUri = replacement;
-        }
-        profile.Trusted = trusted ?? profile.Trusted;
-        return Describe(store.SaveProfile(profile), scope);
+            if (source is not null)
+                ChangeSource(profile, name, source);
+            profile.Trusted = trusted ?? profile.Trusted;
+        });
+        return Describe(updated, scope);
+    }
+
+    private static void ChangeSource(ModuleRepositoryProfile profile, string name, string source)
+    {
+        if (profile.Provider != PrivateGalleryProvider.NuGet)
+            throw new InvalidOperationException("Change provider-specific endpoints with Set-ManagedModuleRepository.");
+        var previousSource = profile.ReadSource;
+        var replacement = ManagedModuleStandaloneInput.ResolveRepository(source, name).Source;
+        profile.RepositoryUri = replacement;
+        // Preserve independently configured read and publish endpoints.
+        if (string.Equals(profile.RepositorySourceUri, previousSource, StringComparison.Ordinal))
+            profile.RepositorySourceUri = replacement;
+        if (string.Equals(profile.RepositoryPublishUri, previousSource, StringComparison.Ordinal))
+            profile.RepositoryPublishUri = replacement;
     }
 
     /// <summary>Removes a profile from the selected store.</summary>
@@ -74,9 +78,8 @@ public static class ManagedModuleRepositoryProfiles
         ModuleRepositoryProfileScope scope = ModuleRepositoryProfileScope.User)
     {
         var store = new ModuleRepositoryProfileStore(scope);
-        var profile = store.GetProfile(name);
-        if (profile is null || !store.RemoveProfile(name))
-            throw new InvalidOperationException($"Repository profile '{name}' was not found in the {scope} store.");
+        var profile = store.RemoveProfileAndRead(name)
+            ?? throw new InvalidOperationException($"Repository profile '{name}' was not found in the {scope} store.");
         return Describe(profile, scope);
     }
 

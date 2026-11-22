@@ -33,37 +33,47 @@ public sealed class ManagedModulePackService
         var manifestReferences = ResolveManifestFileReferences(manifestPath);
         var moduleFiles = EnumerateModuleFiles(modulePath, outputDirectory, packagePath, manifestReferences).ToArray();
 
-        if (File.Exists(packagePath))
-        {
-            if (!request.Force)
-                throw new IOException($"Package already exists: {packagePath}");
-
-            File.Delete(packagePath);
-        }
+        if (!request.Force && File.Exists(packagePath))
+            throw new IOException($"Package already exists: {packagePath}");
 
         var metadata = CreateNuspec(name, version, request, manifestPath, manifestText);
         var fileCount = 0;
-        using (var archive = ZipFile.Open(packagePath, ZipArchiveMode.Create))
+        var stagedPackage = Path.Combine(outputDirectory, ".powerforge-pack-" + Guid.NewGuid().ToString("N") + ".tmp");
+        long packageBytes;
+        try
         {
-            AddTextEntry(archive, $"{name}.nuspec", metadata.ToString(SaveOptions.DisableFormatting));
-            AddTextEntry(archive, "[Content_Types].xml", CreateContentTypes(moduleFiles));
-            var corePropertiesPath = $"package/services/metadata/core-properties/{name}.{version}.psmdcp";
-            AddTextEntry(archive, "_rels/.rels", CreateRelationships(name, corePropertiesPath));
-            AddTextEntry(archive, corePropertiesPath, CreateCoreProperties(name, version, request, manifestPath, manifestText).ToString(SaveOptions.DisableFormatting));
-
-            foreach (var file in moduleFiles)
+            using (var archive = ZipFile.Open(stagedPackage, ZipArchiveMode.Create))
             {
-                var relativePath = NormalizeRelativePath(modulePath, file);
+                AddTextEntry(archive, $"{name}.nuspec", metadata.ToString(SaveOptions.DisableFormatting));
+                AddTextEntry(archive, "[Content_Types].xml", CreateContentTypes(moduleFiles));
+                var corePropertiesPath = $"package/services/metadata/core-properties/{name}.{version}.psmdcp";
+                AddTextEntry(archive, "_rels/.rels", CreateRelationships(name, corePropertiesPath));
+                AddTextEntry(archive, corePropertiesPath, CreateCoreProperties(name, version, request, manifestPath, manifestText).ToString(SaveOptions.DisableFormatting));
+
+                foreach (var file in moduleFiles)
+                {
+                    var relativePath = NormalizeRelativePath(modulePath, file);
 #if NET6_0_OR_GREATER
-                var entry = archive.CreateEntry(relativePath, CompressionLevel.SmallestSize);
+                    var entry = archive.CreateEntry(relativePath, CompressionLevel.SmallestSize);
 #else
-                var entry = archive.CreateEntry(relativePath, CompressionLevel.Optimal);
+                    var entry = archive.CreateEntry(relativePath, CompressionLevel.Optimal);
 #endif
-                using var source = File.OpenRead(file);
-                using var destination = entry.Open();
-                source.CopyTo(destination);
-                fileCount++;
+                    using var source = File.OpenRead(file);
+                    using var destination = entry.Open();
+                    source.CopyTo(destination);
+                    fileCount++;
+                }
             }
+
+            packageBytes = new FileInfo(stagedPackage).Length;
+            if (request.Force && File.Exists(packagePath))
+                File.Replace(stagedPackage, packagePath, null);
+            else
+                File.Move(stagedPackage, packagePath);
+        }
+        finally
+        {
+            File.Delete(stagedPackage);
         }
 
         return new ManagedModulePackResult
@@ -74,7 +84,7 @@ public sealed class ManagedModulePackService
             ManifestPath = manifestPath,
             PackagePath = packagePath,
             FileCount = fileCount,
-            PackageBytes = new FileInfo(packagePath).Length
+            PackageBytes = packageBytes
         };
     }
 
@@ -327,6 +337,9 @@ public sealed class ManagedModulePackService
     {
         var fullPath = Path.GetFullPath(file);
         if (fullPath.Equals(Path.GetFullPath(packagePath), StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (Path.GetFileName(fullPath).StartsWith(".powerforge-pack-", StringComparison.Ordinal) &&
+            string.Equals(Path.GetExtension(fullPath), ".tmp", StringComparison.Ordinal))
             return true;
         var normalizedOutputDirectory = Path.GetFullPath(outputDirectory);
         if (IsSameDirectory(normalizedOutputDirectory, modulePath))

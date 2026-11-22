@@ -119,6 +119,8 @@ public sealed partial class ManagedModuleUninstallService
             return;
 
         EnsureModuleRootSpecified(plan.ModuleRoot);
+        foreach (var target in plan.Targets)
+            EnsureTargetUnderRoot(plan.ModuleRoot, target.ModulePath);
 
         if (!plan.AllowLoadedModuleUninstall)
             ThrowIfLoaded(plan.Targets);
@@ -157,9 +159,9 @@ public sealed partial class ManagedModuleUninstallService
     {
         var stopwatch = Stopwatch.StartNew();
         ManagedModulePackageIdentity.RequireSafeId(target.Name, nameof(target.Name));
-        EnsureTargetUnderRoot(plan.ModuleRoot, target.ModulePath);
         using (ManagedModuleInstallLock.Acquire(plan.ModuleRoot, target.Name, CancellationToken.None))
         {
+            EnsureTargetUnderRoot(plan.ModuleRoot, target.ModulePath);
             if (target.IsFlatLayout)
                 DeleteFlatModuleTarget(target);
             else
@@ -554,6 +556,13 @@ public sealed partial class ManagedModuleUninstallService
             !target.StartsWith(root + Path.AltDirectorySeparatorChar, PathStringComparison))
         {
             throw new InvalidOperationException($"Refusing to remove module path outside module root: {modulePath}");
+        }
+
+        // A version directory below a linked module directory can resolve outside the selected root.
+        for (var current = target; !string.Equals(current, root, PathStringComparison); current = Path.GetDirectoryName(current)!)
+        {
+            if ((File.GetAttributes(GetFileSystemPath(current)) & FileAttributes.ReparsePoint) != 0)
+                throw new InvalidOperationException($"Refusing to remove a module through a symbolic link or junction: {current}");
         }
     }
 

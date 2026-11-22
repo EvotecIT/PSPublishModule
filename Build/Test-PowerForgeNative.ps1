@@ -188,6 +188,13 @@ try {
     }
 
     $saveRoot = Join-Path $work 'saved packages'
+    $denied = Read-CommandResult -Executable $launcher -ExpectedExitCode 1 -Arguments @(
+        'module', 'save', 'PowerForgeNativeSmoke', '--version', '1.1.0', '--source', $feed.FullName,
+        '--destination', $saveRoot, '--as-nupkg', '--require-trusted-repository', '--output', 'json'
+    )
+    if ($denied.error -notmatch 'trust' -or (Test-Path -LiteralPath $saveRoot)) {
+        throw 'Native save did not enforce explicit repository trust before writing.'
+    }
     $saved = Read-CommandResult -Executable $launcher -Arguments @(
         'module', 'save', 'PowerForgeNativeSmoke', '--version', '1.1.0', '--profile', 'NativeSmoke',
         '--destination', $saveRoot, '--as-nupkg', '--require-trusted-repository', '--output', 'json'
@@ -218,6 +225,20 @@ try {
     $uninstallArgs = @(
         'module', 'uninstall', 'PowerForgeNativeSmoke', '--version', '1.0.0', '--destination', $install, '--output', 'json'
     )
+    $linkedRoot = New-Item -ItemType Directory -Path (Join-Path $work 'linked module root')
+    $linkPath = Join-Path $linkedRoot.FullName 'PowerForgeNativeSmoke'
+    $linkType = if ($IsWindows) { 'Junction' } else { 'SymbolicLink' }
+    $null = New-Item -ItemType $linkType -Path $linkPath -Target (Join-Path $install 'PowerForgeNativeSmoke')
+    try {
+        $linkedArgs = $uninstallArgs.Clone()
+        $linkedArgs[[Array]::IndexOf($linkedArgs, '--destination') + 1] = $linkedRoot.FullName
+        $linked = Read-CommandResult -Executable $launcher -Arguments $linkedArgs -ExpectedExitCode 1
+        if ($linked.error -notmatch 'symbolic link or junction' -or [IO.File]::ReadAllText($installedManifest) -ne $manifest) {
+            throw 'Native uninstall touched files outside the selected root through a linked directory.'
+        }
+    } finally {
+        [IO.Directory]::Delete($linkPath)
+    }
     $removalPlan = Read-CommandResult -Executable $launcher -Arguments ($uninstallArgs + '--plan')
     if ($removalPlan.result.targets.Count -ne 1 -or -not (Test-Path -LiteralPath $installedManifest)) {
         throw 'Native uninstall plan did not remain read-only or selected the wrong version.'

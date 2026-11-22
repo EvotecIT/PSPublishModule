@@ -68,8 +68,12 @@ internal static partial class Program
     private static ManagedModuleRepository ResolveModuleRepository(Dictionary<string, string?> options, string defaultName)
     {
         if (!options.TryGetValue("--profile", out var name))
-            return ManagedModuleStandaloneInput.ResolveRepository(
+        {
+            var repository = ManagedModuleStandaloneInput.ResolveRepository(
                 options.GetValueOrDefault("--source") ?? ManagedModuleRestoreService.DefaultSource, defaultName);
+            var trusted = string.Equals(repository.Source, ManagedModuleRestoreService.DefaultSource, StringComparison.OrdinalIgnoreCase);
+            return new ManagedModuleRepository(repository.Name, repository.Source, repository.Kind, trusted);
+        }
         if (options.ContainsKey("--source"))
             throw new ArgumentException("Specify either --profile or --source.");
 
