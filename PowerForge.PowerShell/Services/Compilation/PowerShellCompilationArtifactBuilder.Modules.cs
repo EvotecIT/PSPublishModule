@@ -52,7 +52,9 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             spec.TargetFramework,
             verifyCopiedInput,
             snapshot,
-            retainedSourcePaths);
+            retainedSourcePaths.Concat((spec.RuntimeSourcePaths ?? Array.Empty<string>())
+                .Where(static path => !string.IsNullOrWhiteSpace(path))
+                .Select(static path => Path.GetFullPath(path.Trim().Trim('"')))));
         if (manifestFiles is not null)
         {
             var primaryManifest = manifestFiles[0].Path;

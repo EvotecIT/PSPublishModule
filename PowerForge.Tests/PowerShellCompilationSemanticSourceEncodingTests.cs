@@ -205,8 +205,9 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
             function Get-CompiledCount { return 21 }
             Export-ModuleMember -Function Get-ProfileValue, Get-CompiledCount
             """;
-        const string desktopScript = "function Get-ProfileValue { 'desktop'; [int][char]'é' }";
-        const string modernScript = "function Get-ProfileValue { 'modern'; [int][char]'é' }";
+        const string desktopScript = "function Get-ProfileValue { . \"$PSScriptRoot/Call-Helper.ps1\"; 'desktop'; [int][char]'é' }";
+        const string modernScript = "function Get-ProfileValue { . \"$PSScriptRoot/Call-Helper.ps1\"; 'modern'; [int][char]'é' }";
+        const string helperScript = "'helper'; [int][char]'é'";
         const string profile = PowerShellCompilationSemanticOracleCatalog.WindowsPowerShell51ProfileId;
         using var fixture = OracleFixture.Create(source);
         var moduleRoot = Path.Combine(fixture.RootPath, "authored");
@@ -214,8 +215,11 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
         var legacy = CodePagesEncodingProvider.Instance.GetEncoding(0) ?? Encoding.UTF8;
         var modernName = legacy.GetString(Encoding.Latin1.GetBytes("café.ps1"));
         var manifest = "@{ RootModule = 'Module.psm1'; ModuleVersion = '1.0.0'; FunctionsToExport = @('Get-*'); FileList = @('Desktop.ps1', '" +
-            System.Management.Automation.Language.CodeGeneration.EscapeSingleQuotedStringContent(modernName) + "', 'Example.ps1') }";
-        foreach (var (name, text) in new[] { ("Module.psm1", source), ("Desktop.ps1", desktopScript), (modernName, modernScript) })
+            System.Management.Automation.Language.CodeGeneration.EscapeSingleQuotedStringContent(modernName) + "', 'Call-Helper.ps1', 'Example.ps1') }";
+        foreach (var (name, text) in new[]
+                 {
+                     ("Module.psm1", source), ("Desktop.ps1", desktopScript), (modernName, modernScript), ("Call-Helper.ps1", helperScript)
+                 })
         {
             Directory.CreateDirectory(moduleRoot);
             Directory.CreateDirectory(referenceRoot);
@@ -236,6 +240,7 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
             var input = new PowerShellCompilationInputResolver(profile).Resolve(moduleRoot,
                 PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Hybrid);
             Assert.Single(input.CompilationSourceFiles);
+            Assert.Contains(Path.Combine(moduleRoot, "Call-Helper.ps1"), input.SourceFiles);
             var build = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
                 input.SourcePath, Path.Combine(fixture.RootPath, target), "EncodedHybridManifest",
                 input.Kind, input.Mode, allowUnreviewedDependencyResolution: true)
@@ -251,6 +256,8 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
             var retainedFile = Assert.Single(build.Manifest.Files, file => Path.GetFileName(file.Path) == modernName);
             var needsRewrite = pin.ProfileId == profile || legacy.CodePage != Encoding.UTF8.CodePage;
             Assert.Equal(needsRewrite ? "GeneratedModuleDependency" : "ModuleDependency", retainedFile.Role);
+            var helper = Assert.Single(build.Manifest.Files, file => Path.GetFileName(file.Path) == "Call-Helper.ps1");
+            Assert.Equal(retainedFile.Role, helper.Role);
             var publishedDirectory = Path.GetDirectoryName(build.ArtifactPath!)!;
             if (needsRewrite)
                 Assert.True(File.ReadAllBytes(Path.Combine(publishedDirectory, modernName)).AsSpan().StartsWith(Encoding.UTF8.GetPreamble()));
