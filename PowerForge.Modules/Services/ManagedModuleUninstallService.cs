@@ -120,7 +120,7 @@ public sealed partial class ManagedModuleUninstallService
 
         EnsureModuleRootSpecified(plan.ModuleRoot);
         foreach (var target in plan.Targets)
-            EnsureTargetUnderRoot(plan.ModuleRoot, target.ModulePath);
+            EnsureTargetUnderRoot(plan.ModuleRoot, target);
 
         if (!plan.AllowLoadedModuleUninstall)
             ThrowIfLoaded(plan.Targets);
@@ -161,7 +161,7 @@ public sealed partial class ManagedModuleUninstallService
         ManagedModulePackageIdentity.RequireSafeId(target.Name, nameof(target.Name));
         using (ManagedModuleInstallLock.Acquire(plan.ModuleRoot, target.Name, CancellationToken.None))
         {
-            EnsureTargetUnderRoot(plan.ModuleRoot, target.ModulePath);
+            EnsureTargetUnderRoot(plan.ModuleRoot, target);
             if (target.IsFlatLayout)
                 DeleteFlatModuleTarget(target);
             else
@@ -544,9 +544,10 @@ public sealed partial class ManagedModuleUninstallService
     private static bool PathsEqual(string left, string right)
         => string.Equals(NormalizePath(left), NormalizePath(right), PathStringComparison);
 
-    private static void EnsureTargetUnderRoot(string moduleRoot, string modulePath)
+    private static void EnsureTargetUnderRoot(string moduleRoot, ManagedModuleUninstallTarget uninstallTarget)
     {
         EnsureModuleRootSpecified(moduleRoot);
+        var modulePath = uninstallTarget.ModulePath;
         var root = NormalizePath(moduleRoot);
         var target = NormalizePath(modulePath);
         if (string.Equals(root, target, PathStringComparison))
@@ -558,10 +559,25 @@ public sealed partial class ManagedModuleUninstallService
             throw new InvalidOperationException($"Refusing to remove module path outside module root: {modulePath}");
         }
 
-        // A version directory below a linked module directory can resolve outside the selected root.
+        // Inspect parents first, before resolving a child under a linked directory.
+        var paths = new Stack<string>();
         for (var current = target; !string.Equals(current, root, PathStringComparison); current = Path.GetDirectoryName(current)!)
+            paths.Push(current);
+
+        foreach (var current in paths)
         {
-            if ((File.GetAttributes(GetFileSystemPath(current)) & FileAttributes.ReparsePoint) != 0)
+            FileAttributes attributes;
+            try
+            {
+                attributes = File.GetAttributes(GetFileSystemPath(current));
+            }
+            catch (IOException ex) when (uninstallTarget.IsFlatLayout && ex is (FileNotFoundException or DirectoryNotFoundException))
+            {
+                // A flat module can disappear after planning. Check any remaining ancestors.
+                continue;
+            }
+
+            if ((attributes & FileAttributes.ReparsePoint) != 0)
                 throw new InvalidOperationException($"Refusing to remove a module through a symbolic link or junction: {current}");
         }
     }

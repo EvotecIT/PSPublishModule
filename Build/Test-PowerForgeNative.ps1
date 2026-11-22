@@ -227,13 +227,21 @@ try {
     )
     $linkedRoot = New-Item -ItemType Directory -Path (Join-Path $work 'linked module root')
     $linkPath = Join-Path $linkedRoot.FullName 'PowerForgeNativeSmoke'
-    $linkType = if ($IsWindows) { 'Junction' } else { 'SymbolicLink' }
-    $null = New-Item -ItemType $linkType -Path $linkPath -Target (Join-Path $install 'PowerForgeNativeSmoke')
+    $linkTarget = Join-Path $install 'PowerForgeNativeSmoke'
+    if ($IsWindows) {
+        $null = New-Item -ItemType Junction -Path $linkPath -Target $linkTarget
+    } else {
+        $null = [IO.Directory]::CreateSymbolicLink($linkPath, $linkTarget)
+    }
     try {
         $linkedArgs = $uninstallArgs.Clone()
         $linkedArgs[[Array]::IndexOf($linkedArgs, '--destination') + 1] = $linkedRoot.FullName
         $linked = Read-CommandResult -Executable $launcher -Arguments $linkedArgs -ExpectedExitCode 1
-        if ($linked.error -notmatch 'symbolic link or junction' -or [IO.File]::ReadAllText($installedManifest) -ne $manifest) {
+        if ($linked.error -notmatch 'symbolic link or junction') {
+            throw "Native uninstall did not reject the linked directory with the expected diagnostic. $($linked.error)"
+        }
+        if (-not (Test-Path -LiteralPath $installedManifest) -or
+            [IO.File]::ReadAllText($installedManifest) -cne $manifest) {
             throw 'Native uninstall touched files outside the selected root through a linked directory.'
         }
     } finally {

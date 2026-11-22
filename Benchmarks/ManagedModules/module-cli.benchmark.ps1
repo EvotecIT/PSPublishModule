@@ -80,7 +80,11 @@ New-BenchmarkSuite 'managed-module-cli' -OutputRoot $outputRoot {
         $run.Action = if ($case.Action) { $case.Action } elseif ($name) { 'Install' } else { 'Startup' }
         if ($run.Action -in 'List', 'Uninstall') {
             $null = New-Item -ItemType Directory -Path $run.Destination
-            Copy-Item -LiteralPath (Join-Path $seedModules 'Pester') -Destination $run.Destination -Recurse
+            Copy-Item -LiteralPath (Join-Path $seedModules $name) -Destination $run.Destination -Recurse -ErrorAction Stop
+            $seededManifest = Join-Path $run.Destination $name $run.Version "$name.psd1"
+            if (-not (Test-Path -LiteralPath $seededManifest -PathType Leaf)) {
+                throw "The benchmark seed does not contain $name $($run.Version)."
+            }
         }
         if ($case.Engine -eq 'PowerForge') {
             $run.Executable = $powerForge

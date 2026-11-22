@@ -24,6 +24,24 @@ public sealed class ManagedModuleUninstallServiceTests
     }
 
     [Fact]
+    public void Uninstall_continues_when_a_flat_module_disappears_after_planning()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        var flat = Directory.CreateDirectory(Path.Combine(moduleRoot.Path, "Company.Flat")).FullName;
+        File.WriteAllText(Path.Combine(flat, "Company.Flat.psd1"), "@{ ModuleVersion = '1.0.0' }");
+        CreateInstalledModule(moduleRoot.Path, "Company.Tools", "1.0.0");
+        var service = new ManagedModuleUninstallService();
+        var plan = service.PlanUninstall(CreateRequest(moduleRoot.Path, "Company.*"));
+        Assert.Equal(2, plan.Targets.Count);
+
+        Directory.Delete(flat, recursive: true);
+        var results = service.Uninstall(plan);
+
+        Assert.Equal(2, results.Count);
+        Assert.False(Directory.Exists(Path.Combine(moduleRoot.Path, "Company.Tools", "1.0.0")));
+    }
+
+    [Fact]
     public void PlanUninstall_without_version_and_prerelease_selects_latest_prerelease_version()
     {
         using var moduleRoot = new TemporaryDirectory();
