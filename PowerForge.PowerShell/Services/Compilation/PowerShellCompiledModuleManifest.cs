@@ -618,7 +618,7 @@ internal static class PowerShellCompiledModuleManifest
     }
 
     private static bool SelectsAllRootFunctions(string[]? functions, bool hasNestedModules)
-        => functions is ["*"] && !hasNestedModules;
+        => functions is { Length: 1 } && functions[0] == "*" && !hasNestedModules;
 
     private sealed class ManifestFileReference
     {

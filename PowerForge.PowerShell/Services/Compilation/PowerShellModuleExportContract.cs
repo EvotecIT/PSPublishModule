@@ -32,7 +32,8 @@ internal sealed class PowerShellModuleExportContract
     internal bool HasRuntimeControlledExports { get; }
     internal bool HasWildcardFunctions => Functions.Any(WildcardPattern.ContainsWildcardCharacters);
     internal bool HasTerminalAllCommandExport =>
-        Commands.Length == 1 && Functions is ["*"] && Cmdlets is ["*"] &&
+        Commands.Length == 1 && Functions.Length == 1 && Functions[0] == "*" &&
+        Cmdlets.Length == 1 && Cmdlets[0] == "*" &&
         Commands[0].Parent is PipelineAst { Parent: NamedBlockAst body } pipeline &&
         ReferenceEquals(body.Statements.LastOrDefault(), pipeline);
 
