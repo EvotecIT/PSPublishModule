@@ -10,7 +10,6 @@ internal static partial class ModuleBootstrapperGenerator
         IReadOnlyList<string>? ignoreLibrariesOnLoad = null)
     {
         var normalizedTypes = NormalizePowerShellStringArray(typeNames);
-        var normalizedAssemblies = NormalizePowerShellStringArray(assemblyNames);
         var ignoredLibraryFileNames = NormalizeFileNameSet(ignoreLibrariesOnLoad)
             .OrderBy(static value => value, StringComparer.OrdinalIgnoreCase)
             .ToArray();
@@ -27,7 +26,9 @@ internal static partial class ModuleBootstrapperGenerator
             {
                 ["Mode"] = mode.ToString(),
                 ["RequestedTypes"] = BuildPowerShellArrayLiteral(normalizedTypes),
-                ["RequestedAssemblies"] = BuildPowerShellArrayLiteral(normalizedAssemblies),
+                ["RequestedAssemblies"] = BuildAcceleratorAssemblyNames(
+                    mode, assemblyNames, "FromDirectory", $"({libraryDirectoryExpression})",
+                    ", [string[]]" + BuildPowerShellArrayLiteral(ignoredLibraryFileNames)),
                 ["IgnoredLibraryFileNames"] = BuildPowerShellArrayLiteral(ignoredLibraryFileNames),
                 ["LibraryDirectoryExpression"] = libraryDirectoryExpression,
                 ["RegistrationTrackingBlock"] = BuildTypeAcceleratorTrackingBlock(8)

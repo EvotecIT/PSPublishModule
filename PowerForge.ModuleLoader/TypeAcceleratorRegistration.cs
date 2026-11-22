@@ -24,7 +24,7 @@ namespace PowerForge.ModuleLoader.V1;
 /// One accelerator name maps to one type per process. A name another module already registered stays
 /// with that module; this registration takes it over when that module is removed.
 /// </remarks>
-public sealed class TypeAcceleratorRegistration
+public sealed partial class TypeAcceleratorRegistration
 {
     // Shared with modules built by earlier PowerForge releases, which kept the same owner catalog
     // shape from script: a synchronized table of { Type, Owners } entries in AppDomain data.
@@ -188,7 +188,9 @@ public sealed class TypeAcceleratorRegistration
                     continue;
                 }
 
-                foreach (var type in exported.Concat(TypeAcceleratorForwardedTypes.Read(assembly, message => Warn(message))))
+                IEnumerable<Type> visibleTypes = exported;
+                IncludeForwarders(assembly, ref visibleTypes);
+                foreach (var type in visibleTypes)
                 {
                     if (enumsOnly && !type.IsEnum) continue;
                     Add(type, source);
@@ -220,6 +222,8 @@ public sealed class TypeAcceleratorRegistration
             Warn($"{_module}: {_keptByOthers.Count} type accelerator(s) already point to types another module loaded ({Sample(_keptByOthers)}); " +
                  "they keep doing so and switch to this module's types when that module is removed. Run Import-Module -Verbose for details.");
     }
+
+    partial void IncludeForwarders(Assembly assembly, ref IEnumerable<Type> visibleTypes);
 
     /// <summary>
     /// Gives every free name a live registration still wants to the most recently imported one. Runs whenever a

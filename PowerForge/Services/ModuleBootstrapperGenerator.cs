@@ -516,10 +516,38 @@ internal static partial class ModuleBootstrapperGenerator
             {
                 ["Mode"] = mode.ToString(),
                 ["RequestedTypes"] = BuildPowerShellArrayLiteral(NormalizePowerShellStringArray(typeNames)),
-                ["RequestedAssemblies"] = BuildPowerShellArrayLiteral(NormalizePowerShellStringArray(assemblyNames)),
+                ["RequestedAssemblies"] = BuildAcceleratorAssemblyNames(
+                    mode, assemblyNames, "FromLoadContext", "$ModuleAssembly, " + libraryDirectoryExpression),
                 ["LibraryDirectoryExpression"] = libraryDirectoryExpression,
                 ["RegistrationTrackingBlock"] = BuildTypeAcceleratorTrackingBlock(4)
             });
+    }
+
+    private static string BuildAcceleratorAssemblyNames(
+        AssemblyTypeAcceleratorExportMode mode,
+        IReadOnlyList<string>? assemblies,
+        string method,
+        string sourceArguments,
+        string extraArguments = "")
+    {
+        var assemblyNames = NormalizePowerShellStringArray(assemblies);
+        var assembliesLiteral = BuildPowerShellArrayLiteral(assemblyNames);
+        if (mode is not (AssemblyTypeAcceleratorExportMode.Assembly or AssemblyTypeAcceleratorExportMode.Enums) ||
+            assemblyNames.Length == 0)
+            return assembliesLiteral;
+
+        // An earlier loader may own the registrar. Its assembly list can carry exact forwarding targets.
+        return $$"""
+            (& {
+                $PowerForgeAcceleratorSelection = [{{ModuleLoaderAssets.ProbeTypeName}}]::{{method}}(
+                    [PowerForge.ModuleLoader.V1.TypeAcceleratorRegistration],
+                    {{sourceArguments}}, '{{mode}}', [string[]]{{assembliesLiteral}}{{extraArguments}})
+                foreach ($PowerForgeAcceleratorWarning in $PowerForgeAcceleratorSelection.Warnings) {
+                    Write-Warning -Message $PowerForgeAcceleratorWarning
+                }
+                $PowerForgeAcceleratorSelection.AssemblyNames
+            })
+            """;
     }
 
     private static string[] NormalizePowerShellStringArray(IReadOnlyList<string>? values)

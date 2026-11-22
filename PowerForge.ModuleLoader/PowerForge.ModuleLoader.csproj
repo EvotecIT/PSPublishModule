@@ -8,11 +8,12 @@
     The contract version is part of the assembly name so modules built by different PowerForge
     releases can load side by side in one session. V2 keeps the scoped Desktop resolver ahead of
     version-blind handlers, even when another module has already loaded the older V1 loader.
+    V3 adds forwarded-type discovery while keeping the process-wide registrar shared.
     Bump the identity for public contract changes or fixes that must coexist with older loaders.
   -->
   <PropertyGroup>
     <TargetFrameworks>net472;netcoreapp3.1</TargetFrameworks>
-    <AssemblyName>PowerForge.ModuleLoader.V2</AssemblyName>
+    <AssemblyName>PowerForge.ModuleLoader.V3</AssemblyName>
     <RootNamespace>PowerForge.ModuleLoader.V2</RootNamespace>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
@@ -20,8 +21,8 @@
     <IsPackable>false</IsPackable>
     <Deterministic>true</Deterministic>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
-    <AssemblyVersion>2.0.0.0</AssemblyVersion>
-    <FileVersion>2.0.0.0</FileVersion>
+    <AssemblyVersion>3.0.0.0</AssemblyVersion>
+    <FileVersion>3.0.0.0</FileVersion>
     <Product>PowerForge module loader</Product>
     <Description>Loads PowerForge-built PowerShell module binaries with AssemblyLoadContext isolation on PowerShell 7 and a scoped AssemblyResolve handler on Windows PowerShell 5.1.</Description>
     <!-- netcoreapp3.1 is the PowerShell 7.0 runtime floor; the loader must run in every later host. -->

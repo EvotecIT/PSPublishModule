@@ -2,8 +2,8 @@ namespace PowerForge;
 
 /// <summary>
 /// Writes the precompiled PowerForge module loader (embedded in this assembly) next to a generated module.
-/// Layout: <c>&lt;root&gt;/Core/PowerForge.ModuleLoader.V2.dll</c> (PowerShell 7) and
-/// <c>&lt;root&gt;/Desktop/PowerForge.ModuleLoader.V2.dll</c> (Windows PowerShell 5.1).
+/// Layout: <c>&lt;root&gt;/Core/PowerForge.ModuleLoader.V3.dll</c> (PowerShell 7) and
+/// <c>&lt;root&gt;/Desktop/PowerForge.ModuleLoader.V3.dll</c> (Windows PowerShell 5.1).
 /// </summary>
 internal static class ModuleLoaderAssets
 {
@@ -13,10 +13,10 @@ internal static class ModuleLoaderAssets
     /// <summary>Folder under a development binary root (for example <c>Project/bin</c>) that holds the loader builds.</summary>
     internal const string DevelopmentFolderName = "PowerForge.ModuleLoader";
 
-    internal const string FileName = "PowerForge.ModuleLoader.V2.dll";
+    internal const string FileName = "PowerForge.ModuleLoader.V3.dll";
 
     /// <summary>A public loader type the generated script probes before loading the assembly.</summary>
-    internal const string ProbeTypeName = "PowerForge.ModuleLoader.V2.SharedAssemblyPolicy";
+    internal const string ProbeTypeName = "PowerForge.ModuleLoader.V3.ForwardedTypeAccelerators";
 
     private static readonly (string Edition, string Resource)[] Builds =
     {

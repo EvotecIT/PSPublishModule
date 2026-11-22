@@ -107,8 +107,8 @@ public sealed partial class ModulePipelineUnifiedReleaseTests {
                 ? Directory.EnumerateFiles(staging, "*", SearchOption.AllDirectories).Append(archive).ToArray()
                 :
             [
-                Path.Combine(staging, "Loader", "Core", "PowerForge.ModuleLoader.V2.dll"),
-                Path.Combine(staging, "Loader", "Desktop", "PowerForge.ModuleLoader.V2.dll"),
+                Path.Combine(staging, "Loader", "Core", "PowerForge.ModuleLoader.V3.dll"),
+                Path.Combine(staging, "Loader", "Desktop", "PowerForge.ModuleLoader.V3.dll"),
                 Path.Combine(staging, name + ".Libraries.ps1"),
                 Path.Combine(staging, name + ".psm1"), archive
             ];

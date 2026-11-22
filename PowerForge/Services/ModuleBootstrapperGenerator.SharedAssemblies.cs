@@ -23,6 +23,7 @@ internal static partial class ModuleBootstrapperGenerator
         }
 
         return string.Equals(fileName, "PowerForge.ModuleLoader.V1.dll", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(fileName, "PowerForge.ModuleLoader.V2.dll", StringComparison.OrdinalIgnoreCase)
             || string.Equals(fileName, ModuleLoaderAssets.FileName, StringComparison.OrdinalIgnoreCase);
     }
 

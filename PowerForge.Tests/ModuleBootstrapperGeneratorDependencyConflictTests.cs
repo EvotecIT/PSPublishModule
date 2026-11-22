@@ -40,7 +40,7 @@ public sealed partial class ModuleBootstrapperGeneratorWindowsPowerShellTests
             var script = Path.Combine(root, "Test-Rule.ps1");
             File.WriteAllText(script, "$cases = @(" + string.Join(", ", cases.Select(c => $"@{{ Name = '{c.Name}'; Expect = '{c.Expect}' }}")) + ")\n" + """
 $ErrorActionPreference = 'Stop'
-Add-Type -Path (Join-Path $PSScriptRoot 'Loader/Core/PowerForge.ModuleLoader.V2.dll')
+Add-Type -Path (Join-Path $PSScriptRoot 'Loader/Core/PowerForge.ModuleLoader.V3.dll')
 $owner = [System.Runtime.Loader.AssemblyLoadContext]::new('owner', $false)
 foreach ($case in $cases) { $null = $owner.LoadFromAssemblyPath((Join-Path $PSScriptRoot "Owner/Lib/Default/Dep$($case.Name).dll")) }
 foreach ($case in $cases) {
@@ -142,7 +142,7 @@ Remove-Module Second, Third
             var script = Path.Combine(root, "Test-SharedLink.ps1");
             File.WriteAllText(script, """
 $ErrorActionPreference = 'Stop'
-Add-Type -Path (Join-Path $PSScriptRoot 'Loader/Core/PowerForge.ModuleLoader.V2.dll')
+Add-Type -Path (Join-Path $PSScriptRoot 'Loader/Core/PowerForge.ModuleLoader.V3.dll')
 [PowerForge.ModuleLoader.V2.SharedAssemblyPolicy]::Register([string[]]@('SharedLinkFixture'), [string[]]@((Join-Path $PSScriptRoot 'alias')))
 $assembly = [PowerForge.ModuleLoader.V2.SharedAssemblyPolicy]::Resolve([Reflection.AssemblyName]::new('SharedLinkFixture'), [string[]]@((Join-Path $PSScriptRoot 'physical')))
 if ($assembly.GetName().Name -ne 'SharedLinkFixture') { throw 'Wrong shared assembly.' }
