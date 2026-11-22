@@ -21,8 +21,10 @@ internal static class PowerShellAdvancedFunctionLifecyclePlanner
         var documents = (sourceDocuments ?? typed.SourcePaths.Select(path =>
                 PowerShellSourceParser.ParseFile(path, Path.GetDirectoryName(path), semanticProfileId)).ToArray())
             .ToDictionary(static document => Path.GetFullPath(document.Path), PowerShellCompilationPathSafety.PathComparer);
+        var nativeDeclarationPaths = typed.NativeDeclarationTimingSourcePaths.ToHashSet(PowerShellCompilationPathSafety.PathComparer);
         var isolatedSources = documents
-            .Where(static entry => CanHostLifecycleInIsolation(entry.Value))
+            // A function-only export cannot publish the binary cmdlet used by the hosted lifecycle adapter.
+            .Where(entry => !nativeDeclarationPaths.Contains(entry.Key) && CanHostLifecycleInIsolation(entry.Value))
             .Select(static entry => entry.Key)
             .ToHashSet(PowerShellCompilationPathSafety.PathComparer);
         var lifecycleMethods = typed.LifecycleSources

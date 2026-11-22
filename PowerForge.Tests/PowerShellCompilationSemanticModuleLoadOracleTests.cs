@@ -305,6 +305,38 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
 
     [PinnedSemanticHostFact]
     [Trait("Category", "PowerShellCompilerGate")]
+    public void FunctionWildcardExportsTheAdvancedLifecycleFunctionOnBothHosts()
+    {
+        const string source = """
+            function Get-PublishedLifecycle {
+                [CmdletBinding()]
+                param([Parameter(ValueFromPipeline=$true)][int] $Number)
+                begin { Write-Output 'begin' }
+                process {
+                    trap { 'caught'; continue }
+                    Write-Output ('item:' + $Number)
+                }
+                end { Write-Output 'end' }
+            }
+            function Get-PublishedMarker { return 9 }
+            function Read-Private { return 19 }
+            Export-ModuleMember -Function Get-Published*
+            """;
+        const string probe = """
+            [ordered]@{
+                exports = @((Get-Module ScopedValues).ExportedCommands.Keys | Sort-Object)
+                kind = (Get-Command Get-PublishedLifecycle -ErrorAction Stop).CommandType.ToString()
+                values = @(3, 7 | Get-PublishedLifecycle)
+                marker = Get-PublishedMarker
+            } | ConvertTo-Json -Compress
+            """;
+        CompareScopedArtifacts(source, probe, new[] { "Get-PublishedMarker" },
+            value => Assert.Equal(
+                "{\"exports\":[\"Get-PublishedLifecycle\",\"Get-PublishedMarker\"],\"kind\":\"Function\",\"values\":[\"begin\",\"item:3\",\"item:7\",\"end\"],\"marker\":9}", value));
+    }
+
+    [PinnedSemanticHostFact]
+    [Trait("Category", "PowerShellCompilerGate")]
     public void HybridModuleRetainsExportsSelectedByAnInitializationFunctionOnBothHosts()
     {
         const string source = """

@@ -17,10 +17,11 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                     [int] $Number,
                     [Parameter(ValueFromRemainingArguments)]
                     [string[]] $Remaining,
-                    [string] $CleanupPath
+                    [object] $CleanupPath
                 )
                 begin { $total = 0 }
                 process {
+                    trap { break }
                     Write-Progress -Activity 'Lifecycle' -Status "Number $Number"
                     if ($Number -lt 0) { Write-Error "negative:$Number"; return }
                     if ($Number -eq 99) { throw 'terminating:99' }
