@@ -223,6 +223,9 @@ internal sealed partial class PowerShellSemanticBinder
             }
             if (moduleStateOriginsChanged) continue;
 
+            if (capabilities == PowerShellCompilationCapabilities.TypedExecutable)
+                ExcludeUnprovedFinallyCompositions(functions, functionsByName, failedDiagnostics);
+
             var boundNames = functions.Select(static function => function.Symbol.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
             if (boundNames.SetEquals(functionsByName.Keys))
             {

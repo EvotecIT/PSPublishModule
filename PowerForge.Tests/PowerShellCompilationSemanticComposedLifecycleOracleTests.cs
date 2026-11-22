@@ -278,6 +278,48 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
     }
 
     [PinnedSemanticHostFact]
+    public async Task StrictCompositionRejectsFinallyForwardingAcrossAFallibleStage()
+    {
+        using var fixture = OracleFixture.Create("""
+            function Send-Number {
+                [CmdletBinding()]
+                [OutputType([int])]
+                param([Parameter(ValueFromPipeline)][int] $Record)
+                begin { try { 10 } finally { 99 } }
+                process { $Record }
+                end {}
+            }
+            function Receive-Number {
+                [CmdletBinding()]
+                [OutputType([int])]
+                param([Parameter(ValueFromPipeline)][int] $Record)
+                begin { throw [InvalidOperationException]::new('first') }
+                process {
+                    if ($Record -eq 99) { throw [ArgumentException]::new('second') }
+                    $Record
+                }
+                end {}
+            }
+            try { return 1,2 | Send-Number | Receive-Number }
+            catch [InvalidOperationException] { return 11 }
+            catch [ArgumentException] { return 22 }
+            """);
+        foreach (var pin in PowerShellCompilationSemanticHostArtifactPinCatalog.Pins)
+        {
+            var host = StrictStreamingHostPath(pin) ??
+                Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe");
+            var original = await ObserveExitedConsole(host, fixture.RootPath,
+                new[] { "-NoProfile", "-NonInteractive", "-File", fixture.ScriptPath }, string.Empty);
+            Assert.Equal(new[] { "10", "11" }, original.Output.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries));
+            Assert.Equal(0, original.Code);
+            Assert.Empty(original.Error);
+            var build = BuildStrictStreamingFixture(fixture, "StrictFallibleFinally", pin.ProfileId);
+            Assert.False(build.Succeeded);
+            Assert.Contains("requires both stages to have no terminating error path", build.Error, StringComparison.Ordinal);
+        }
+    }
+
+    [PinnedSemanticHostFact]
     public async Task StrictComposedLifecycleBindsNullBeforeForwardingTypedScalarRecords()
     {
         using var fixture = OracleFixture.Create("""

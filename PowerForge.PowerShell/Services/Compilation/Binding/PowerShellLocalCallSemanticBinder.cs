@@ -56,6 +56,8 @@ internal sealed class PowerShellLocalCallSignature
     internal bool PipelineLifecycleStreamsOutput { get; set; }
     internal bool PipelineLifecycleSupportsComposition { get; set; }
     internal bool PipelineLifecycleCompositionMayStopEarly { get; set; }
+    internal bool PipelineLifecycleWritesFinallyRecords { get; set; }
+    internal bool PipelineLifecycleProvesTotalTransfer { get; set; }
     internal PowerShellStrictPipelineReduction? StrictPipelineReduction { get; }
     internal bool PipelineLifecycleRequiresNonNullInput { get; }
     internal bool ReturnsModuleStateDerived { get; private set; }

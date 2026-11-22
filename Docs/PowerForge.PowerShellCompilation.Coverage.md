@@ -123,7 +123,8 @@ before the first resumes, including records emitted during `begin` and
 `Select-Object -First` stops the active producers at the selected record.
 Authored `finally` blocks still run, and a downstream error can reach an
 upstream author catch. An unbounded composition forwards success output
-from a stage's `finally`. With an early-stop selector, writes from a
+from a stage's `finally` when both stages have no terminating error path
+during record transfer. With an early-stop selector, writes from a
 helper's `finally` can reach the next stage and the stopped selector
 rejects further records. Early stopping with stage-level `finally`
 output remains outside the compiled subset.
