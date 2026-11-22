@@ -55,6 +55,7 @@ internal sealed class PowerShellLocalCallSignature
     internal bool PipelineLifecycleHasOutputLimit { get; set; }
     internal bool PipelineLifecycleStreamsOutput { get; set; }
     internal bool PipelineLifecycleSupportsComposition { get; set; }
+    internal bool PipelineLifecycleCompositionMayStopEarly { get; set; }
     internal PowerShellStrictPipelineReduction? StrictPipelineReduction { get; }
     internal bool PipelineLifecycleRequiresNonNullInput { get; }
     internal bool ReturnsModuleStateDerived { get; private set; }
@@ -188,23 +189,11 @@ internal static class PowerShellLocalCallSemanticBinder
         PowerShellCommandSemanticResolver? strictResolver = null)
     {
         if (function.Body.ProcessBlock is null) return false;
-        var knownTypes = parameters.ToDictionary(static parameter => parameter.Symbol.Name, static parameter => parameter.Type, StringComparer.OrdinalIgnoreCase);
-        foreach (var assignment in function.Body.FindAll(static node => node is AssignmentStatementAst, searchNestedScriptBlocks: false)
-                     .OfType<AssignmentStatementAst>().OrderBy(static assignment => assignment.Extent.StartOffset))
-        {
-            if (PowerShellAssignmentTargetPolicy.FindDirectVariable(assignment.Left) is not { } variable ||
-                knownTypes.ContainsKey(variable.VariablePath.UserPath))
-                continue;
-            var expression = Unwrap(assignment.Right);
-            var type = assignment.Left is ConvertExpressionAst typed && typed.StaticType != typeof(object)
-                ? typed.StaticType
-                : InferExpressionType(expression, knownTypes, functions);
-            if (type is not null) knownTypes[variable.VariablePath.UserPath] = type;
-        }
+        var knownTypes = GetLifecycleKnownTypes(function, parameters, functions);
         var output = strictResolver is not null && function.Body.BeginBlock is { } begin
             ? begin.Statements.Concat(function.Body.ProcessBlock.Statements) : function.Body.ProcessBlock.Statements;
         var localFunctionNames = strictResolver is null ? null : functions.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
-        return EnumeratePipelineLifecycleProcessOutputs(output)
+        return EnumeratePipelineLifecycleProcessOutputs(output, includeTry: strictResolver is not null)
             .Any(pipeline =>
             {
                 var syntax = Unwrap(pipeline);
@@ -220,7 +209,7 @@ internal static class PowerShellLocalCallSemanticBinder
     }
 
     private static IEnumerable<PipelineAst> EnumeratePipelineLifecycleProcessOutputs(
-        IEnumerable<StatementAst> statements)
+        IEnumerable<StatementAst> statements, bool includeTry)
     {
         foreach (var statement in statements)
         {
@@ -229,12 +218,17 @@ internal static class PowerShellLocalCallSemanticBinder
                 yield return pipeline;
                 continue;
             }
-            if (statement is not IfStatementAst conditional) continue;
-            foreach (var clause in conditional.Clauses)
-            foreach (var nested in EnumeratePipelineLifecycleProcessOutputs(clause.Item2.Statements))
-                yield return nested;
-            if (conditional.ElseClause is null) continue;
-            foreach (var nested in EnumeratePipelineLifecycleProcessOutputs(conditional.ElseClause.Statements))
+            var blocks = statement switch
+            {
+                IfStatementAst conditional => conditional.Clauses.Select(static clause => clause.Item2)
+                    .Concat(conditional.ElseClause is { } alternate ? new[] { alternate } : Array.Empty<StatementBlockAst>()),
+                TryStatementAst attempt when includeTry => new[] { attempt.Body }
+                    .Concat(attempt.CatchClauses.Select(static clause => clause.Body))
+                    .Concat(attempt.Finally is { } cleanup ? new[] { cleanup } : Array.Empty<StatementBlockAst>()),
+                _ => Enumerable.Empty<StatementBlockAst>()
+            };
+            foreach (var block in blocks)
+            foreach (var nested in EnumeratePipelineLifecycleProcessOutputs(block.Statements, includeTry))
                 yield return nested;
         }
     }
@@ -242,15 +236,33 @@ internal static class PowerShellLocalCallSemanticBinder
     internal static Type? InferPipelineLifecycleRecordType(FunctionDefinitionAst function,
         PowerShellLocalCallSignature signature, IReadOnlyDictionary<string, PowerShellLocalCallSignature> functions)
     {
-        var knownTypes = signature.Parameters.ToDictionary(static parameter => parameter.Symbol.Name,
-            static parameter => parameter.Type, StringComparer.OrdinalIgnoreCase);
+        var knownTypes = GetLifecycleKnownTypes(function, signature.Parameters, functions);
         var clauses = new[] { function.Body.BeginBlock, function.Body.ProcessBlock };
         var types = clauses.OfType<NamedBlockAst>()
-            .SelectMany(static clause => EnumeratePipelineLifecycleProcessOutputs(clause.Statements))
+            .SelectMany(static clause => EnumeratePipelineLifecycleProcessOutputs(clause.Statements, includeTry: true))
             .Select(pipeline => InferExpressionType(Unwrap(pipeline), knownTypes, functions))
             .Where(static type => type is not null && type != typeof(void))
             .Distinct().ToArray();
         return types.Length == 1 ? types[0] : null;
+    }
+
+    private static Dictionary<string, Type> GetLifecycleKnownTypes(FunctionDefinitionAst function,
+        IReadOnlyList<PowerShellLocalCallParameter> parameters, IReadOnlyDictionary<string, PowerShellLocalCallSignature> functions)
+    {
+        var knownTypes = parameters.ToDictionary(static parameter => parameter.Symbol.Name,
+            static parameter => parameter.Type, StringComparer.OrdinalIgnoreCase);
+        foreach (var assignment in function.Body.FindAll(static node => node is AssignmentStatementAst, searchNestedScriptBlocks: false)
+                     .OfType<AssignmentStatementAst>().OrderBy(static assignment => assignment.Extent.StartOffset))
+        {
+            if (PowerShellAssignmentTargetPolicy.FindDirectVariable(assignment.Left) is not { } variable ||
+                knownTypes.ContainsKey(variable.VariablePath.UserPath))
+                continue;
+            var type = assignment.Left is ConvertExpressionAst typed && typed.StaticType != typeof(object)
+                ? typed.StaticType
+                : InferExpressionType(Unwrap(assignment.Right), knownTypes, functions);
+            if (type is not null) knownTypes[variable.VariablePath.UserPath] = type;
+        }
+        return knownTypes;
     }
 
     private static Type? InferExpressionType(
@@ -458,7 +470,8 @@ internal static class PowerShellLocalCallSemanticBinder
             arguments,
             returnType,
             authoredOrder.ToArray(),
-            bound.Keys.Select(index => signature.Parameters[index].Contract.Name).OrderBy(static name => name, StringComparer.OrdinalIgnoreCase).ToArray(),
+            bound.Keys.Where(index => lifecycleStage is null || index != signature.PipelineLifecycleParameterIndex)
+                .Select(index => signature.Parameters[index].Contract.Name).OrderBy(static name => name, StringComparer.OrdinalIgnoreCase).ToArray(),
             signature.ReturnsModuleStateDerived,
             capturesSuccessOutput,
             signature.ClosedCollectionFactory is null

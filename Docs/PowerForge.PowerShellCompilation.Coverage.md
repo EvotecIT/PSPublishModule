@@ -122,8 +122,11 @@ before the first resumes, including records emitted during `begin` and
 `end`. Both stages keep their own local state. A terminal
 `Select-Object -First` stops the active producers at the selected record.
 Authored `finally` blocks still run, and a downstream error can reach an
-upstream author catch. A write from an upstream `finally` can still reach
-the next stage. The stopped selector rejects any record forwarded to it.
+upstream author catch. An unbounded composition forwards success output
+from a stage's `finally`. With an early-stop selector, writes from a
+helper's `finally` can reach the next stage and the stopped selector
+rejects further records. Early stopping with stage-level `finally`
+output remains outside the compiled subset.
 PowerShell 7 `clean` runs in source order for each
 started stage and discards its success output.
 
