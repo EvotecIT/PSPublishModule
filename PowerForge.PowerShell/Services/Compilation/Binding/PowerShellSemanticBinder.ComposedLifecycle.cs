@@ -13,7 +13,8 @@ internal sealed partial class PowerShellSemanticBinder
         {
             PowerShellBoundTryStatement => true,
             PowerShellBoundIfStatement branch => branch.Clauses.All(static clause => IsTotalRecordExpression(clause.Condition)),
-            PowerShellBoundAssignmentStatement assignment => IsTotalRecordExpression(assignment.Value),
+            PowerShellBoundAssignmentStatement { Operation: PowerShellBoundMutationOperator.Assign, PreserveStatementErrors: false } assignment
+                => IsTotalRecordExpression(assignment.Value),
             PowerShellBoundReturnStatement { Expression: null } => true,
             _ => PowerShellSemanticAnalyzer.GetSuccessOutputExpression(statement) is { } output && IsTotalRecordExpression(output)
         });

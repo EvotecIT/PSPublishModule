@@ -280,7 +280,7 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
     [PinnedSemanticHostFact]
     public async Task StrictCompositionRejectsFinallyForwardingAcrossAFallibleStage()
     {
-        using var fixture = OracleFixture.Create("""
+        const string source = """
             function Send-Number {
                 [CmdletBinding()]
                 [OutputType([int])]
@@ -303,7 +303,11 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
             try { return 1,2 | Send-Number | Receive-Number }
             catch [InvalidOperationException] { return 11 }
             catch [ArgumentException] { return 22 }
-            """);
+            """;
+        using var fixture = OracleFixture.Create(source);
+        using var mutation = OracleFixture.Create(source
+            .Replace("throw [InvalidOperationException]::new('first')", "[int] $total = 2147483647; $total += 1", StringComparison.Ordinal)
+            .Replace("throw [ArgumentException]::new('second')", "[int] $dividend = 1; $dividend %= 0", StringComparison.Ordinal));
         foreach (var pin in PowerShellCompilationSemanticHostArtifactPinCatalog.Pins)
         {
             var host = StrictStreamingHostPath(pin) ??
@@ -316,6 +320,9 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
             var build = BuildStrictStreamingFixture(fixture, "StrictFallibleFinally", pin.ProfileId);
             Assert.False(build.Succeeded);
             Assert.Contains("requires both stages to have no terminating error path", build.Error, StringComparison.Ordinal);
+            var mutationBuild = BuildStrictStreamingFixture(mutation, "StrictFallibleFinallyMutation", pin.ProfileId);
+            Assert.False(mutationBuild.Succeeded);
+            Assert.Contains("requires both stages to have no terminating error path", mutationBuild.Error, StringComparison.Ordinal);
         }
     }
 
