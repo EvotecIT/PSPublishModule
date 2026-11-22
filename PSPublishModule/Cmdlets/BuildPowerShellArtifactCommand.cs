@@ -149,7 +149,9 @@ public sealed class BuildPowerShellArtifactCommand : AsyncPSCmdlet
     /// <inheritdoc />
     protected override async Task ProcessRecordAsync()
     {
-        var requestedPaths = Path.Select(path => SessionState.Path.GetUnresolvedProviderPathFromPSPath(path)).ToArray();
+        var requestedPaths = Path.Select(path => SessionState.Path.GetUnresolvedProviderPathFromPSPath(path))
+            .Distinct(PowerShellCompilationPathSafety.PathComparer)
+            .ToArray();
         var entryPointPath = string.IsNullOrWhiteSpace(EntryPoint)
             ? null
             : SessionState.Path.GetUnresolvedProviderPathFromPSPath(EntryPoint);

@@ -1,3 +1,4 @@
+using System.Management.Automation.Runspaces;
 using System.Text;
 using PowerForge;
 using Xunit;
@@ -6,6 +7,28 @@ namespace PowerForge.Tests;
 
 public sealed partial class PowerShellCompilationSemanticOracleTests
 {
+    [Fact]
+    public void ArtifactCmdletResolvesDuplicatePathsWithThePackageProfile()
+    {
+        using var fixture = OracleFixture.Create(". \"$PSScriptRoot/café.ps1\"");
+        File.WriteAllText(Path.Combine(fixture.RootPath, "café.ps1"), "'helper'");
+
+        var sessionState = InitialSessionState.CreateDefault();
+        sessionState.Commands.Add(new SessionStateCmdletEntry("Build-PowerShellArtifact",
+            typeof(PSPublishModule.BuildPowerShellArtifactCommand), helpFileName: null));
+        using var runspace = RunspaceFactory.CreateRunspace(sessionState);
+        runspace.Open();
+        foreach (var paths in new[] { new[] { fixture.ScriptPath }, new[] { fixture.ScriptPath, fixture.ScriptPath } })
+        {
+            using var command = System.Management.Automation.PowerShell.Create();
+            command.Runspace = runspace;
+            command.AddCommand("Build-PowerShellArtifact").AddParameter("Path", paths)
+                .AddParameter("TargetFramework", "net472").AddParameter("WhatIf");
+            Assert.Empty(command.Invoke());
+            Assert.Empty(command.Streams.Error);
+        }
+    }
+
     [PinnedSemanticHostFact]
     public async Task StrictSourceDecodingMatchesNativeFileInvocationOnBothPinnedHosts()
     {
@@ -197,6 +220,7 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
     public async Task HybridManifestRetainsEncodedSwitchAlternativesOnBothPinnedHosts()
     {
         const string source = """
+            class EncodedModuleBase {}
             $path = switch ($PSVersionTable.PSVersion.Major) {
                 { $_ -ge 7 } { 'café.ps1' }
                 default { 'Desktop.ps1' }
@@ -205,8 +229,10 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
             function Get-CompiledCount { return 21 }
             Export-ModuleMember -Function Get-ProfileValue, Get-CompiledCount
             """;
-        const string desktopScript = "function Get-ProfileValue { . \"$PSScriptRoot/Call-Helper.ps1\"; 'desktop'; [int][char]'é' }";
-        const string modernScript = "function Get-ProfileValue { . \"$PSScriptRoot/Call-Helper.ps1\"; 'modern'; [int][char]'é' }";
+        const string desktopScript = "class DesktopValue : EncodedModuleBase {}\n" +
+            "function Get-ProfileValue { . \"$PSScriptRoot/Call-Helper.ps1\"; 'desktop'; [int][char]'é' }";
+        const string modernScript = "class ModernValue : EncodedModuleBase {}\n" +
+            "function Get-ProfileValue { . \"$PSScriptRoot/Call-Helper.ps1\"; 'modern'; [int][char]'é' }";
         const string helperScript = "'helper'; [int][char]'é'";
         const string profile = PowerShellCompilationSemanticOracleCatalog.WindowsPowerShell51ProfileId;
         using var fixture = OracleFixture.Create(source);

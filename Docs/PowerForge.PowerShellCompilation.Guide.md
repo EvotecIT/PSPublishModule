@@ -76,9 +76,10 @@ encoding rules when no semantic profile is selected. Selecting a different
 profile resolves the source dependencies again. Hybrid modules targeting
 Windows PowerShell ship retained runtime scripts with a Unicode byte order
 mark when their bytes would otherwise depend on the recipient's code page.
-Files carried only as manifest inventory keep their original bytes. Use a UTF-8 BOM for
-non-ASCII source when building for Windows PowerShell 5.1 on another operating
-system.
+CompleteModule discovers literal `.ps1` and `.psm1` loads inside retained
+functions. Files carried only as manifest inventory keep their original bytes.
+Use a UTF-8 BOM for non-ASCII source when building for Windows PowerShell 5.1
+on another operating system.
 
 ### Inspecting Package artifacts
 
