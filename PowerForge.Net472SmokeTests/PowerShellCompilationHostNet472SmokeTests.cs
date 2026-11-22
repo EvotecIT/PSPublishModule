@@ -43,6 +43,23 @@ if ($loadedCompiler.ManifestModule.ModuleVersionId.ToString() -ne $ExpectedCompi
 }
 Write-Checkpoint ('Compiler: ' + $loadedCompiler.Location + '; MVID=' + $loadedCompiler.ManifestModule.ModuleVersionId)
 [void][Reflection.Assembly]::LoadFrom((Join-Path (Split-Path $CompilerAssembly) 'PowerForge.dll'))
+$rejectedSource = Join-Path (Split-Path $Source) 'Rejected.psm1'
+[IO.File]::WriteAllText($rejectedSource, @'
+function Read-Record {
+    Get-Content "$PSScriptRoot/../record.txt"
+}
+'@)
+$check = [PowerForge.PowerShellCompilationCheckRequest]::new($rejectedSource)
+$check.Kind = [PowerForge.PowerShellCompilationArtifactKind]::BinaryModule
+$check.Mode = [PowerForge.PowerShellCompilationMode]::Hybrid
+$check.TargetFramework = 'net472'
+$rejected = [PowerForge.PowerShellCompilationHostService]::new().Check($check)
+$issue = @($rejected.Diagnostics)
+if ($rejected.CanProceed -or $issue.Count -ne 1 -or $issue[0].FilePath -ne $rejectedSource -or
+    $issue[0].Line -ne 2 -or $issue[0].Column -ne 17 -or $issue[0].Message -notlike '*escapes the source root*') {
+    throw ('Legacy source rejection lost its location: ' + ($issue | ConvertTo-Json -Compress))
+}
+Write-Checkpoint 'Legacy source rejection location passed'
 $spec = [PowerForge.PowerShellCompilationBuildSpec]::new($Source, $Output, 'Example', [PowerForge.PowerShellCompilationArtifactKind]::BinaryModule, [PowerForge.PowerShellCompilationMode]::Hybrid, $true)
 $spec.TargetFramework = 'net472'
 $spec.ResourceMode = [PowerForge.PowerShellCompilationResourceMode]::None

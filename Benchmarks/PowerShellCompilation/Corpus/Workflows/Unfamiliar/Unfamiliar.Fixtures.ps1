@@ -45,18 +45,31 @@ beta
     return $tree
 }
 
+function Set-UnfamiliarGitIsolation {
+    param([hashtable] $Environment, [string] $Root)
+
+    foreach ($name in [Environment]::GetEnvironmentVariables().Keys) {
+        if ($name -like 'GIT_*') { $Environment[$name] = $null }
+    }
+    $globalConfig = Join-Path $Root '.fixture-gitconfig'
+    if (-not (Test-Path -LiteralPath $globalConfig)) { Write-UnfamiliarText $globalConfig '' }
+    $Environment.GIT_CONFIG_GLOBAL = $globalConfig
+    $Environment.GIT_CONFIG_NOSYSTEM = '1'
+    $Environment.GIT_CEILING_DIRECTORIES = Split-Path -Parent $Root
+}
+
 function New-UnfamiliarGitFixture {
     param([string] $Root)
 
     Write-UnfamiliarText (Join-Path $Root 'consolegit2gitfilters.json') '{"ContainsFilters":["/excluded"],"SuffixFilters":[".generated"],"PrefixFilters":["scratch"]}'
-    $environment = @{
-        GIT_AUTHOR_NAME = 'Fixture Author'
-        GIT_COMMITTER_NAME = 'Fixture Author'
-        GIT_AUTHOR_EMAIL = 'author@example.test'
-        GIT_COMMITTER_EMAIL = 'author@example.test'
-        GIT_AUTHOR_DATE = '2025-01-01T00:00:00+00:00'
-        GIT_COMMITTER_DATE = '2025-01-01T00:00:00+00:00'
-    }
+    $environment = @{}
+    Set-UnfamiliarGitIsolation $environment $Root
+    $environment.GIT_AUTHOR_NAME = 'Fixture Author'
+    $environment.GIT_COMMITTER_NAME = 'Fixture Author'
+    $environment.GIT_AUTHOR_EMAIL = 'author@example.test'
+    $environment.GIT_COMMITTER_EMAIL = 'author@example.test'
+    $environment.GIT_AUTHOR_DATE = '2025-01-01T00:00:00+00:00'
+    $environment.GIT_COMMITTER_DATE = '2025-01-01T00:00:00+00:00'
     $steps = @(
         @{arguments = @('init', '--quiet', '--template=')}
         @{arguments = @('add', 'consolegit2gitfilters.json')}
@@ -291,30 +304,98 @@ function ConvertTo-UnfamiliarScenarioEffectHash {
     return $RawHash
 }
 
+function Get-UnfamiliarContentHash {
+    param([byte[]] $Bytes)
+
+    $sha256 = [Security.Cryptography.SHA256]::Create()
+    try { return [BitConverter]::ToString($sha256.ComputeHash($Bytes)).Replace('-', '').ToLowerInvariant() }
+    finally { $sha256.Dispose() }
+}
+
 function ConvertTo-UnfamiliarReportEffectHash {
     param([string] $Path, [datetime] $Started, [datetime] $Completed)
 
     $utf8 = [Text.UTF8Encoding]::new($false, $true)
     $html = $utf8.GetString([IO.File]::ReadAllBytes($Path))
-    $meta = [regex] '<meta (?:name="(?<name>viewport|revised)" content="(?<value>[^"]*)"|content="(?<value>[^"]*)" name="(?<name>viewport|revised)")>'
-    $tags = $meta.Matches($html)
-    $revision = @($tags | Where-Object { $_.Groups['name'].Value -ceq 'revised' })
-    $viewport = @($tags | Where-Object { $_.Groups['name'].Value -ceq 'viewport' })
+    $meta = [regex] '\A<meta (?:name="(?<name>viewport|revised)" content="(?<value>[^"]*)"|content="(?<value>[^"]*)" name="(?<name>viewport|revised)")>\z'
+    $markup = [regex] @'
+(?isx)
+    <!-- (?: -?> | .*? (?: --!?> | \z ) )
+  | <plaintext\b .* \z
+  | <(?<raw>script|style|textarea|title|xmp|iframe|noembed|noframes|noscript)\b
+       (?: [^>"'] | "[^"]*" | '[^']*' )* > .*? (?: </\k<raw>\s*> | \z )
+  | <(?: [!?] | /?[a-z] ) (?: [^>"'] | "[^"]*" | '[^']*' )* >
+'@
+    $tags = @(
+        foreach ($token in $markup.Matches($html)) {
+            $tag = $meta.Match($token.Value)
+            if ($tag.Success) {
+                [pscustomobject]@{ Index = $token.Index; Length = $token.Length
+                    Name = $tag.Groups['name'].Value; Value = $tag.Groups['value'].Value }
+            }
+        }
+    )
+    $revision = @($tags | Where-Object Name -CEQ 'revised')
+    $viewport = @($tags | Where-Object Name -CEQ 'viewport')
     if ($revision.Count -ne 1 -or $viewport.Count -ne 1) {
         throw 'The HTML report must contain one viewport and one revision meta element.'
     }
-    $timestamp = [DateTime]::ParseExact($revision[0].Groups['value'].Value, 'yyyy-MM-dd HH:mm:ss',
+    $timestamp = [DateTime]::ParseExact($revision[0].Value, 'yyyy-MM-dd HH:mm:ss',
         [Globalization.CultureInfo]::InvariantCulture)
     if ($timestamp -lt $Started.AddSeconds(-1) -or $timestamp -gt $Completed) {
         throw 'The HTML report revision timestamp falls outside the invocation.'
     }
-    $content = $meta.Replace($html, {
-        param($tag)
-        $name = $tag.Groups['name'].Value
-        $value = if ($name -ceq 'revised') { '<invocation-time>' } else { $tag.Groups['value'].Value }
-        '<meta name="{0}" content="{1}">' -f $name, $value
-    })
-    return [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($utf8.GetBytes($content))).ToLowerInvariant()
+    $content = $html
+    foreach ($tag in ($tags | Sort-Object Index -Descending)) {
+        $value = if ($tag.Name -ceq 'revised') { '<invocation-time>' } else { $tag.Value }
+        $normalized = '<meta name="{0}" content="{1}">' -f $tag.Name, $value
+        $content = $content.Remove($tag.Index, $tag.Length).Insert($tag.Index, $normalized)
+    }
+    return Get-UnfamiliarContentHash ($utf8.GetBytes($content))
+}
+
+function Get-UnfamiliarCssRuleEnds {
+    param([string] $Css)
+
+    $rules = [Collections.Generic.Dictionary[int, int]]::new()
+    $delimiters = [Collections.Generic.Stack[char]]::new()
+    $cssWhitespace = [char[]] @(0x20, 0x09, 0x0a, 0x0c, 0x0d)
+    $quote = [char] 0
+    $escaped = $false
+    $start = -1
+    for ($i = 0; $i -lt $Css.Length; $i++) {
+        $c = $Css[$i]
+        if ($escaped) { $escaped = $false; continue }
+        if ($quote -eq [char] 0 -and $c -in $cssWhitespace) { continue }
+        if ($start -lt 0) { $start = $i }
+        if ($c -eq '\') { $escaped = $true; continue }
+        if ($quote -ne [char] 0) {
+            if ($c -eq $quote) { $quote = [char] 0 }
+            continue
+        }
+        switch ($c) {
+            { $_ -in '"', "'" } { $quote = $c }
+            '{' { $delimiters.Push('}') }
+            '(' { $delimiters.Push(')') }
+            '[' { $delimiters.Push(']') }
+            { $_ -in '}', ')', ']' } {
+                if ($delimiters.Count -eq 0 -or $delimiters.Pop() -ne $c) {
+                    throw 'The report comparison requires balanced CSS delimiters.'
+                }
+                if ($c -eq '}' -and $delimiters.Count -eq 0) {
+                    $rules.Add($start, $i + 1)
+                    $start = -1
+                }
+            }
+            ';' {
+                if ($delimiters.Count -eq 0 -and $Css[$start] -eq '@') { $start = -1 }
+            }
+        }
+    }
+    if ($start -ge 0 -or $delimiters.Count -gt 0 -or $quote -ne [char] 0 -or $escaped) {
+        throw 'The report comparison requires balanced CSS delimiters and complete rules.'
+    }
+    return ,$rules
 }
 
 function ConvertTo-SingleClassReportEffectHash {
@@ -335,10 +416,15 @@ function ConvertTo-SingleClassReportEffectHash {
         throw 'The report comparison requires a comment-free stylesheet.'
     }
     $rules = [regex]::Matches($css.Value, '(?m)^[\t ]*\.(?<name>[-A-Za-z0-9_]+)[\t ]*\{[^\r\n{}]*\}[\t ]*\r?\n')
+    $ruleEnds = Get-UnfamiliarCssRuleEnds $css.Value
     $names = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
     $lines = [Collections.Generic.List[string]]::new()
     $end = if ($rules.Count) { $rules[0].Index } else { 0 }
     foreach ($rule in $rules) {
+        $selector = $rule.Groups['name'].Index - 1
+        if (-not $ruleEnds.ContainsKey($selector) -or $ruleEnds[$selector] -ne ($rule.Index + $rule.Value.TrimEnd().Length)) {
+            throw 'The report comparison requires complete standalone single-class CSS rules.'
+        }
         if ($rule.Index -ne $end -or -not $names.Add($rule.Groups['name'].Value)) {
             throw 'The report comparison requires a contiguous block of distinct single-class CSS rules.'
         }
@@ -353,5 +439,5 @@ function ConvertTo-SingleClassReportEffectHash {
     $sorted = $lines.ToArray()
     [Array]::Sort($sorted, [StringComparer]::Ordinal)
     $observed = $html.Substring(0, $first) + ($sorted -join '') + $html.Substring($css.Index + $end)
-    return [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($utf8.GetBytes($observed))).ToLowerInvariant()
+    return Get-UnfamiliarContentHash ($utf8.GetBytes($observed))
 }

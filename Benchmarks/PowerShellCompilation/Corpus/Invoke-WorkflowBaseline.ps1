@@ -63,20 +63,28 @@ foreach ($target in ($selected.artifactTargets | Sort-Object -Unique)) {
     if ($Framework -and $target -notin $Framework) { continue }
     $profile = Get-CorpusProperty $packet.artifactMatrix $target
     if ($null -eq $profile -or -not $hostPaths.ContainsKey($target)) { throw "Missing host contract for '$target'." }
-    $versionProbe = Invoke-OwnedProcess -FileName $hostPaths[$target] -Arguments @(
-        '-NoLogo', '-NoProfile', '-NonInteractive', '-Command', '$PSVersionTable.PSVersion.ToString()'
+    $identityCommand = @'
+$runtime = [Runtime.InteropServices.RuntimeInformation]
+[ordered]@{
+    version = $PSVersionTable.PSVersion.ToString()
+    operatingSystem = if ($runtime::IsOSPlatform([Runtime.InteropServices.OSPlatform]::Windows)) { 'Windows' } else { 'Other' }
+    architecture = $runtime::ProcessArchitecture.ToString().ToLowerInvariant()
+} | ConvertTo-Json -Compress
+'@
+    $identityProbe = Invoke-OwnedProcess -FileName $hostPaths[$target] -Arguments @(
+        '-NoLogo', '-NoProfile', '-NonInteractive', '-Command', $identityCommand
     ) -WorkingDirectory $runRoot -TimeoutSeconds 30
-    if ($versionProbe.ExitCode -ne 0 -or $versionProbe.StandardOutput.Trim() -cne $profile.referenceHost) {
-        throw "The $target oracle must be PowerShell $($profile.referenceHost). Received '$($versionProbe.StandardOutput.Trim())'."
-    }
-    $hostIdentities[$target] = $versionProbe.StandardOutput.Trim()
+    if ($identityProbe.ExitCode -ne 0) { throw "The '$target' reference host identity probe failed." }
+    $identity = $identityProbe.StandardOutput | ConvertFrom-Json -AsHashtable
+    Assert-WorkflowReferenceHost $identity $profile $target
+    $hostIdentities[$target] = $identity
 }
 if ($hostIdentities.Count -eq 0) { throw 'The selection has no declared target lanes.' }
 
 $cliVersion = Invoke-OwnedProcess -FileName 'dotnet' -Arguments @($CliAssemblyPath, '--version') -WorkingDirectory $runRoot -TimeoutSeconds 30
 if ($cliVersion.ExitCode -ne 0) { throw 'PowerForge version could not be verified.' }
 $report = [ordered]@{
-    schemaVersion = 1
+    schemaVersion = 2
     packetId = $packet.packetId
     packetSha256 = $packetState.Sha256
     fixtures = $fixtureIdentities

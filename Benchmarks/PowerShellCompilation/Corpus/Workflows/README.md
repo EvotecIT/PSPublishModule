@@ -22,7 +22,7 @@ The module packages and their binaries are external comparison inputs. Acquire t
 
 ## Unfamiliar workflow baseline
 
-The [unfamiliar workflow packet](../unfamiliar-workflows.net10.json) pins 15 standalone scripts, ten Gallery modules, and five multi-file applications. It declares 30 Windows x64 artifacts for PowerShell 7.6.6 and ten module artifacts for Windows PowerShell 5.1. The packet lists the source hosts separately, since some scripts run in Windows PowerShell while their compiled executable target is .NET 10.
+The [unfamiliar workflow packet](../unfamiliar-workflows.net10.json) pins 15 standalone scripts, ten Gallery modules, and five multi-file applications. It declares 30 Windows x64 lanes using PowerShell 7.6.6 for source observations and ten additional module lanes using Windows PowerShell 5.1. Source-host entries in the packet describe workload applicability. The selected target determines which host runs each source observation.
 
 Run the observation suite from the corpus directory with the PowerForge assembly from the compiler revision under assessment. Choose a short, dedicated scratch path. Each project installs into its own directory under that path.
 
@@ -31,7 +31,7 @@ Run the observation suite from the corpus directory with the PowerForge assembly
     -WorkspacePath $scratch -AllowExternalExecution
 ```
 
-The runner verifies source package hashes and the exact PowerShell version for each selected target. It records the compiler version and fixture hashes. Set `-WorkloadId` or `-Framework` for a replay of specific lanes. `-OfflineAcquisition` uses an existing verified source cache, optionally at `-PayloadCachePath`. Fresh projects still use the normal project restore operation.
+The runner verifies source package hashes and the exact PowerShell version, operating system, and process architecture for each selected target. It records those host identities, the compiler version, and fixture hashes. Set `-WorkloadId` or `-Framework` for a replay of specific lanes. `-OfflineAcquisition` uses an existing verified source cache, optionally at `-PayloadCachePath`. Fresh projects still use the normal project restore operation.
 
 Each lane retains separate source, built, and installed observations. The artifact comparisons withdraw the copied compiler inputs, and the installation entrypoint must match the built entrypoint by SHA-256. The observation compares output, errors, exit status, and changed or removed files. Module observations also compare exported commands. The full process streams remain available for investigating differences. Comparison removes terminal coloring, replaces the known per-case and entry paths, and normalizes elapsed time for the three fixtures that print it.
 
@@ -43,4 +43,4 @@ Combine the completed target reports into a portable baseline. Pass one report p
 ./Publish-WorkflowBaseline.ps1 -EvidencePath $reports -OutputPath $baseline
 ```
 
-The output records every declared target lane, exact fixture hashes, and digests of the observations. Publication requires all lanes and one compiler revision. If an invalid source fixture was corrected, pass its targeted replay after the original report. The baseline records both fixture identities and uses the valid source case. Build, installation, and semantic failures remain visible in their recorded lanes.
+The output records every declared target lane, exact fixture hashes, and digests of the observations. Publication requires schema version 2 evidence for all lanes and one compiler revision. The earlier baseline files retain their original observations. If an invalid source fixture was corrected, pass its targeted replay after the original report. The baseline records both fixture identities and uses the valid source case. Build, installation, and semantic failures remain visible in their recorded lanes.

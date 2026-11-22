@@ -554,7 +554,7 @@ function Invoke-WholeWorkflowQualification {
         $steps[$operation] = Invoke-WorkflowCliOperation -Arguments @('powershell', 'project', $operation, $projectPath, '--output', 'json') -WorkingDirectory $root -EvidencePath (Join-Path $evidenceRoot ($operation + '.json')) -Environment $environment
     }
     $installRoot = [string] @($steps.install.targets)[0].path
-    $relativePrimary = [IO.Path]::GetRelativePath($outputRoot, $builtPath)
+    $relativePrimary = $builtPath.Substring($outputRoot.TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar).Length + 1)
     $installedPath = Assert-ContainedPath -Root $installRoot -Path (Join-Path $installRoot ('artifact/' + $relativePrimary)) -Label 'Installed workflow primary'
     if ((Get-FileHash -LiteralPath $builtPath).Hash -ne $buildReceipt.manifest.artifactSha256 -or
         (Get-FileHash -LiteralPath $installedPath).Hash -ne $buildReceipt.manifest.artifactSha256) {

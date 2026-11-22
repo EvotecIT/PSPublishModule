@@ -708,7 +708,7 @@
         "7.6.6",
         "5.1.26100.9818"
       ],
-      "probe": "scratch-only source formatting and dry run; missing helper",
+      "probe": "scratch-only source formatting and dry run; invalid named argument",
       "artifactTargets": [
         "net10.0"
       ]

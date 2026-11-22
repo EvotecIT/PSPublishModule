@@ -51,7 +51,7 @@ public sealed class PowerShellCompilationProjectDiagnosticsTests
         var text = string.Join("\n", PowerShellCompilationDiagnosticReportFormatter.Format(report));
         Assert.Contains("[Shaping] binary-module.cmdlet-shape", text);
         Assert.Contains("Calls Get-Leaf at 7:5 -> Functions.psm1:1", text);
-        Assert.DoesNotContain(fixture.Root, JsonSerializer.Serialize(report), StringComparison.OrdinalIgnoreCase);
+        AssertRedactedFixturePath(report, fixture.Root);
         var explanation = JsonSerializer.Deserialize<PowerShellCompilationExplanation>(
             File.ReadAllText(target.Path!), PowerShellCompilationProjectManifestService.JsonOptions)!;
         Assert.Equal(explanation.CanProceed, result.Succeeded); // Do not use the pre-shaping plan's success.
@@ -148,7 +148,7 @@ public sealed class PowerShellCompilationProjectDiagnosticsTests
             var report = Assert.Single(result.Targets).DiagnosticReport!;
             Assert.False(report.FinalShapeAvailable);
             Assert.Equal(stage, Assert.Single(report.Issues).Stage);
-            Assert.DoesNotContain(fixture.Root, JsonSerializer.Serialize(report), StringComparison.OrdinalIgnoreCase);
+            AssertRedactedFixturePath(report, fixture.Root);
         }
     }
 
@@ -170,7 +170,7 @@ public sealed class PowerShellCompilationProjectDiagnosticsTests
         Assert.Equal(2, issue.Line);
         Assert.Equal(17, issue.Column);
         Assert.Contains("escapes the source root", issue.Message, StringComparison.Ordinal);
-        Assert.DoesNotContain(fixture.Root, JsonSerializer.Serialize(report), StringComparison.OrdinalIgnoreCase);
+        AssertRedactedFixturePath(report, fixture.Root);
     }
 
     [Theory]
@@ -191,7 +191,7 @@ public sealed class PowerShellCompilationProjectDiagnosticsTests
         Assert.Equal("Helper.ps1", issue.RelativePath);
         Assert.Equal(3, issue.Line);
         Assert.Equal(5, issue.Column);
-        Assert.DoesNotContain(fixture.Root, JsonSerializer.Serialize(report), StringComparison.OrdinalIgnoreCase);
+        AssertRedactedFixturePath(report, fixture.Root);
     }
 
     [Fact]
@@ -263,6 +263,13 @@ public sealed class PowerShellCompilationProjectDiagnosticsTests
         var workflowReport = Assert.Single(new PowerShellCompilationProjectWorkflowService().Explain(fixture.Project).Targets).DiagnosticReport!;
         Assert.Equal(inner.Unit.UnitId, workflowReport.Units.Single(group => group.Unit.Name == "Get-Inner").Unit.UnitId);
         Assert.Equal(2, Assert.Single(outer.LocalCalls).Line);
+    }
+
+    private static void AssertRedactedFixturePath(PowerShellCompilationDiagnosticReport report, string root)
+    {
+        var json = JsonSerializer.Serialize(report);
+        Assert.DoesNotContain(JsonSerializer.Serialize(root)[1..^1], json, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(JsonSerializer.Serialize(root.Replace('\\', '/'))[1..^1], json, StringComparison.OrdinalIgnoreCase);
     }
 
     internal sealed class Fixture : IDisposable
