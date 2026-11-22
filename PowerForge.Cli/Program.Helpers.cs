@@ -82,6 +82,7 @@ internal static partial class Program
                                 [--prerelease] [--plan] [--accept-license] [--allow-clobber] [--output json]
       powerforge module restore --requirements <modules.json> --lock-file <modules.lock.json> --destination <directory>
                                 [--source <feed-url-or-folder>] [--write-lock] [--plan] [--accept-license] [--allow-clobber] [--output json]
+      powerforge module manifest --path <module.psd1> [--output json]
       powerforge pipeline [--config <Pipeline.json>] [--project-root <path>] [--diagnostics-baseline <file>] [--diagnostics-baseline-generate] [--diagnostics-baseline-update] [--fail-on-new-diagnostics] [--fail-on-diagnostics-severity <Warning|Error>] [--output json]
       powerforge plan [--config <Pipeline.json>] [--project-root <path>] [--output json]
       powerforge find --name <Name>[,<Name>...] [--repo <Repo>] [--version <X.Y.Z>] [--prerelease]

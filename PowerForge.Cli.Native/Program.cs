@@ -7,12 +7,17 @@ internal static partial class Program
     {
         var cli = ParseCliOptions(args, out var error);
         var command = StripGlobalArgs(args);
-        if (error is not null || !HandlesNativeCommand(command))
+        var isVersion = IsVersionInvocation(args);
+        if (error is not null || (!isVersion && !HandlesNativeCommand(command)))
             return ManagedWorker.Run(args);
 
         using var encoding = ConsoleEncoding.UseUtf8(switchEncoding: true);
         if (cli.NoColor)
             Environment.SetEnvironmentVariable("NO_COLOR", "1");
+
+        // The module engine and managed CLI share a release version and source revision.
+        if (isVersion)
+            return CommandVersion(args, typeof(ModuleManifestMetadataReader).Assembly);
 
         ILogger logger = new TerminalOutputLogger { IsVerbose = cli.Verbose };
         if (cli.Quiet)
