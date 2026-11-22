@@ -142,7 +142,9 @@ internal sealed partial class PowerShellSemanticAnalyzer
         {
             if (statement.Message is PowerShellBoundArrayExpression array)
                 return statement.RuntimeFree && array.Elements.Any(RequiresHostedArrayRecord);
-            if (type.ClrType == typeof(void) || PowerShellStableScalarTypePolicy.IsSupported(type))
+            if (type.ClrType == typeof(void) || PowerShellStableScalarTypePolicy.IsSupported(type) ||
+                statement.RuntimeFree && (statement.Message.ValueState == PowerShellValueState.Null ||
+                    type.ClrType == typeof(Generated.Runtime.PowerShellStrictProjectionRecord)))
                 return false;
             var clr = type.ClrType;
             return !statement.RuntimeFree || !clr.IsArray || clr.GetArrayRank() != 1 ||
@@ -233,6 +235,7 @@ internal sealed partial class PowerShellSemanticAnalyzer
                 PowerShellBoundReturnStatement { EmitsValue: true } => true,
                 PowerShellBoundExpressionStatement { EmitsOutput: true } => true,
                 PowerShellBoundThrowStatement => true,
+                PowerShellBoundExitStatement { RuntimeFree: true } => true,
                 PowerShellBoundIfStatement conditional => conditional.ElseBlock is not null &&
                     conditional.Clauses.All(static clause => BlockReturnsValue(clause.Body)) &&
                     BlockReturnsValue(conditional.ElseBlock),

@@ -88,8 +88,8 @@ internal static class PowerShellLoweredRegionGraphBuilder
         {
             var startOffset = MapOffset(region.StartOffset, mappings);
             var endOffset = MapOffset(region.EndOffset, mappings);
-            var start = GetLineColumn(authoredText, startOffset);
-            var end = GetLineColumn(authoredText, endOffset);
+            var start = PowerShellSourceParser.GetLineColumn(authoredText, startOffset);
+            var end = PowerShellSourceParser.GetLineColumn(authoredText, endOffset);
             var span = new SourceSpan(
                 authoredDocumentId,
                 startOffset,
@@ -439,26 +439,6 @@ internal static class PowerShellLoweredRegionGraphBuilder
         }
         throw new InvalidOperationException(
             $"A lowered executable region offset ({syntheticOffset}) has no authored source mapping.");
-    }
-
-    private static (int Line, int Column) GetLineColumn(string text, int offset)
-    {
-        if (offset < 0 || offset > text.Length) throw new ArgumentOutOfRangeException(nameof(offset));
-        var line = 1;
-        var column = 1;
-        for (var index = 0; index < offset; index++)
-        {
-            if (text[index] == '\n')
-            {
-                line++;
-                column = 1;
-            }
-            else
-            {
-                column++;
-            }
-        }
-        return (line, column);
     }
 
     private sealed class RegionAccumulator

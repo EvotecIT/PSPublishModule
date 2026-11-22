@@ -4,17 +4,21 @@ namespace PowerForge;
 
 internal static class PowerShellRuntimeStateCommandSemanticBinder
 {
+    internal const string PlainConsoleInputProviderId = "powerforge.command.runtime-state.read-host";
     private const string CurrentLocalDateTimeOperation = "ReadCurrentLocalDateTime";
 
     internal static bool IsSupportedShape(
         CommandAst command,
         PowerShellCompilationCommandProviderContract provider,
-        PowerShellCompilationCapability capabilities)
+        PowerShellCompilationCapability capabilities,
+        bool permitsGeneratedScriptRoot = false)
         => capabilities.HasFlag(PowerShellCompilationCapability.RuntimeStateIntrinsics) &&
-           IsCurrentLocalDateTimeProvider(provider) &&
            command.InvocationOperator == TokenKind.Unknown &&
            command.Redirections.Count == 0 &&
-           (command.CommandElements.Count == 1 || TryGetLiteralFormat(command, out _));
+           (IsCurrentLocalDateTimeProvider(provider) && (command.CommandElements.Count == 1 || TryGetLiteralFormat(command, out _)) ||
+            IsPlainConsoleInput(provider) && capabilities == PowerShellCompilationCapabilities.TypedExecutable &&
+            (permitsGeneratedScriptRoot || IsInScriptRoot(command)) &&
+            TryGetLiteralPrompt(command, out _) && TryGetConsoleErrorRoute(command, out _));
 
     internal static PowerShellBoundExpression? Bind(
         ParsedSourceDocument document,
@@ -26,6 +30,30 @@ internal static class PowerShellRuntimeStateCommandSemanticBinder
         ICollection<PowerShellSemanticDiagnostic> diagnostics)
     {
         var span = PowerShellSourceParser.GetSpan(document, command.Extent);
+        if (IsPlainConsoleInput(provider))
+        {
+            if (!IsSupportedShape(command, provider, capabilities, document.AuthoredProjection is not null) || !TryGetLiteralPrompt(command, out var prompt))
+            {
+                diagnostics.Add(new PowerShellSemanticDiagnostic(provider.FeatureId,
+                    "Strict Read-Host requires a direct script-root assignment with an optional nonempty literal prompt.", span));
+                return null;
+            }
+            var source = document.AuthoredProjection?.Select(document, new[] { command.Extent }) ??
+                new PowerShellCommandRegionSourceSelection(document.Path, document.Text, new[] { span });
+            var authored = source.Statements.Single();
+            var line = PowerShellSourceParser.GetSourceLine(source.Document, authored);
+            var consoleArguments = new object[]
+            {
+                prompt, Path.GetFileName(source.Path), authored.StartLine, authored.StartColumn,
+                authored.StartLine == authored.EndLine ? authored.EndColumn - authored.StartColumn : line.Length - authored.StartColumn + 1,
+                line, command.GetCommandName()!
+            };
+            return new PowerShellBoundRuntimeStateExpression(span, PowerShellRuntimeStateIntrinsicKind.PlainConsoleInput,
+                targetFramework ?? string.Empty, semanticProfileId, consoleArguments.Select(value => new PowerShellBoundLiteralExpression(
+                    span, value, new PowerShellTypeFact(value.GetType(), PowerShellTypeFactProvenance.Literal, "The command source determines this argument."),
+                    PowerShellValueState.Known)).ToArray(), provider);
+        }
+
         if (!IsSupportedShape(command, provider, capabilities))
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic(
@@ -72,7 +100,67 @@ internal static class PowerShellRuntimeStateCommandSemanticBinder
             } resolution ||
             !IsSupportedShape(command, resolution.Contract!, capabilities))
             return false;
-        type = command.CommandElements.Count == 1 ? typeof(DateTime) : typeof(string);
+        type = IsCurrentLocalDateTimeProvider(resolution.Contract!) && command.CommandElements.Count == 1
+            ? typeof(DateTime)
+            : typeof(string);
+        return true;
+    }
+
+    private static bool IsPlainConsoleInput(PowerShellCompilationCommandProviderContract provider)
+        => provider.ProviderId.Equals(PlainConsoleInputProviderId, StringComparison.Ordinal);
+
+    private static bool IsInScriptRoot(CommandAst command)
+    {
+        for (Ast? parent = command.Parent; parent is not null; parent = parent.Parent)
+            if (parent is ScriptBlockAst block) return block.Parent is null;
+        return false;
+    }
+
+    internal static bool TryGetConsoleErrorRoute(CommandAst command, out bool catchesStatementError)
+    {
+        catchesStatementError = false;
+        if (command.Parent is not PipelineAst { PipelineElements.Count: 1 } pipeline ||
+            PowerShellCommandRegionSemanticBinder.IsBackground(pipeline) ||
+            pipeline.Parent is not AssignmentStatementAst { Operator: TokenKind.Equals } assignment ||
+            PowerShellAssignmentTargetPolicy.FindDirectVariable(assignment.Left) is not { VariablePath.IsUnqualified: true })
+            return false;
+        var requiresFinallyUnwind = false;
+        for (Ast? child = assignment, parent = assignment.Parent; parent is not null; child = parent, parent = parent.Parent)
+        {
+            if (parent is CatchClauseAst) return false;
+            if (parent is not TryStatementAst attempt) continue;
+            if (ReferenceEquals(child, attempt.Finally)) return false;
+            if (ReferenceEquals(child, attempt.Body))
+            {
+                if (attempt.CatchClauses.Count == 0)
+                {
+                    requiresFinallyUnwind = true;
+                    continue;
+                }
+                if (attempt.CatchClauses.Any(static clause => clause.CatchTypes.Count != 0)) return false;
+                catchesStatementError = true;
+                return true;
+            }
+        }
+        return !requiresFinallyUnwind;
+    }
+
+    private static bool TryGetLiteralPrompt(CommandAst command, out string prompt)
+    {
+        prompt = string.Empty;
+        var elements = command.CommandElements;
+        if (elements.Count == 1) return true;
+        var value = elements.Count switch
+        {
+            2 when elements[1] is StringConstantExpressionAst literal => literal,
+            2 when elements[1] is CommandParameterAst parameter && parameter.ParameterName.Equals("Prompt", StringComparison.OrdinalIgnoreCase)
+                => parameter.Argument as StringConstantExpressionAst,
+            3 when elements[1] is CommandParameterAst { Argument: null } parameter && parameter.ParameterName.Equals("Prompt", StringComparison.OrdinalIgnoreCase)
+                => elements[2] as StringConstantExpressionAst,
+            _ => null
+        };
+        if (value is null || value.Value.Length == 0) return false;
+        prompt = value.Value;
         return true;
     }
 

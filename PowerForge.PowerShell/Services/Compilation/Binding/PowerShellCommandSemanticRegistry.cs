@@ -269,6 +269,27 @@ internal sealed partial class PowerShellCommandSemanticRegistry
         };
         yield return new PowerShellCompilationCommandProviderContract
         {
+            ProviderId = PowerShellRuntimeStateCommandSemanticBinder.PlainConsoleInputProviderId,
+            ProviderVersion = "1.0",
+            FeatureId = PowerShellCompilationFeatureIds.ForCommand("Read-Host"),
+            Family = PowerShellCompilationCommandFamily.RuntimeState,
+            CommandName = "Read-Host",
+            ModuleNames = new[] { "Microsoft.PowerShell.Utility" },
+            Parameters = new[] { new PowerShellCompilationCommandParameterContract { Name = "Prompt", Position = 0 } },
+            Output = PowerShellCompilationCommandOutput.Projected,
+            Cardinality = PowerShellCompilationCommandCardinality.Scalar,
+            Stream = "Success",
+            Errors = PowerShellCompilationCommandErrors.Terminating,
+            Adapter = new PowerShellCompilationCommandAdapterContract
+            {
+                Operation = "ReadPlainConsoleLine",
+                SemanticProfile = PowerShellCompilationSemanticProfile.RuntimeFreeStrictName + "/" + PowerShellCompilationSemanticProfile.RuntimeFreeStrictVersion,
+                RuntimeFree = true,
+                AotCompatible = true
+            }
+        };
+        yield return new PowerShellCompilationCommandProviderContract
+        {
             ProviderId = "powerforge.command.construction.new-object",
             ProviderVersion = "1.0",
             FeatureId = PowerShellCompilationFeatureIds.ForCommand("New-Object"),

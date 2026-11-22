@@ -76,6 +76,44 @@ The generated artifacts verify the runtime-free dependency closure. The
 original six Strict programs continue to pass.
 [Semantic oracle tests](../PowerForge.Tests/PowerShellCompilationSemanticStrictStreamingOracleTests.cs).
 
+## Strict NativeAOT data-processing scripts
+
+The starting compiler rejected all eight candidate scripts in the public
+source survey. `Read-Host` was the first diagnostic in six. The frozen
+selection uses three unchanged CC0 scripts at the same upstream revision.
+Each builds and runs as a Strict NativeAOT executable on Windows x64 and
+Linux x64 with a verified runtime-free dependency closure.
+
+| Unchanged script | Starting Strict build | Observed native data path | Windows x64 bytes | Linux x64 bytes |
+| --- | --- | --- | ---: | ---: |
+| `list-files.ps1` | Rejected | Recursive filesystem records and ordered `FullName` projection | 3,140,608 | 3,248,408 |
+| `convert-csv2txt.ps1` | Rejected | Explicit-header CSV reads and ordered row interpolation | 3,104,256 | 3,174,120 |
+| `list-empty-files.ps1` | Rejected | Filesystem working-directory default, empty-file selection and counts | 3,054,080 | 3,178,368 |
+
+The Windows builds match 30/30 executable observations against PowerShell
+7.6.6 and Windows PowerShell 5.1.26100.9818 with UTF-8 reference console
+output. Strict console tables display full path values. PowerShell can
+shorten displayed paths to fit the console, and the oracles verify the
+complete values through structured records. The comparisons cover ordered
+file records, quoted CSV fields, redirected input, counted outputs, exit
+status and selected failures. They
+normalize the measured elapsed seconds and the layout of the nonterminating
+missing-path diagnostic. The default Windows reference console can replace
+an authored warning glyph under its active code page. All three Linux
+executables run in an isolated filesystem containing the program images,
+native OS libraries and test data. The Windows executables also run with
+.NET lookup restricted to an empty directory. A framework-dependent control
+fails to locate .NET in the same environment. A second uncached build on
+each platform reproduces all six executable hashes.
+
+The pinned oracles also check partial output after a terminating error and
+stopping in the middle of a local advanced function. PowerShell 7.6.6 covers
+`clean`, including early stop, discarded cleanup output, and locally handled
+failures. Strict requires proven-total cleanup or an exhaustive local catch
+around fallible operations.
+[Upstream source revision](https://github.com/fleschutz/PowerShell/tree/50082bcec78864a42527a4291b34d4af7fdb8be9/scripts).
+[Pinned oracle tests](../PowerForge.Tests/PowerShellCompilationSemanticStrictStreamingOracleTests.cs).
+
 ## Additional published Gallery packages
 
 Eight additional version-pinned Gallery packages were measured with the Hybrid

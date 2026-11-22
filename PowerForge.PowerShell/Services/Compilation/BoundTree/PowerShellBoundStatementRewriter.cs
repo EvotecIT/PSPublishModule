@@ -10,7 +10,8 @@ internal static class PowerShellBoundStatementRewriter
                 capture.Span, capture.Target, rewriteBlock(capture.Body), capture.NativeTarget, capture.Operation,
                 capture.Kind, capture.CapturedElementType, capture.ShareEmptyArray, capture.TransfersEnclosingLoop),
             PowerShellBoundStatementErrorBoundary boundary => new PowerShellBoundStatementErrorBoundary(
-                rewriteBlock(boundary.Body), boundary.SourcePath, boundary.SourceText, boundary.NativeSuccessStatus, boundary.NativeSequencePoint),
+                rewriteBlock(boundary.Body), boundary.SourcePath, boundary.SourceText, boundary.NativeSuccessStatus,
+                boundary.NativeSequencePoint, boundary.RuntimeFree),
             PowerShellBoundIfStatement conditional => new PowerShellBoundIfStatement(
                 conditional.Span,
                 conditional.Clauses.Select(clause => new PowerShellBoundConditionalClause(clause.Condition, rewriteBlock(clause.Body))).ToArray(),

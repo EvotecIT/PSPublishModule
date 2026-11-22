@@ -352,6 +352,8 @@ internal sealed partial class PowerShellSemanticAnalyzer
         {
             PowerShellBoundReturnStatement { EmitsSuccessOutput: true } returned => returned.Expression,
             PowerShellBoundExpressionStatement { EmitsOutput: true } expression => expression.Expression,
+            PowerShellBoundStreamWriteStatement
+                { RuntimeFree: true, Message: PowerShellBoundArrayExpression { Elements.Length: 0 } } => null,
             PowerShellBoundStreamWriteStatement { Kind: PowerShellStreamCommandKind.Success } stream => stream.Message,
             _ => null
         };

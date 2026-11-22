@@ -216,16 +216,19 @@ internal sealed class PowerShellLoweredLocalDeclarationStatement : PowerShellLow
 
 internal sealed class PowerShellLoweredParameter
 {
-    internal PowerShellLoweredParameter(PowerShellSymbolId symbol, Type clrType, PowerShellCompilationParameter contract)
+    internal PowerShellLoweredParameter(PowerShellSymbolId symbol, Type clrType, PowerShellCompilationParameter contract,
+        bool defaultsToCurrentDirectory)
     {
         Symbol = symbol;
         ClrType = clrType;
         Contract = contract;
+        DefaultsToCurrentDirectory = defaultsToCurrentDirectory;
     }
 
     internal PowerShellSymbolId Symbol { get; }
     internal Type ClrType { get; }
     internal PowerShellCompilationParameter Contract { get; }
+    internal bool DefaultsToCurrentDirectory { get; }
 }
 
 internal sealed class PowerShellLoweredFunction

@@ -148,6 +148,42 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
     }
 
     [Fact]
+    public void RuntimeFreeArtifactObserverRejectsIncoherentClosedRecordSets()
+    {
+        var method = new PowerShellCompilationAbiMethod
+        {
+            OutputCardinality = "None",
+            ClosedSuccessRecordTypes = new[] { "System.Int32", "System.String" }
+        };
+        var culture = System.Globalization.CultureInfo.InvariantCulture;
+        Assert.Throws<InvalidOperationException>(() =>
+            PowerShellCompilationSemanticRuntimeFreeArtifactObserver.RequireObservableOutputContract(method, culture));
+        method.OutputCardinality = "Collection";
+        method.CollectionElementType = "System.Object";
+        method.OutputValueStates = new[] { "Known" };
+        method.ClosedSuccessRecordTypes = new[] { "System.DateTime", "System.String" };
+        Assert.Throws<InvalidOperationException>(() =>
+            PowerShellCompilationSemanticRuntimeFreeArtifactObserver.RequireObservableOutputContract(method, culture));
+    }
+
+    [Fact]
+    public void RuntimeFreeArtifactObserverRejectsRecordsOutsideTheClosedContract()
+    {
+        using var fixture = OracleFixture.Create("Write-Output 42; Write-Output 'done'");
+        var build = BuildStrictOracleExecutable(fixture, "ClosedStrictOracle");
+        Assert.True(build.Succeeded, build.Error + Environment.NewLine + build.BuildOutput);
+        var method = PowerShellCompilationSemanticRuntimeFreeArtifactObserver.SelectEntryPoint(build.Manifest!.PublicAbi);
+        Assert.Equal(new[] { "System.Int32", "System.String" }, method.ClosedSuccessRecordTypes);
+        foreach (var frame in new[] { ("VALUE", "System.Int64", "42"), ("ROW", "System.Management.Automation.PSCustomObject", "{}") })
+        {
+            var runner = new UnadmittedSemanticRecordRunner(frame.Item1, frame.Item2, frame.Item3);
+            Assert.Throws<InvalidDataException>(() =>
+                new PowerShellCompilationSemanticRuntimeFreeArtifactObserver(runner).Observe(
+                    PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId, build));
+        }
+    }
+
+    [Fact]
     public void RuntimeFreeArtifactObserverRejectsOversizedOutputFromCustomRunner()
     {
         using var fixture = OracleFixture.Create("42");
@@ -215,6 +251,22 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
         {
             InvocationCount++;
             throw new InvalidOperationException("The process boundary must not be reached.");
+        }
+    }
+
+    private sealed class UnadmittedSemanticRecordRunner(string recordType, string typeName, string value) : IProcessRunner
+    {
+        public Task<ProcessRunResult> RunAsync(ProcessRunRequest request, CancellationToken cancellationToken = default)
+        {
+            static string Encode(string text) => Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(text));
+            var output = string.Join(Environment.NewLine, new[]
+            {
+                "PowerForge.StrictObservation/1|BEGIN||",
+                $"PowerForge.StrictObservation/1|{recordType}|{Encode(typeName)}|{Encode(value)}",
+                "PowerForge.StrictObservation/1|END||MQ==",
+                string.Empty
+            });
+            return Task.FromResult(new ProcessRunResult(0, output, string.Empty, request.FileName, TimeSpan.Zero, timedOut: false));
         }
     }
 

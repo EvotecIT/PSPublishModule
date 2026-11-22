@@ -13,7 +13,8 @@ internal sealed partial class PowerShellSemanticBinder
         string? targetFramework,
         PowerShellCompilationCapability capabilities,
         bool allowNonTerminalSuccessOutput,
-        Type? nonTerminalSuccessOutputType)
+        Type? nonTerminalSuccessOutputType,
+        StrictStreamingBinding? strictStreaming)
     {
         var clauses = new List<PowerShellBoundConditionalClause>();
         var baselineSymbols = CloneSymbols(symbols);
@@ -34,7 +35,8 @@ internal sealed partial class PowerShellSemanticBinder
                 targetFramework,
                 capabilities,
                 allowNonTerminalSuccessOutput: allowNonTerminalSuccessOutput,
-                nonTerminalSuccessOutputType: nonTerminalSuccessOutputType);
+                nonTerminalSuccessOutputType: nonTerminalSuccessOutputType,
+                strictStreaming: strictStreaming);
             if (body is null) return null;
             clauses.Add(new PowerShellBoundConditionalClause(condition, body));
             pathSymbols.Add(clauseSymbols);
@@ -56,7 +58,8 @@ internal sealed partial class PowerShellSemanticBinder
                 targetFramework,
                 capabilities,
                 allowNonTerminalSuccessOutput: allowNonTerminalSuccessOutput,
-                nonTerminalSuccessOutputType: nonTerminalSuccessOutputType);
+                nonTerminalSuccessOutputType: nonTerminalSuccessOutputType,
+                strictStreaming: strictStreaming);
             if (elseBlock is null) return null;
             pathSymbols.Add(elseSymbols);
         }
@@ -72,7 +75,8 @@ internal sealed partial class PowerShellSemanticBinder
         IReadOnlyDictionary<string, PowerShellLocalCallSignature> functions,
         ICollection<PowerShellSemanticDiagnostic> diagnostics,
         string? targetFramework,
-        PowerShellCompilationCapability capabilities)
+        PowerShellCompilationCapability capabilities,
+        StrictStreamingBinding? strictStreaming)
     {
         var baselineSymbols = CloneSymbols(symbols);
         var loopSymbols = CloneSymbols(baselineSymbols);
@@ -85,11 +89,13 @@ internal sealed partial class PowerShellSemanticBinder
             if (condition is null) return null;
             condition = BindConditionTruthiness(condition, capabilities, diagnostics, document, statement.Condition);
             if (condition is null) return null;
-            body = BindBlock(document, statement.Body, loopSymbols, functions, diagnostics, targetFramework, capabilities);
+            body = BindBlock(document, statement.Body, loopSymbols, functions, diagnostics, targetFramework, capabilities,
+                strictStreaming: strictStreaming);
         }
         else
         {
-            body = BindBlock(document, statement.Body, loopSymbols, functions, diagnostics, targetFramework, capabilities);
+            body = BindBlock(document, statement.Body, loopSymbols, functions, diagnostics, targetFramework, capabilities,
+                strictStreaming: strictStreaming);
             if (body is null) return null;
             var conditionSymbols = CloneSymbols(loopSymbols);
             if (HasPostTestFlowTransfer(statement.Body))
@@ -125,7 +131,8 @@ internal sealed partial class PowerShellSemanticBinder
         IReadOnlyDictionary<string, PowerShellLocalCallSignature> functions,
         ICollection<PowerShellSemanticDiagnostic> diagnostics,
         string? targetFramework,
-        PowerShellCompilationCapability capabilities)
+        PowerShellCompilationCapability capabilities,
+        StrictStreamingBinding? strictStreaming)
     {
         var initializer = statement.Initializer is null
             ? null
@@ -140,7 +147,8 @@ internal sealed partial class PowerShellSemanticBinder
         if (condition is not null) condition = BindConditionTruthiness(condition, capabilities, diagnostics, document, statement.Condition!);
         if (statement.Condition is not null && condition is null) return null;
         PowerShellInt32RangePolicy.RefineDescendingCounter(statement, initializer, loopSymbols);
-        var body = BindBlock(document, statement.Body, loopSymbols, functions, diagnostics, targetFramework, capabilities);
+        var body = BindBlock(document, statement.Body, loopSymbols, functions, diagnostics, targetFramework, capabilities,
+            strictStreaming: strictStreaming);
         if (body is null) return null;
         if (HasPostTestFlowTransfer(statement.Body))
             PrepareLoopFlowState(loopSymbols, functions, capabilities, statement.Condition, statement.Body, statement.Iterator);
@@ -161,7 +169,8 @@ internal sealed partial class PowerShellSemanticBinder
         IReadOnlyDictionary<string, PowerShellLocalCallSignature> functions,
         ICollection<PowerShellSemanticDiagnostic> diagnostics,
         string? targetFramework,
-        PowerShellCompilationCapability capabilities)
+        PowerShellCompilationCapability capabilities,
+        StrictStreamingBinding? strictStreaming)
     {
         var variableSpan = PowerShellSourceParser.GetSpan(document, statement.Variable.Extent);
         var nativeInvocation = capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding);
@@ -200,7 +209,8 @@ internal sealed partial class PowerShellSemanticBinder
         var loopSymbols = CloneSymbols(baselineSymbols);
         PrepareLoopFlowState(loopSymbols, functions, capabilities, statement.Body);
         loopSymbols[statement.Variable.VariablePath.UserPath].ForgetValueState();
-        var body = BindBlock(document, statement.Body, loopSymbols, functions, diagnostics, targetFramework, capabilities);
+        var body = BindBlock(document, statement.Body, loopSymbols, functions, diagnostics, targetFramework, capabilities,
+            strictStreaming: strictStreaming);
         if (body is null) return null;
         MergeSymbolValueStates(symbols, baselineSymbols, loopSymbols);
         PrepareLoopFlowState(symbols, functions, capabilities, statement.Body);

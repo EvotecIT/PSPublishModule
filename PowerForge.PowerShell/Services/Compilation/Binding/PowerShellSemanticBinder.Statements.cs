@@ -18,7 +18,8 @@ internal sealed partial class PowerShellSemanticBinder
         string? targetFramework,
         PowerShellCompilationCapability capabilities,
         bool allowNonTerminalSuccessOutput = false,
-        Type? nonTerminalSuccessOutputType = null)
+        Type? nonTerminalSuccessOutputType = null,
+        StrictStreamingBinding? strictStreaming = null)
     {
         allowNonTerminalSuccessOutput |= capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding);
         // The native function declaration installs the type before invoking CLR clauses.
@@ -37,8 +38,21 @@ internal sealed partial class PowerShellSemanticBinder
         var bound = statement is FunctionDefinitionAst nested && capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding)
             ? BindNativeFunctionDeclaration(document, nested, functions, diagnostics)
             : BindStatementCore(document, statement, symbols, functions, diagnostics, isTerminal,
-            targetFramework, capabilities, allowNonTerminalSuccessOutput, nonTerminalSuccessOutputType);
+                targetFramework, capabilities, allowNonTerminalSuccessOutput, nonTerminalSuccessOutputType, strictStreaming);
         if (bound is null) return null;
+        if (capabilities == PowerShellCompilationCapabilities.TypedExecutable &&
+            statement is AssignmentStatementAst consoleAssignment &&
+            UnwrapExpression(consoleAssignment.Right) is CommandAst consoleCommand &&
+            PowerShellRuntimeStateCommandSemanticBinder.TryGetConsoleErrorRoute(consoleCommand, out var catchesConsoleError) &&
+            !catchesConsoleError &&
+            PowerShellSemanticAnalyzer.EnumerateDirectExpressions(bound).SelectMany(PowerShellSemanticAnalyzer.EnumerateExpressions)
+                .Any(static expression => expression is PowerShellBoundRuntimeStateExpression
+                    { Kind: PowerShellRuntimeStateIntrinsicKind.PlainConsoleInput }))
+        {
+            assignedSymbol?.ForgetValueState();
+            return new PowerShellBoundStatementErrorBoundary(new PowerShellBoundBlock(bound.Span, new[] { bound }),
+                document.Path, string.Empty, runtimeFree: true);
+        }
         // Native pipeline compilation owns its error and status route, including
         // direct returned records. Routing an escaping pipeline error again would
         // append it twice to the native function's ErrorVariable.
@@ -76,7 +90,8 @@ internal sealed partial class PowerShellSemanticBinder
         string? targetFramework,
         PowerShellCompilationCapability capabilities,
         bool allowNonTerminalSuccessOutput = false,
-        Type? nonTerminalSuccessOutputType = null)
+        Type? nonTerminalSuccessOutputType = null,
+        StrictStreamingBinding? strictStreaming = null)
     {
         var closedCollectionFactoryAssignment = IsClosedCollectionFactoryAssignment(statement, functions);
         if (!closedCollectionFactoryAssignment &&
@@ -285,7 +300,8 @@ internal sealed partial class PowerShellSemanticBinder
                 symbols,
                 (item, itemType) => BindExpression(document, item, symbols, functions, diagnostics, itemType, targetFramework, assignmentCapabilities),
                 diagnostics,
-                assignmentCapabilities);
+                assignmentCapabilities,
+                _semanticProfile.ProfileId);
             return mutation is null
                 ? null
                 : new PowerShellBoundAssignmentStatement(
@@ -296,12 +312,22 @@ internal sealed partial class PowerShellSemanticBinder
                     mutation.NormalizeNullString,
                     mutation.IntegralSemantics, mutation.PreserveStatementErrors);
         }
-        if (statement is ExitStatementAst exitStatement && capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding))
+        if (statement is ExitStatementAst exitStatement &&
+            (capabilities == PowerShellCompilationCapabilities.TypedExecutable ||
+             capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding)))
         {
+            var runtimeFree = capabilities == PowerShellCompilationCapabilities.TypedExecutable;
+            var span = PowerShellSourceParser.GetSpan(document, exitStatement.Extent);
             var expression = exitStatement.Pipeline is null ? null : BindExpression(document, exitStatement.Pipeline,
                 symbols, functions, diagnostics, targetFramework: targetFramework, capabilities: capabilities);
+            if (runtimeFree && expression is not null && expression.Type.ClrType != typeof(int))
+            {
+                diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2317",
+                    "Strict executable exit requires an omitted status or an Int32 expression.", span));
+                return null;
+            }
             return exitStatement.Pipeline is null || expression is not null
-                ? new PowerShellBoundExitStatement(PowerShellSourceParser.GetSpan(document, exitStatement.Extent), expression)
+                ? new PowerShellBoundExitStatement(span, expression, runtimeFree)
                 : null;
         }
         if (statement is ReturnStatementAst returnStatement)
@@ -317,19 +343,23 @@ internal sealed partial class PowerShellSemanticBinder
                 : null;
         }
         if (statement is IfStatementAst ifStatement)
-            return BindIfStatement(document, ifStatement, symbols, functions, diagnostics, targetFramework, capabilities, allowNonTerminalSuccessOutput, nonTerminalSuccessOutputType);
+            return BindIfStatement(document, ifStatement, symbols, functions, diagnostics, targetFramework, capabilities,
+                allowNonTerminalSuccessOutput, nonTerminalSuccessOutputType, strictStreaming);
         if (statement is WhileStatementAst whileStatement)
-            return BindWhileStatement(document, whileStatement, PowerShellBoundLoopKind.While, symbols, functions, diagnostics, targetFramework, capabilities);
+            return BindWhileStatement(document, whileStatement, PowerShellBoundLoopKind.While, symbols, functions, diagnostics,
+                targetFramework, capabilities, strictStreaming);
         if (statement is DoWhileStatementAst doWhileStatement)
-            return BindWhileStatement(document, doWhileStatement, PowerShellBoundLoopKind.DoWhile, symbols, functions, diagnostics, targetFramework, capabilities);
+            return BindWhileStatement(document, doWhileStatement, PowerShellBoundLoopKind.DoWhile, symbols, functions, diagnostics,
+                targetFramework, capabilities, strictStreaming);
         if (statement is DoUntilStatementAst doUntilStatement)
-            return BindWhileStatement(document, doUntilStatement, PowerShellBoundLoopKind.DoUntil, symbols, functions, diagnostics, targetFramework, capabilities);
+            return BindWhileStatement(document, doUntilStatement, PowerShellBoundLoopKind.DoUntil, symbols, functions, diagnostics,
+                targetFramework, capabilities, strictStreaming);
         if (statement is ForStatementAst forStatement)
-            return BindForStatement(document, forStatement, symbols, functions, diagnostics, targetFramework, capabilities);
+            return BindForStatement(document, forStatement, symbols, functions, diagnostics, targetFramework, capabilities, strictStreaming);
         if (statement is ForEachStatementAst forEachStatement)
-            return BindForEachStatement(document, forEachStatement, symbols, functions, diagnostics, targetFramework, capabilities);
+            return BindForEachStatement(document, forEachStatement, symbols, functions, diagnostics, targetFramework, capabilities, strictStreaming);
         if (statement is SwitchStatementAst switchStatement)
-            return BindSwitchStatement(document, switchStatement, symbols, functions, diagnostics, targetFramework, capabilities);
+            return BindSwitchStatement(document, switchStatement, symbols, functions, diagnostics, targetFramework, capabilities, strictStreaming);
         if (statement is ThrowStatementAst throwStatement)
         {
             if (throwStatement.IsRethrow)
@@ -367,7 +397,8 @@ internal sealed partial class PowerShellSemanticBinder
             }
             var baselineSymbols = CloneSymbols(symbols);
             var trySymbols = CloneSymbols(baselineSymbols);
-            var body = BindBlock(document, tryStatement.Body, trySymbols, functions, diagnostics, targetFramework, capabilities, terminalOutputReturns: isTerminal);
+            var body = BindBlock(document, tryStatement.Body, trySymbols, functions, diagnostics, targetFramework, capabilities,
+                terminalOutputReturns: isTerminal, strictStreaming: strictStreaming);
             if (body is null) return null;
             var catches = new List<PowerShellBoundCatchClause>();
             var pathSymbols = new List<IReadOnlyDictionary<string, PowerShellSemanticSymbolBinding>> { trySymbols };
@@ -392,7 +423,8 @@ internal sealed partial class PowerShellSemanticBinder
                 }
                 var catchSymbols = CloneSymbols(baselineSymbols);
                 ForgetTryMutationsOnCatchEntry(catchSymbols, tryStatement.Body);
-                var catchBody = BindBlock(document, clause.Body, catchSymbols, functions, diagnostics, targetFramework, capabilities, terminalOutputReturns: isTerminal);
+                var catchBody = BindBlock(document, clause.Body, catchSymbols, functions, diagnostics, targetFramework, capabilities,
+                    terminalOutputReturns: isTerminal, strictStreaming: strictStreaming);
                 if (catchBody is null) return null;
                 catches.Add(new PowerShellBoundCatchClause(types.ToArray(), catchBody));
                 pathSymbols.Add(catchSymbols);
@@ -418,7 +450,8 @@ internal sealed partial class PowerShellSemanticBinder
             PowerShellBoundBlock? finallyBlock = null;
             if (tryStatement.Finally is not null)
             {
-                finallyBlock = BindBlock(document, tryStatement.Finally, joinedSymbols, functions, diagnostics, targetFramework, capabilities);
+                finallyBlock = BindBlock(document, tryStatement.Finally, joinedSymbols, functions, diagnostics, targetFramework, capabilities,
+                    strictStreaming: strictStreaming);
                 if (finallyBlock is null) return null;
             }
             MergeSymbolValueStates(symbols, joinedSymbols);
@@ -513,8 +546,24 @@ internal sealed partial class PowerShellSemanticBinder
                 outputBinding = _semanticProfile.Family == PowerShellCompilationSemanticHostFamily.PowerShell7
                     ? PowerShellOutputBindingKind.PositionalNoEnumeratePowerShell7
                     : PowerShellOutputBindingKind.NoEnumerate;
-            var expectedType = streamKind == PowerShellStreamCommandKind.Success ? null : typeof(string);
+            var strictOutput = PowerShellCommandIslandPolicy.IsStrictWriteOutput(capabilities, streamProvider!);
+            var expectedType = strictOutput ? InferPipelineInputType(messageSyntax, symbols) :
+                streamKind == PowerShellStreamCommandKind.Success ? null : typeof(string);
             var message = BindExpression(document, messageSyntax, symbols, functions, diagnostics, expectedType, targetFramework, capabilities);
+            if (strictOutput && message is not null)
+            {
+                var type = message.Type.ClrType;
+                if (!PowerShellStableScalarTypePolicy.IsSupported(type) &&
+                    !(type.IsArray && type.GetArrayRank() == 1 && PowerShellStableScalarTypePolicy.IsSupported(type.GetElementType()!)) &&
+                    message.ValueState != PowerShellValueState.Null &&
+                    message is not PowerShellBoundArrayExpression { Elements.Length: 0 })
+                {
+                    diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2948",
+                        "Strict Write-Output requires a stable scalar, an explicit null, or a one-dimensional stable-scalar array.", message.Span));
+                    return null;
+                }
+                return StrictSuccessOutput(message);
+            }
             if (message is not null && namedNoEnumerate &&
                 _semanticProfile.Family == PowerShellCompilationSemanticHostFamily.WindowsPowerShell51 &&
                 !PowerShellStableScalarTypePolicy.IsSupported(message.Type))
@@ -539,7 +588,7 @@ internal sealed partial class PowerShellSemanticBinder
                 out var enumeration))
             return enumeration;
         if (statement is PipelineAst lifecyclePipeline &&
-            IsRuntimeFreePipelineLifecycleInvocation(lifecyclePipeline, functions))
+            TryGetRuntimeFreePipelineLifecycleSelection(lifecyclePipeline, functions, capabilities, out _))
         {
             var invocation = BindRuntimeFreePipelineLifecycleInvocation(
                 document,
@@ -586,6 +635,11 @@ internal sealed partial class PowerShellSemanticBinder
                 capabilities);
             if (expression is null) return null;
             var emitsOutput = EmitsExpressionValue(expression);
+            if (capabilities == PowerShellCompilationCapabilities.TypedExecutable && !isTerminal &&
+                emitsOutput && !allowNonTerminalSuccessOutput &&
+                expression is not PowerShellBoundInvocationExpression &&
+                PowerShellStableScalarTypePolicy.IsSupported(expression.Type))
+                return StrictSuccessOutput(expression);
             if (!isTerminal && !allowNonTerminalSuccessOutput && emitsOutput &&
                 capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams) &&
                 capabilities.HasFlag(PowerShellCompilationCapability.PipelineParameterBinding) &&
@@ -632,7 +686,8 @@ internal sealed partial class PowerShellSemanticBinder
         PowerShellCompilationCapability capabilities,
         bool terminalOutputReturns = false,
         bool allowNonTerminalSuccessOutput = false,
-        Type? nonTerminalSuccessOutputType = null)
+        Type? nonTerminalSuccessOutputType = null,
+        StrictStreamingBinding? strictStreaming = null)
     {
         if (RejectUnrepresentedTraps(document, syntax.Traps, diagnostics)) return null;
         var statements = new List<PowerShellBoundStatement>();
@@ -640,17 +695,26 @@ internal sealed partial class PowerShellSemanticBinder
         {
             var statement = syntax.Statements[index];
             var diagnosticCount = diagnostics.Count;
+            var isTerminal = terminalOutputReturns && index == syntax.Statements.Count - 1;
+            if (TryBindStrictStreamingStatement(strictStreaming, document, statement, symbols, functions, statements,
+                    diagnostics, isTerminal: false, targetFramework, out var streaming))
+            {
+                if (streaming is null) return null;
+                statements.AddRange(streaming);
+                continue;
+            }
             var bound = BindStatement(
                 document,
                 statement,
                 symbols,
                 functions,
                 diagnostics,
-                isTerminal: terminalOutputReturns && index == syntax.Statements.Count - 1,
+                isTerminal,
                 targetFramework,
                 capabilities,
                 allowNonTerminalSuccessOutput,
-                nonTerminalSuccessOutputType);
+                nonTerminalSuccessOutputType,
+                strictStreaming);
             if (bound is null)
             {
                 if (diagnostics.Count == diagnosticCount)

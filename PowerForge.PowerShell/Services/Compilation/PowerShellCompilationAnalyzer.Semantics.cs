@@ -1,4 +1,5 @@
 using System.Management.Automation.Language;
+using System.Text;
 
 namespace PowerForge;
 
@@ -86,11 +87,21 @@ public sealed partial class PowerShellCompilationAnalyzer
                 .ToArray();
             var symbolName = "__PowerForgeScript_" + document.DocumentId.Substring(0, 16);
             var parameterBlock = PowerShellSourceParser.GetParameterBlockSource(document.SyntaxRoot.ParamBlock);
-            var body = string.Join(Environment.NewLine, statements.Select(static statement => statement.Extent.Text));
-            var synthetic = PowerShellSourceParser.Parse(
-                $"function {symbolName} {{{Environment.NewLine}{parameterBlock}{Environment.NewLine}{body}{Environment.NewLine}}}",
-                document.Path + ".powerforge-analysis.ps1",
-                identityRoot);
+            var source = new StringBuilder().Append("function ").Append(symbolName).AppendLine(" {").AppendLine(parameterBlock);
+            var mappings = new List<PowerShellRegionSourceRemap>();
+            foreach (var statement in statements)
+            {
+                var start = source.Length;
+                source.Append(statement.Extent.Text);
+                mappings.Add(new PowerShellRegionSourceRemap(start, source.Length, statement.Extent.StartOffset, statement.Extent.EndOffset));
+                source.AppendLine();
+            }
+            if (statements.Length == 0) source.AppendLine();
+            var synthetic = PowerShellSourceParser.Parse(source.Append('}').ToString(),
+                document.Path + ".powerforge-analysis.ps1", identityRoot);
+            if (capabilities == PowerShellCompilationCapabilities.TypedExecutable)
+                synthetic = new ParsedSourceDocument(synthetic.DocumentId, synthetic.Path, synthetic.Text, synthetic.SyntaxRoot,
+                    synthetic.Tokens, synthetic.Errors, new PowerShellAuthoredSourceProjection(document, mappings.ToArray()));
             compilationDocuments.Add(synthetic);
             var definition = synthetic.SyntaxRoot.EndBlock!.Statements.OfType<FunctionDefinitionAst>().Single();
             targets.Add(new SemanticUnitTarget(

@@ -512,7 +512,8 @@ internal static class PowerShellCommandIslandPolicy
         outputBinding = PowerShellOutputBindingKind.Default;
         var resolution = resolver.Resolve(command, localFunctionNames, capabilities);
         if (!resolution.IsProvider || resolution.Contract is null ||
-            !PowerShellStreamCommandSemanticBinder.TryBind(command, resolution.Contract, out kind, out message, out outputBinding))
+            !PowerShellStreamCommandSemanticBinder.TryBind(command, resolution.Contract, out kind, out message, out outputBinding,
+                IsStrictWriteOutput(capabilities, resolution.Contract)))
             return false;
         provider = resolution.Contract;
         return true;
@@ -540,11 +541,16 @@ internal static class PowerShellCommandIslandPolicy
                 capabilities))
             return false;
 
-        return capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams) ||
+        return IsStrictWriteOutput(capabilities, provider!) && outputBinding == PowerShellOutputBindingKind.Default ||
+               capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams) ||
                capabilities.HasFlag(PowerShellCompilationCapability.RuntimeFreeProviderOperations) &&
                provider!.Adapter.RuntimeFree &&
                provider.Adapter.EntryPoint is not null;
     }
+
+    internal static bool IsStrictWriteOutput(PowerShellCompilationCapability capabilities, PowerShellCompilationCommandProviderContract provider)
+        => capabilities == PowerShellCompilationCapabilities.TypedExecutable &&
+           provider.ProviderId.Equals("powerforge.command.stream.output", StringComparison.Ordinal);
 
     private static bool IsStreamCommand(
         CommandAst command,

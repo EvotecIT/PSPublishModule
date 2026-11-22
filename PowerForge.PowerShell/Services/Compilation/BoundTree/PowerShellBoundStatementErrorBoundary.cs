@@ -4,10 +4,11 @@ namespace PowerForge;
 internal sealed class PowerShellBoundStatementErrorBoundary : PowerShellBoundStatement
 {
     internal PowerShellBoundStatementErrorBoundary(PowerShellBoundBlock body, string sourcePath, string sourceText,
-        bool? nativeSuccessStatus = null, bool nativeSequencePoint = false)
+        bool? nativeSuccessStatus = null, bool nativeSequencePoint = false, bool runtimeFree = false)
         : base(body.Span, body.Effects | PowerShellSemanticEffect.NonSuccessStream | PowerShellSemanticEffect.Host |
             (nativeSuccessStatus.HasValue ? PowerShellSemanticEffect.Mutation : PowerShellSemanticEffect.None),
-            body.Capabilities | PowerShellRequiredCapability.PowerShellStatementErrors | PowerShellRequiredCapability.PowerShellHostTypes |
+            body.Capabilities | (runtimeFree ? PowerShellRequiredCapability.None :
+                PowerShellRequiredCapability.PowerShellStatementErrors | PowerShellRequiredCapability.PowerShellHostTypes) |
             (nativeSuccessStatus.HasValue || nativeSequencePoint ? PowerShellRequiredCapability.NativeFunctionBinding : PowerShellRequiredCapability.None))
     {
         Body = body;
@@ -15,6 +16,7 @@ internal sealed class PowerShellBoundStatementErrorBoundary : PowerShellBoundSta
         SourceText = sourceText;
         NativeSuccessStatus = nativeSuccessStatus;
         NativeSequencePoint = nativeSequencePoint;
+        RuntimeFree = runtimeFree;
     }
 
     internal PowerShellBoundBlock Body { get; }
@@ -22,4 +24,5 @@ internal sealed class PowerShellBoundStatementErrorBoundary : PowerShellBoundSta
     internal string SourceText { get; }
     internal bool? NativeSuccessStatus { get; }
     internal bool NativeSequencePoint { get; }
+    internal bool RuntimeFree { get; }
 }

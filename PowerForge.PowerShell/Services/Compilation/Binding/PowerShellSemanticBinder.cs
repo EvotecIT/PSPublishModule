@@ -152,13 +152,15 @@ internal sealed partial class PowerShellSemanticBinder
                 functions,
                 diagnostics,
                 targetFramework,
-                bindingCapabilities,
+                capabilities == PowerShellCompilationCapabilities.TypedExecutable ? capabilities : bindingCapabilities,
                 outputTypeContract.SemanticType,
                 outputTypeContract.MetadataTypeName,
                 symbols,
                 parameters,
                 pipelineParameter,
                 functions[function.Name].PipelineLifecycleReturnsCollection,
+                functions[function.Name].PipelineLifecycleHasOutputLimit,
+                functions[function.Name].PipelineLifecycleStreamsOutput,
                 functionDiagnosticStart,
                 outputTypeContract.Declarations);
         var authoredStatements = function.Body.EndBlock?.Statements.ToArray() ?? Array.Empty<StatementAst>();
@@ -173,6 +175,9 @@ internal sealed partial class PowerShellSemanticBinder
         var statements = new List<PowerShellBoundStatement>();
         var statementBindings = new List<PowerShellBoundStatementBinding>();
         var pipelineLocals = new List<PowerShellBoundLocal>();
+        var strictStreaming = capabilities == PowerShellCompilationCapabilities.TypedExecutable
+            ? new StrictStreamingBinding(localFunctionNames, pipelineLocals)
+            : null;
         var bodyIsValid = true;
         var lastFailedStatementIndex = -1;
         for (var index = 0; index < authoredStatements.Length; index++)
@@ -224,9 +229,9 @@ internal sealed partial class PowerShellSemanticBinder
                 continue;
             }
             var diagnosticCount = diagnostics.Count;
-            if (capabilities == PowerShellCompilationCapabilities.TypedExecutable && statement is PipelineAst pipeline &&
-                TryBindStrictStreamingPipeline(document, pipeline, symbols, functions, localFunctionNames, statements, diagnostics,
-                    index == authoredStatements.Length - 1, targetFramework, pipelineLocals, out var streaming))
+            var isTerminal = index == authoredStatements.Length - 1;
+            if (TryBindStrictStreamingStatement(strictStreaming, document, statement, symbols, functions, statements,
+                    diagnostics, isTerminal, targetFramework, out var streaming))
             {
                 if (streaming is not null)
                 {
@@ -235,14 +240,12 @@ internal sealed partial class PowerShellSemanticBinder
                         new PowerShellBoundStatementBinding(authoredStatementIndex, authoredStatementIndex, boundStatement)));
                     continue;
                 }
-                if (diagnostics.Count == diagnosticCount)
-                    RejectStrictPipeline(diagnostics, PowerShellSourceParser.GetSpan(document, statement.Extent),
-                        "could not prove the source and stage contracts");
                 bodyIsValid = false;
                 lastFailedStatementIndex = authoredStatementIndex;
                 continue;
             }
-            var bound = BindStatement(document, statement, symbols, functions, diagnostics, index == authoredStatements.Length - 1, targetFramework, capabilities);
+            var bound = BindStatement(document, statement, symbols, functions, diagnostics, isTerminal, targetFramework, capabilities,
+                strictStreaming: strictStreaming);
             if (bound is null)
             {
                 if (diagnostics.Count == diagnosticCount)
@@ -414,7 +417,10 @@ internal sealed partial class PowerShellSemanticBinder
                     span));
                 invalid = true;
             }
-            if (parameter.DefaultValue is not null && contract.DefaultValue is null &&
+            var useCurrentDirectory = capabilities == PowerShellCompilationCapabilities.TypedExecutable &&
+                document.AuthoredProjection is not null &&
+                PowerShellStrictParameterDefaultPolicy.UsesFileSystemCurrentDirectory(parameter);
+            if (parameter.DefaultValue is not null && contract.DefaultValue is null && !useCurrentDirectory &&
                 !capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding))
             {
                 diagnostics.Add(new PowerShellSemanticDiagnostic(
@@ -437,7 +443,7 @@ internal sealed partial class PowerShellSemanticBinder
                             : $"Untyped parameter '${name}' preserves the PowerShell host's object-valued parameter contract.");
             var symbol = new PowerShellSymbolId(PowerShellSymbolKind.Parameter, document.DocumentId, name, span, function.Name + "/parameter/" + name);
             if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding)) type = PowerShellTypeFact.Unknown;
-            var bound = new PowerShellBoundParameter(symbol, type, contract);
+            var bound = new PowerShellBoundParameter(symbol, type, contract, useCurrentDirectory);
             symbols.Add(name, new PowerShellSemanticSymbolBinding(symbol, type));
             parameters.Add(bound);
         }

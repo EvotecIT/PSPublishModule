@@ -164,6 +164,16 @@ internal static class PowerShellTypedExecutableCompiler
                 Array.Empty<PowerShellCompilationDiagnostic>());
         }
         var entryDescription = CreateMethodDescription(entryUnit, entry.Function, entry.Emission, entryPoint);
+        if (capabilities == PowerShellCompilationCapabilities.TypedExecutable &&
+            entryDescription.CollectionElementType == typeof(object).FullName)
+        {
+            var analyzedFunctions = semantic.Analyzed.Functions.ToDictionary(static function => function.Symbol.StableKey, StringComparer.Ordinal);
+            var types = PowerShellSuccessOutputTypePolicy.ResolveTypes(analyzedFunctions[entry.Function.Symbol.StableKey], analyzedFunctions);
+            if (types.Length > 1 && types.All(type => PowerShellCompilationSemanticRuntimeFreeArtifactObserver.IsFramedScalarType(type.FullName ?? type.Name) ||
+                    type == typeof(Generated.Runtime.PowerShellStrictProjectionRecord)))
+                entryDescription.ClosedSuccessRecordTypes = types.Select(static type => type.FullName!)
+                    .OrderBy(static name => name, StringComparer.Ordinal).ToArray();
+        }
         entryDescription.IsSyntheticNoOpExecutableEntry = syntheticNoOpEntry;
         descriptions.Add(entryDescription);
         var declaringType = nativeScriptEntry ? PowerShellHybridNativeEntryEmitter.DeclaringTypeName :
@@ -176,6 +186,21 @@ internal static class PowerShellTypedExecutableCompiler
                 body.GeneratedDeclaringTypeName = declaringType;
         }
         var reachableCommandProviders = CollectReachableCommandProviders(semantic, entry.Function.Symbol);
+        var expressions = semantic.Lowered.Functions
+            .SelectMany(static function => PowerShellLoweredTreeEnumerator.EnumerateExpressions(function.Statements))
+            .ToArray();
+        var runtimeSources = expressions
+            .OfType<PowerShellLoweredClrInvocationExpression>()
+            .Select(static invocation => invocation.DeclaringType)
+            .Where(static type => type == typeof(Generated.Runtime.PowerShellStrictFileSystemReader) ||
+                type == typeof(Generated.Runtime.PowerShellStrictCsvReader) ||
+                type == typeof(Generated.Runtime.PowerShellStrictPipelineOperations) ||
+                type == typeof(Generated.Runtime.PowerShellStrictConsoleProgress) ||
+                type == typeof(Generated.Runtime.PowerShellStrictProjectionRecord))
+            .Select(static type => type.Name).Distinct(StringComparer.Ordinal).ToArray();
+        if (expressions.OfType<PowerShellLoweredRuntimeStateExpression>().Any(static expression =>
+                expression.Kind == PowerShellRuntimeStateIntrinsicKind.CaughtCommandErrorLine))
+            runtimeSources = runtimeSources.Append(nameof(Generated.Runtime.PowerShellScriptCommandError)).ToArray();
         return new PowerShellTypedExecutableCompilation(
             new PowerShellTypedExecutableContract(entryDescription, entry.Function.Parameters
                 .Select(static parameter => new PowerShellTypedExecutableParameter(parameter.ClrType, parameter.Contract))
@@ -185,7 +210,8 @@ internal static class PowerShellTypedExecutableCompiler
             descriptions.ToArray(),
             reachableCommandProviders,
             semantic.Optimization.ToPublicModel(),
-            PowerShellCompilationIrSnapshotBuilder.Create(semantic));
+            PowerShellCompilationIrSnapshotBuilder.Create(semantic),
+            runtimeSources);
     }
 
     private static PowerShellCompilationCommandProviderContract[] CollectReachableCommandProviders(
@@ -474,7 +500,8 @@ internal sealed class PowerShellTypedExecutableCompilation
         PowerShellCompiledMethod[] methods,
         PowerShellCompilationCommandProviderContract[] reachableCommandProviders,
         PowerShellCompilationOptimizationEvidence optimization,
-        PowerShellCompilationIrSnapshotBundle irSnapshots)
+        PowerShellCompilationIrSnapshotBundle irSnapshots,
+        string[] runtimeSources)
     {
         EntryPoint = entryPoint;
         EntryPointMethod = entryPointMethod;
@@ -483,6 +510,7 @@ internal sealed class PowerShellTypedExecutableCompilation
         ReachableCommandProviders = reachableCommandProviders;
         Optimization = optimization;
         IrSnapshots = irSnapshots;
+        RuntimeSources = runtimeSources;
     }
 
     internal PowerShellTypedExecutableContract EntryPoint { get; }
@@ -492,6 +520,7 @@ internal sealed class PowerShellTypedExecutableCompilation
     internal PowerShellCompilationCommandProviderContract[] ReachableCommandProviders { get; }
     internal PowerShellCompilationOptimizationEvidence Optimization { get; }
     internal PowerShellCompilationIrSnapshotBundle IrSnapshots { get; }
+    internal string[] RuntimeSources { get; }
 }
 
 internal sealed class PowerShellTypedExecutableContract

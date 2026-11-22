@@ -305,6 +305,22 @@ Two additional pinned third-party packets extend the evidence beyond the five-mo
 - [ ] Resolve the PowerShell 7 `ActiveDirectorySecurity.Access` source/host prerequisite before claiming positive ACL coverage there; do not add fixture-only members and call the ordinary source qualified. Establish AD-backed constructor, dependency closure, other scanner techniques and collision behavior before any full-module claim. Preserve Strict rejection of runtime-authored classes.
 - [ ] Treat the seven-workload [frontier](../Benchmarks/PowerShellCompilation/Corpus/m29a-authored-class-comparison.json) as a priority map, not an unlock forecast. After authored types, choose a specific safe unsupported-syntax or typed-scriptblock family with real offline callers; inspect newly exposed co-blockers before promising coverage. Preserve the existing caller/process `break` and `exit` hosted boundary for Scoop and GetBIOS until transfer, errors and cleanup are qualified without running installer, hardware or admin operations.
 
+### Strict NativeAOT data-processing scripts
+
+Three unchanged scripts now build and run under the Strict NativeAOT target
+on Windows x64 and Linux x64. The source survey started with zero admitted
+scripts in the selected three. The work admits typed pipeline capture or
+return, bounded property projection, recursive file and explicit-header CSV
+input, and local advanced-function records with early stopping. The pinned
+PowerShell 7 profile also covers `clean`. The [coverage report](PowerForge.PowerShellCompilation.Coverage.md#strict-nativeaot-data-processing-scripts)
+records the source pin and observed paths.
+
+Keep the next runtime-free expansion centered on composed pipelines. Qualify
+two local output-producing stages together, including records from `begin`
+and `end`, synchronous downstream delivery, an early stop, and cleanup
+for every started stage. Use both pinned hosts for the common syntax and
+PowerShell 7.6.6 for `clean`.
+
 ## Milestone 30 — Qualify distribution, providers, and platforms
 
 **Status: selected public distribution gates complete; broader platform work remains partial.** The coordinated signed [v3.0.169 release](https://github.com/EvotecIT/PSPublishModule/releases/tag/v3.0.169) identifies source `7ff791c1e5737519a4751538f3cdb0b4dfda1430` after [PR #1090](https://github.com/EvotecIT/PSPublishModule/pull/1090). Independent public verification covers all 12 release-set NuGet packages and their GitHub counterparts: 1,168 non-signature entries match. The finalized Gallery module has 81 payload files, 71 valid DLL/script/manifest signatures and the recorded 209 cmdlets/eight aliases. Independently built Gallery and NuGet engine containers differ in whole-file identity while their compared methods, metadata, resources and initialized data agree.

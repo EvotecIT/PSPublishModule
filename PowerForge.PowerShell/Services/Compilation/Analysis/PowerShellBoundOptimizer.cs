@@ -96,7 +96,8 @@ internal sealed class PowerShellBoundOptimizer
                 capture.Span, capture.Target, OptimizeBlock(capture.Body), capture.NativeTarget, capture.Operation,
                 capture.Kind, capture.CapturedElementType, capture.ShareEmptyArray, capture.TransfersEnclosingLoop),
             PowerShellBoundStatementErrorBoundary boundary => new PowerShellBoundStatementErrorBoundary(
-                OptimizeBlock(boundary.Body), boundary.SourcePath, boundary.SourceText, boundary.NativeSuccessStatus, boundary.NativeSequencePoint),
+                OptimizeBlock(boundary.Body), boundary.SourcePath, boundary.SourceText, boundary.NativeSuccessStatus,
+                boundary.NativeSequencePoint, boundary.RuntimeFree),
             PowerShellBoundAssignmentStatement assignment => new PowerShellBoundAssignmentStatement(
                 assignment.Span, assignment.Target, OptimizeExpression(assignment.Value), assignment.Operation,
                 assignment.NormalizeNullString, assignment.IntegralSemantics, assignment.PreserveStatementErrors),
@@ -134,7 +135,7 @@ internal sealed class PowerShellBoundOptimizer
                 loop.DeclareVariable,
                 loop.NullCollectionElement is null ? null : OptimizeExpression(loop.NullCollectionElement), loop.CheckHostInterrupts, loop.NativeBinding, loop.Label),
             PowerShellBoundExitStatement exited => new PowerShellBoundExitStatement(exited.Span,
-                exited.Expression is null ? null : OptimizeExpression(exited.Expression)),
+                exited.Expression is null ? null : OptimizeExpression(exited.Expression), exited.RuntimeFree),
             PowerShellBoundThrowStatement thrown => new PowerShellBoundThrowStatement(
                 thrown.Span, thrown.Expression is null ? null : OptimizeExpression(thrown.Expression),
                 thrown.PreserveStatementErrors, thrown.SourcePath, thrown.SourceText),

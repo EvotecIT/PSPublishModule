@@ -8,5 +8,6 @@ internal enum PowerShellForEachEnumerationKind
     ScalarString,
     SystemArray,
     PowerShellEnumerable,
-    NativeInvocation
+    NativeInvocation,
+    RuntimeFreeEnumerable
 }

@@ -4,7 +4,8 @@ namespace PowerForge;
 internal sealed class PowerShellLoweredStatementErrorBoundary : PowerShellLoweredStatement
 {
     internal PowerShellLoweredStatementErrorBoundary(SourceSpan span, PowerShellLoweredStatement[] statements,
-        string sourcePath, string sourceText, string exceptionTemporary, bool? nativeSuccessStatus, bool nativeSequencePoint = false) : base(span)
+        string sourcePath, string sourceText, string exceptionTemporary, bool? nativeSuccessStatus, bool nativeSequencePoint = false,
+        bool runtimeFree = false) : base(span)
     {
         Statements = statements;
         SourcePath = sourcePath;
@@ -12,6 +13,7 @@ internal sealed class PowerShellLoweredStatementErrorBoundary : PowerShellLowere
         ExceptionTemporary = exceptionTemporary;
         NativeSuccessStatus = nativeSuccessStatus;
         NativeSequencePoint = nativeSequencePoint;
+        RuntimeFree = runtimeFree;
     }
 
     internal PowerShellImmutableArray<PowerShellLoweredStatement> Statements { get; }
@@ -20,4 +22,5 @@ internal sealed class PowerShellLoweredStatementErrorBoundary : PowerShellLowere
     internal string ExceptionTemporary { get; }
     internal bool? NativeSuccessStatus { get; }
     internal bool NativeSequencePoint { get; }
+    internal bool RuntimeFree { get; }
 }
