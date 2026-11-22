@@ -291,13 +291,16 @@ internal sealed class ManagedModuleInstallContext : IDisposable
             !_bufferedPackagePrefetches.TryUpdate(key, null, lazy))
             return null;
 
+        var download = lazy.Value;
         try
         {
-            return await lazy.Value.ConfigureAwait(false);
+            return await download.WaitAsync(cancellationToken).ConfigureAwait(false);
         }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            return null;
+            // We took ownership when we replaced the entry with a consumed marker.
+            DisposeBufferedPackageWhenComplete(download);
+            throw;
         }
         catch (ManagedModuleBufferedPackageTooLargeException)
         {
