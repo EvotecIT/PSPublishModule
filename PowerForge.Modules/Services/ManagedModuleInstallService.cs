@@ -800,6 +800,7 @@ public sealed partial class ManagedModuleInstallService
             var promotionBackupMoveElapsed = TimeSpan.Zero;
             var promotionFinalMoveElapsed = TimeSpan.Zero;
             var promotionBackupCleanupElapsed = TimeSpan.Zero;
+            string? promotionBackupCleanupWarning = null;
             var promotionHadExistingTarget = false;
             var promotionMaterializedDirectly = false;
             var promotionDirectMaterializationElapsed = TimeSpan.Zero;
@@ -865,11 +866,12 @@ public sealed partial class ManagedModuleInstallService
                         {
                             MaterializeStageFromPackageCache();
 
-                            var promotionResult = PromoteStagedModule(stageModulePath, modulePath);
+                            var promotionResult = await PromoteStagedModuleAsync(stageModulePath, modulePath, cancellationToken).ConfigureAwait(false);
                             promotionMoveElapsed = promotionResult.Elapsed;
                             promotionBackupMoveElapsed = promotionResult.BackupMoveElapsed;
                             promotionFinalMoveElapsed = promotionResult.FinalMoveElapsed;
                             promotionBackupCleanupElapsed = promotionResult.BackupCleanupElapsed;
+                            promotionBackupCleanupWarning = promotionResult.BackupCleanupWarning;
                             promotionHadExistingTarget = promotionResult.HadExistingTarget;
                         }
                     }
@@ -878,11 +880,12 @@ public sealed partial class ManagedModuleInstallService
                         if (directPayloadLease is not null)
                             MaterializeStageFromPackageCache();
 
-                        var promotionResult = PromoteStagedModule(stageModulePath, modulePath);
+                        var promotionResult = await PromoteStagedModuleAsync(stageModulePath, modulePath, cancellationToken).ConfigureAwait(false);
                         promotionMoveElapsed = promotionResult.Elapsed;
                         promotionBackupMoveElapsed = promotionResult.BackupMoveElapsed;
                         promotionFinalMoveElapsed = promotionResult.FinalMoveElapsed;
                         promotionBackupCleanupElapsed = promotionResult.BackupCleanupElapsed;
+                        promotionBackupCleanupWarning = promotionResult.BackupCleanupWarning;
                         promotionHadExistingTarget = promotionResult.HadExistingTarget;
                     }
                 }
@@ -936,6 +939,8 @@ public sealed partial class ManagedModuleInstallService
             };
             context.RecordInstalledVersion(moduleRoot, request.Name, version);
             _receiptStore.WriteReceipt(request.Repository, result);
+            if (promotionBackupCleanupWarning is not null)
+                _logger.Warn(promotionBackupCleanupWarning);
             return result;
         }
         finally
