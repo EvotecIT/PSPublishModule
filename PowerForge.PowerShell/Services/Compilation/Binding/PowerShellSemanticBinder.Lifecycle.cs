@@ -113,7 +113,7 @@ internal sealed partial class PowerShellSemanticBinder
                 rawRecord.Span, sourceParameter.Symbol, PowerShellConversionSemanticBinder.BindClosedStringConversion(rawRecord)!);
             process = new PowerShellBoundBlock(process.Span, new PowerShellBoundStatement[] { normalize }.Concat(process.Statements).ToArray());
         }
-        if ((supportsOutputLimit || composition) && new[] { begin, process, end }.Any(block =>
+        if ((supportsOutputLimit || functions[function.Name].PipelineLifecycleCompositionMayStopEarly) && new[] { begin, process, end }.Any(block =>
                 PowerShellSemanticAnalyzer.EnumerateStatements(block, descendIntoCaptures: false).OfType<PowerShellBoundTryStatement>()
                     .Any(attempt => attempt.FinallyBlock is { } cleanup && GetSuccessOutputs(cleanup).Length != 0)))
         {

@@ -320,7 +320,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
             PowerShellLoweredRuntimeStateExpression runtime => EmitRuntimeState(runtime),
             PowerShellLoweredCommandAvailabilityExpression discovery => EmitCommandAvailability(discovery),
             PowerShellLoweredHostedBooleanCommandExpression hostedBoolean => EmitHostedBooleanCommand(hostedBoolean),
-            PowerShellLoweredParameterPresenceExpression presence => $"__boundParameters.Contains({PowerShellCSharpLiteral.QuoteString(presence.ParameterName)})",
+            PowerShellLoweredParameterPresenceExpression presence => EmitParameterPresence(presence),
             PowerShellLoweredConversionExpression conversion => EmitConversion(conversion),
             PowerShellLoweredRegionValueAlternativeExpression alternative =>
                 "global::PowerForge.Generated.Runtime.PowerShellRegionValueAlternative.Create(" +
