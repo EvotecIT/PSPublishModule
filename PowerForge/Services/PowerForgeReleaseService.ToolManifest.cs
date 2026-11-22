@@ -247,10 +247,12 @@ internal sealed partial class PowerForgeReleaseService
                 var native = artifact.Source == NativePowerForgeArchiveSource;
                 var suffix = artifact.Runtime!.StartsWith("win-", StringComparison.OrdinalIgnoreCase) ? ".exe" : string.Empty;
                 var executableName = (native ? "powerforge" : "PowerForge") + suffix;
-                var archiveSha256 = ComputeSha256(artifact.Path);
+                using var input = File.OpenRead(artifact.Path);
+                var archiveSha256 = ComputeSha256(input);
                 if (native && !string.Equals(archiveSha256, artifact.StagedSha256, StringComparison.OrdinalIgnoreCase))
                     throw new InvalidDataException($"Native PowerForge archive changed after validation: {artifact.Path}");
-                using var archive = ZipFile.OpenRead(artifact.Path);
+                input.Position = 0;
+                using var archive = new ZipArchive(input, ZipArchiveMode.Read, leaveOpen: true);
                 return new
                 {
                     name = assetName,
