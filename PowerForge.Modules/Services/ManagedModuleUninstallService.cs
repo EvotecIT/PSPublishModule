@@ -342,7 +342,7 @@ public sealed partial class ManagedModuleUninstallService
                         ModuleName = candidate.Name,
                         Version = candidate.Version,
                         ModulePath = candidate.ModulePath,
-                        RequiredVersion = ModulePublisher.FormatRequiredModuleConstraint(requiredModule)
+                        RequiredVersion = RequiredModuleVersionConstraint.FormatRequiredModuleConstraint(requiredModule)
                     }));
                 }
             }
@@ -373,14 +373,14 @@ public sealed partial class ManagedModuleUninstallService
         RequiredModuleReference requiredModule,
         ManagedModuleUninstallTarget target)
         => string.Equals(requiredModule.ModuleName, target.Name, StringComparison.OrdinalIgnoreCase) &&
-           ModulePublisher.DoesVersionMatchRequiredModule(requiredModule, target.Version) &&
+           RequiredModuleVersionConstraint.DoesVersionMatchRequiredModule(requiredModule, target.Version) &&
            RequiredModuleGuidMatches(requiredModule.Guid, target.Guid);
 
     private static bool RequiredModuleMatchesCandidate(
         RequiredModuleReference requiredModule,
         InstalledModuleCandidate candidate)
         => string.Equals(requiredModule.ModuleName, candidate.Name, StringComparison.OrdinalIgnoreCase) &&
-           ModulePublisher.DoesVersionMatchRequiredModule(requiredModule, candidate.Version) &&
+           RequiredModuleVersionConstraint.DoesVersionMatchRequiredModule(requiredModule, candidate.Version) &&
            RequiredModuleGuidMatches(requiredModule.Guid, candidate.Guid);
 
     private static bool RequiredModuleGuidMatches(string? requiredGuid, string? installedGuid)

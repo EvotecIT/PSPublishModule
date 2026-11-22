@@ -1,3 +1,4 @@
+using static PowerForge.RequiredModuleVersionConstraint;
 namespace PowerForge;
 
 /// <content>

@@ -411,7 +411,7 @@ internal sealed class ModuleStateInventoryService
 
         try
         {
-            var receipt = System.Text.Json.JsonSerializer.Deserialize<ManagedModuleReceipt>(File.ReadAllText(receiptPath));
+            var receipt = System.Text.Json.JsonSerializer.Deserialize(File.ReadAllText(receiptPath), ManagedModuleReceiptJsonContext.Default.ManagedModuleReceipt);
             return FirstNonEmpty(receipt?.RepositoryName, receipt?.RepositorySource);
         }
         catch

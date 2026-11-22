@@ -17,8 +17,7 @@ internal static partial class Program
             (!int.TryParse(requestedLimit, NumberStyles.None, CultureInfo.InvariantCulture, out limit) || limit is < 1 or > 100))
             throw new ArgumentException("Module find --limit must be between 1 and 100.");
 
-        var source = options.GetValueOrDefault("--source") ?? ManagedModuleRestoreService.DefaultSource;
-        var repository = ManagedModuleStandaloneInput.ResolveRepository(source, "Search");
+        var repository = ResolveModuleRepository(options, "Search");
         var client = new ManagedModuleRepositoryClient(logger);
         var includePrerelease = options.ContainsKey("--prerelease");
         ManagedModuleVersionInfo[] results;

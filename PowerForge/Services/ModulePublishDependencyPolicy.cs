@@ -41,7 +41,7 @@ internal static class ModulePublishDependencyPolicy
     // Preset provenance is explicit; equal caller overrides are not preset defaults.
     private static bool HasLegacyProtocolEndpoints(PublishRepositoryConfiguration? repository)
         => repository is not null &&
-           (repository.UseProviderEndpointDefaults ?? PrivateGalleryRepositoryEndpoints.HasLegacyProtocolEndpointDefaults(repository)) &&
+           (repository.UseProviderEndpointDefaults ?? PrivateGalleryRepositoryEndpoints.HasLegacyProtocolEndpointDefaults(repository.SourceUri, repository.PublishUri, repository.Uri)) &&
            !string.IsNullOrWhiteSpace(repository.SourceUri) &&
            !string.IsNullOrWhiteSpace(repository?.PublishUri) &&
            string.Equals(repository!.SourceUri!.Trim().TrimEnd('/'),

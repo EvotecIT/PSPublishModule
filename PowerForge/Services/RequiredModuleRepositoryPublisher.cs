@@ -62,7 +62,7 @@ internal sealed class RequiredModuleRepositoryPublisher
         if (selected is null)
         {
             throw new InvalidOperationException(
-                $"Required module '{moduleName}' is missing in repository '{targetRepositoryNameValue}', and no matching version was found in source repository '{sourceRepository}'. Constraint: {ModulePublisher.FormatRequiredModuleConstraint(requiredModule)}.");
+                $"Required module '{moduleName}' is missing in repository '{targetRepositoryNameValue}', and no matching version was found in source repository '{sourceRepository}'. Constraint: {RequiredModuleVersionConstraint.FormatRequiredModuleConstraint(requiredModule)}.");
         }
 
         var selectedVersion = ModulePublisher.GetRepositoryVersionText(selected);
@@ -196,7 +196,7 @@ internal sealed class RequiredModuleRepositoryPublisher
             var constraintVersion = matchPrereleaseByBaseVersion && IsPrereleaseVersion(versionText)
                 ? GetBaseVersion(versionText)
                 : versionText;
-            if (!ModulePublisher.DoesVersionMatchRequiredModule(requiredModule, constraintVersion))
+            if (!RequiredModuleVersionConstraint.DoesVersionMatchRequiredModule(requiredModule, constraintVersion))
                 continue;
 
             if (selected is null ||

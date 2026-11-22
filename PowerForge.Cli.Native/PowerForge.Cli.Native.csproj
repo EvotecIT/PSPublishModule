@@ -16,7 +16,7 @@
     <ProjectReference Include="..\PowerForge.ConsoleUi.Terminal\PowerForge.ConsoleUi.Terminal.csproj" GlobalPropertiesToRemove="PublishAot;RuntimeIdentifier;SelfContained" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="..\PowerForge.Cli\CliJsonWriter.cs;..\PowerForge.Cli\ModuleCliJson.cs;..\PowerForge.Cli\Program.Command.Metadata.cs;..\PowerForge.Cli\Program.Command.ModuleFind.cs;..\PowerForge.Cli\Program.Command.ProjectVersions.cs;..\PowerForge.Cli\Program.Command.Module.cs;..\PowerForge.Cli\Program.Command.ModuleInstall.cs;..\PowerForge.Cli\Program.SharedOptions.cs"
+    <Compile Include="..\PowerForge.Cli\CliJsonWriter.cs;..\PowerForge.Cli\ModuleCliJson.cs;..\PowerForge.Cli\Program.Command.Metadata.cs;..\PowerForge.Cli\Program.Command.ModuleFind.cs;..\PowerForge.Cli\Program.Command.ProjectVersions.cs;..\PowerForge.Cli\Program.Command.Module.cs;..\PowerForge.Cli\Program.Command.ModuleInstall.cs;..\PowerForge.Cli\Program.Command.ModuleLifecycle.cs;..\PowerForge.Cli\Program.Command.ModuleRepository.cs;..\PowerForge.Cli\Program.SharedOptions.cs"
              Link="Shared\%(Filename)%(Extension)" />
     <Compile Include="..\PowerForge\ConsoleEnvironment.cs;..\PowerForge\ConsoleView.cs;..\PowerForge\Diagnostics\ConsoleEncoding.cs;..\PowerForge\Services\BufferedLogger.cs;..\PowerForge\Models\BufferedLogEntry.cs"
              Link="Shared\%(Filename)%(Extension)" />

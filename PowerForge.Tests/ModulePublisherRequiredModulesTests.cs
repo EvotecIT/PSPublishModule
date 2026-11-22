@@ -16,8 +16,8 @@ public sealed class ModulePublisherRequiredModulesTests
             moduleName: "PSSharedGoods",
             requiredVersion: "0.0.312");
 
-        Assert.True(ModulePublisher.DoesVersionMatchRequiredModule(required, "0.0.312"));
-        Assert.False(ModulePublisher.DoesVersionMatchRequiredModule(required, "0.0.313"));
+        Assert.True(RequiredModuleVersionConstraint.DoesVersionMatchRequiredModule(required, "0.0.312"));
+        Assert.False(RequiredModuleVersionConstraint.DoesVersionMatchRequiredModule(required, "0.0.313"));
     }
 
     [Fact]
@@ -27,9 +27,9 @@ public sealed class ModulePublisherRequiredModulesTests
             moduleName: "PSSharedGoods",
             moduleVersion: "0.0.312");
 
-        Assert.True(ModulePublisher.DoesVersionMatchRequiredModule(required, "0.0.312"));
-        Assert.True(ModulePublisher.DoesVersionMatchRequiredModule(required, "0.0.400"));
-        Assert.False(ModulePublisher.DoesVersionMatchRequiredModule(required, "0.0.311"));
+        Assert.True(RequiredModuleVersionConstraint.DoesVersionMatchRequiredModule(required, "0.0.312"));
+        Assert.True(RequiredModuleVersionConstraint.DoesVersionMatchRequiredModule(required, "0.0.400"));
+        Assert.False(RequiredModuleVersionConstraint.DoesVersionMatchRequiredModule(required, "0.0.311"));
     }
 
     [Fact]
@@ -40,10 +40,10 @@ public sealed class ModulePublisherRequiredModulesTests
             moduleVersion: "0.0.300",
             maximumVersion: "0.0.350");
 
-        Assert.True(ModulePublisher.DoesVersionMatchRequiredModule(required, "0.0.300"));
-        Assert.True(ModulePublisher.DoesVersionMatchRequiredModule(required, "0.0.350"));
-        Assert.False(ModulePublisher.DoesVersionMatchRequiredModule(required, "0.0.299"));
-        Assert.False(ModulePublisher.DoesVersionMatchRequiredModule(required, "0.0.351"));
+        Assert.True(RequiredModuleVersionConstraint.DoesVersionMatchRequiredModule(required, "0.0.300"));
+        Assert.True(RequiredModuleVersionConstraint.DoesVersionMatchRequiredModule(required, "0.0.350"));
+        Assert.False(RequiredModuleVersionConstraint.DoesVersionMatchRequiredModule(required, "0.0.299"));
+        Assert.False(RequiredModuleVersionConstraint.DoesVersionMatchRequiredModule(required, "0.0.351"));
     }
 
     [Fact]

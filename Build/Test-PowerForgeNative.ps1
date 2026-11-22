@@ -13,6 +13,8 @@ $sourceLauncher = Join-Path $packageRoot "powerforge$extension"
 $managed = Join-Path $packageRoot "full/powerforge-full$extension"
 $work = [IO.Directory]::CreateTempSubdirectory('powerforge-smoke-').FullName
 $previousPath = $env:PATH
+$previousProfilePath = $env:POWERFORGE_MODULE_REPOSITORY_PROFILE_PATH
+$previousMachineProfilePath = $env:POWERFORGE_MODULE_REPOSITORY_MACHINE_PROFILE_PATH
 
 function Read-CommandResult {
     param(
@@ -34,6 +36,8 @@ function Read-CommandResult {
 }
 
 try {
+    $env:POWERFORGE_MODULE_REPOSITORY_PROFILE_PATH = Join-Path $work 'user-profiles.json'
+    $env:POWERFORGE_MODULE_REPOSITORY_MACHINE_PROFILE_PATH = Join-Path $work 'machine-profiles.json'
     $feed = New-Item -ItemType Directory -Path (Join-Path $work 'local feed') -Force
     $nativeOnly = New-Item -ItemType Directory -Path (Join-Path $work 'native only')
     $launcher = Join-Path $nativeOnly.FullName "powerforge$extension"
@@ -160,6 +164,77 @@ try {
         throw "Native frozen restore did not reject changed package bytes before writing the destination. $($rejected.error)"
     }
 
+    $moduleSource = New-Item -ItemType Directory -Path (Join-Path $work 'PowerForgeNativeSmoke')
+    $nextManifest = "@{`nModuleVersion = '1.1.0'`nGUID = 'd6379ba8-c225-438a-a07e-a92a7cc56bd0'`nAuthor = 'PowerForge'`nDescription = 'Lifecycle smoke test'`n}"
+    [IO.File]::WriteAllText((Join-Path $moduleSource.FullName $manifestName), $nextManifest)
+    $packed = Read-CommandResult -Executable $launcher -Arguments @(
+        'module', 'pack', '--path', $moduleSource.FullName, '--destination', $feed.FullName, '--output', 'json'
+    )
+    $nextPackage = Join-Path $feed.FullName 'PowerForgeNativeSmoke.1.1.0.nupkg'
+    if ($packed.command -ne 'module.pack' -or $packed.result.version -ne '1.1.0' -or
+        -not (Test-Path -LiteralPath $nextPackage -PathType Leaf)) {
+        throw 'Native pack did not produce the requested version.'
+    }
+
+    $null = Read-CommandResult -Executable $launcher -Arguments @(
+        'module', 'repository', 'add', '--name', 'NativeSmoke', '--source', $feed.FullName, '--output', 'json'
+    )
+    $null = Read-CommandResult -Executable $launcher -Arguments @(
+        'module', 'repository', 'set', '--name', 'NativeSmoke', '--trusted', '--output', 'json'
+    )
+    $profiles = Read-CommandResult -Executable $launcher -Arguments @('module', 'repository', 'list', '--output', 'json')
+    if ($profiles.result.Count -ne 1 -or $profiles.result[0].name -ne 'NativeSmoke' -or -not $profiles.result[0].trusted) {
+        throw 'Native repository CRUD did not persist the profile and its trust setting.'
+    }
+
+    $saveRoot = Join-Path $work 'saved packages'
+    $saved = Read-CommandResult -Executable $launcher -Arguments @(
+        'module', 'save', 'PowerForgeNativeSmoke', '--version', '1.1.0', '--profile', 'NativeSmoke',
+        '--destination', $saveRoot, '--as-nupkg', '--require-trusted-repository', '--output', 'json'
+    )
+    $savedPackage = @(Get-ChildItem -LiteralPath $saveRoot -Filter '*.nupkg' -Recurse -File)
+    if ($saved.command -ne 'module.save' -or $savedPackage.Count -ne 1 -or
+        (Get-FileHash -LiteralPath $savedPackage[0].FullName).Hash -ne (Get-FileHash -LiteralPath $nextPackage).Hash) {
+        throw 'Native save did not write an archive identical to the source.'
+    }
+
+    $updateArgs = @(
+        'module', 'update', 'PowerForgeNativeSmoke', '--version', '1.1.0', '--profile', 'NativeSmoke',
+        '--destination', $install, '--require-trusted-repository', '--output', 'json'
+    )
+    $updatePlan = Read-CommandResult -Executable $launcher -Arguments ($updateArgs + '--plan')
+    $newManifestPath = Join-Path $install "PowerForgeNativeSmoke/1.1.0/$manifestName"
+    if ($updatePlan.result.targetVersion -ne '1.1.0' -or (Test-Path -LiteralPath $newManifestPath)) {
+        throw 'Native update plan did not remain read-only or selected the wrong version.'
+    }
+    $update = Read-CommandResult -Executable $launcher -Arguments $updateArgs
+    $listArgs = @('module', 'list', '--destination', $install, '--name', 'PowerForgeNative*', '--output', 'json')
+    $listed = Read-CommandResult -Executable $launcher -Arguments $listArgs
+    if ($update.result.status -ne 'Updated' -or [IO.File]::ReadAllText($newManifestPath) -ne $nextManifest -or
+        $listed.result.Count -ne 2 -or '1.1.0' -notin $listed.result.version -or '1.0.0' -notin $listed.result.version) {
+        throw 'Native update and list did not report the two installed versions.'
+    }
+
+    $uninstallArgs = @(
+        'module', 'uninstall', 'PowerForgeNativeSmoke', '--version', '1.0.0', '--destination', $install, '--output', 'json'
+    )
+    $removalPlan = Read-CommandResult -Executable $launcher -Arguments ($uninstallArgs + '--plan')
+    if ($removalPlan.result.targets.Count -ne 1 -or -not (Test-Path -LiteralPath $installedManifest)) {
+        throw 'Native uninstall plan did not remain read-only or selected the wrong version.'
+    }
+    $uninstalled = Read-CommandResult -Executable $launcher -Arguments $uninstallArgs
+    $remaining = Read-CommandResult -Executable $launcher -Arguments $listArgs
+    if ($uninstalled.result[0].status -ne 'Uninstalled' -or (Test-Path -LiteralPath $installedManifest) -or
+        $remaining.result.Count -ne 1 -or $remaining.result[0].version -ne '1.1.0') {
+        throw 'Native uninstall removed an unexpected version or left the target installed.'
+    }
+
+    $null = Read-CommandResult -Executable $launcher -Arguments @(
+        'module', 'repository', 'remove', '--name', 'NativeSmoke', '--output', 'json'
+    )
+    $profiles = Read-CommandResult -Executable $launcher -Arguments @('module', 'repository', 'list', '--output', 'json')
+    if ($profiles.result.Count -ne 0) { throw 'Native repository remove did not remove the saved profile.' }
+
     $version = Read-CommandResult -Executable $launcher -Arguments @('--version', '--output', 'json')
     $direct = Read-CommandResult -Executable $managed -Arguments @('--version', '--output', 'json')
     if ($version.command -ne 'version' -or -not $version.result.version -or
@@ -189,8 +264,10 @@ try {
         throw 'The bundled managed CLI did not expose the full command help.'
     }
 
-    Write-Output 'Native module search, install, frozen restore, version discovery, manifest inspection, NuGet verification and managed forwarding passed.'
+    Write-Output 'Native module lifecycle, repository profiles, frozen restore, version discovery, manifest inspection, NuGet verification and managed forwarding passed.'
 } finally {
     $env:PATH = $previousPath
+    $env:POWERFORGE_MODULE_REPOSITORY_PROFILE_PATH = $previousProfilePath
+    $env:POWERFORGE_MODULE_REPOSITORY_MACHINE_PROFILE_PATH = $previousMachineProfilePath
     if (Test-Path -LiteralPath $work) { Remove-Item -LiteralPath $work -Recurse -Force }
 }

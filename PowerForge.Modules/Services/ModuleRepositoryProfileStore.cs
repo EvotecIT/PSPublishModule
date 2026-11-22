@@ -3,13 +3,11 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 
 namespace PowerForge;
 
 internal sealed class ModuleRepositoryProfileStore
 {
-    private static readonly JsonSerializerOptions JsonOptions = CreateJsonOptions();
     private readonly string _path;
     private readonly ModuleRepositoryProfileScope _scope;
 
@@ -229,7 +227,7 @@ internal sealed class ModuleRepositoryProfileStore
         if (string.IsNullOrWhiteSpace(json))
             return Array.Empty<ModuleRepositoryProfile>();
 
-        var document = NormalizeDocument(JsonSerializer.Deserialize<ModuleRepositoryProfileDocument>(json, JsonOptions));
+        var document = NormalizeDocument(JsonSerializer.Deserialize(json, ModuleRepositoryProfileJson.Default.ModuleRepositoryProfileDocument));
         return document.Profiles
             .Where(static profile => profile is not null && !string.IsNullOrWhiteSpace(profile.Name))
             .Select(Normalize)
@@ -340,7 +338,7 @@ internal sealed class ModuleRepositoryProfileStore
 
         try
         {
-            return NormalizeDocument(JsonSerializer.Deserialize<ModuleRepositoryProfileDocument>(json, JsonOptions));
+            return NormalizeDocument(JsonSerializer.Deserialize(json, ModuleRepositoryProfileJson.Default.ModuleRepositoryProfileDocument));
         }
         catch (JsonException)
         {
@@ -364,7 +362,7 @@ internal sealed class ModuleRepositoryProfileStore
         if (!string.IsNullOrWhiteSpace(directory))
             Directory.CreateDirectory(directory!);
 
-        var json = JsonSerializer.Serialize(document, JsonOptions) + Environment.NewLine;
+        var json = JsonSerializer.Serialize(document, ModuleRepositoryProfileJson.Default.ModuleRepositoryProfileDocument) + Environment.NewLine;
         File.WriteAllText(path, json);
     }
 
@@ -406,16 +404,5 @@ internal sealed class ModuleRepositoryProfileStore
         }
 
         return System.IO.Path.Combine(root, "PowerForge", "PrivateGalleries", "profiles.json");
-    }
-
-    private static JsonSerializerOptions CreateJsonOptions()
-    {
-        var options = new JsonSerializerOptions
-        {
-            PropertyNameCaseInsensitive = true,
-            WriteIndented = true
-        };
-        options.Converters.Add(new JsonStringEnumConverter());
-        return options;
     }
 }

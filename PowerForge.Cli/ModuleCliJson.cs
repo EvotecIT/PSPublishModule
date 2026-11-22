@@ -14,6 +14,13 @@ namespace PowerForge.Cli;
 [JsonSerializable(typeof(CliVersionResult))]
 [JsonSerializable(typeof(ManagedModuleVersionInfo[]))]
 [JsonSerializable(typeof(ProjectVersionInfo[]))]
+[JsonSerializable(typeof(ManagedModuleUpdatePlan))]
+[JsonSerializable(typeof(ManagedModuleUpdateResult))]
+[JsonSerializable(typeof(ManagedModuleUninstallPlan))]
+[JsonSerializable(typeof(ManagedModuleUninstallResult[]))]
+[JsonSerializable(typeof(ManagedModulePackResult))]
+[JsonSerializable(typeof(ManagedModuleInstalledInfo[]))]
+[JsonSerializable(typeof(ManagedModuleRepositoryProfileInfo[]))]
 internal sealed partial class ModuleCliJson : JsonSerializerContext;
 
 internal sealed record CliVersionResult(string Version);

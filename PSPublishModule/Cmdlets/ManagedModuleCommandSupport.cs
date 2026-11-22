@@ -41,9 +41,9 @@ internal static class ManagedModuleCommandSupport
             throw new InvalidOperationException("Specify either ProfileName or Repository, not both.");
 
         var profile = ModuleRepositoryProfileCommandSupport.ResolveRequired(profileName!);
-        var source = ResolveProfileSource(profile, profileName!, publish: false);
+        var source = profile.ReadSource;
         return new ManagedModuleRepository(
-            ResolveProfileRepositoryName(profile, profileName!),
+            profile.EffectiveRepositoryName,
             ResolveRepositorySource(cmdlet, source),
             ManagedModuleRepositoryKind.Auto,
             profile.Trusted);
@@ -144,7 +144,7 @@ internal static class ManagedModuleCommandSupport
                 throw new InvalidOperationException("Specify either ProfileName, Repository, or OutputDirectory.");
 
             var profile = ModuleRepositoryProfileCommandSupport.ResolveRequired(profileName!);
-            var source = ResolveProfileSource(profile, profileName!, publish: true);
+            var source = ResolveProfilePublishSource(profile, profileName!);
             return new ManagedModuleRepository(
                 ResolveProfileRepositoryName(profile, profileName!),
                 ResolveRepositoryPublishSource(cmdlet, source, out _, out _),
@@ -532,11 +532,10 @@ internal static class ManagedModuleCommandSupport
     private static ManagedModuleRepositoryKind GetRepositoryKind(string repository)
         => new ManagedModuleRepository("Repository", repository).Kind;
 
-    private static string ResolveProfileSource(ModuleRepositoryProfile profile, string profileName, bool publish)
+    private static string ResolveProfilePublishSource(ModuleRepositoryProfile profile, string profileName)
     {
-        var source = publish
-            ? FirstNonEmpty(profile.RepositoryPublishUri, profile.RepositoryUri, profile.RepositorySourceUri, profile.Repository, profile.RepositoryName, profileName)
-            : FirstNonEmpty(profile.RepositoryUri, profile.RepositorySourceUri, profile.Repository, profile.RepositoryName, profileName);
+        var source = FirstNonEmpty(profile.RepositoryPublishUri, profile.RepositoryUri, profile.RepositorySourceUri,
+            profile.Repository, profile.RepositoryName, profileName);
 
         return source
             ?? throw new InvalidOperationException($"Profile '{profileName}' does not define a repository source.");
