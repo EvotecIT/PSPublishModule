@@ -870,6 +870,9 @@ public sealed class ManagedModuleRepositoryClientTests
 
         Assert.True(result.FromCache);
         Assert.Equal(0, result.BytesWritten);
+        Assert.Null(result.TimeToFirstByte);
+        Assert.Null(result.BodyTransferElapsed);
+        Assert.Null(result.BytesPerSecond);
         Assert.Equal(0, result.RedirectCount);
         Assert.Equal(ComputeSha256(result.PackagePath), result.PackageSha256);
         Assert.Equal("Company.Tools", result.Metadata!.Id);
@@ -1295,6 +1298,9 @@ public sealed class ManagedModuleRepositoryClientTests
         Assert.Equal("Local", result.RepositoryName);
         Assert.Equal(new FileInfo(result.PackagePath).Length, result.BytesWritten);
         Assert.Equal(ComputeSha256(result.PackagePath), result.PackageSha256);
+        Assert.Null(result.TimeToFirstByte);
+        Assert.Null(result.BodyTransferElapsed);
+        Assert.Null(result.BytesPerSecond);
     }
 
     private static string ComputeSha256(string path)

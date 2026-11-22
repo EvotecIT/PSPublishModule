@@ -15,6 +15,7 @@ public sealed class ModuleBuildResult
     public ExportSet Exports { get; }
 
     internal ModuleOwnerNote[] BuildNotes { get; }
+    internal string? GeneratedRootBootstrapper { get; set; }
 
     /// <summary>
     /// Exact finalized module payload selected by an authoritative build producer.

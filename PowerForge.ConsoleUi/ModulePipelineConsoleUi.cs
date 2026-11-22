@@ -29,15 +29,10 @@ internal static class ModulePipelineConsoleUi
     }
 
     public static ModulePipelineResult RunInteractive(
-        ModulePipelineRunner runner,
-        ModulePipelineSpec spec,
         ModulePipelinePlan plan,
-        string? configLabel)
-    {
-        if (runner is null) throw new ArgumentNullException(nameof(runner));
-        if (spec is null) throw new ArgumentNullException(nameof(spec));
-        return RunInteractive(new ProgressView(), plan, configLabel, progress => runner.Run(spec, plan, progress));
-    }
+        string? configLabel,
+        Func<IModulePipelineProgressReporter, ModulePipelineResult> run)
+        => RunInteractive(new ProgressView(), plan, configLabel, run);
 
     internal static ModulePipelineResult RunInteractive(
         ProgressView view,
@@ -79,7 +74,7 @@ internal static class ModulePipelineConsoleUi
 
     private static void WriteHeader(ModulePipelinePlan plan, string? configLabel, int stepCount)
     {
-        var versionText = BuildServices.FormatVersionWithPreRelease(plan.ResolvedVersion, plan.PreRelease);
+        var versionText = ModulePathTokenFormatter.FormatVersionWithPreRelease(plan.ResolvedVersion, plan.PreRelease);
         var packageLaneCount = (plan.ProjectBuilds?.Length ?? 0) + (plan.PackageBuilds?.Length ?? 0);
         var coordinatedRelease = packageLaneCount > 0 || plan.Release is not null;
         var title = coordinatedRelease

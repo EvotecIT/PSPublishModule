@@ -190,6 +190,143 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
     }
 
     [PinnedSemanticHostFact]
+    public async Task StrictComposedLifecycleReportsPipelineParameterBindingByPhase()
+    {
+        using var fixture = OracleFixture.Create("""
+            param([switch] $Empty)
+            function Send-Number {
+                [CmdletBinding()]
+                [OutputType([int])]
+                param([Parameter(ValueFromPipeline)][int] $Record)
+                begin { if ($PSBoundParameters.ContainsKey('Record')) { 91 } }
+                process { if ($PSBoundParameters.ContainsKey('Record')) { $Record } else { 92 } }
+                end {}
+            }
+            function Receive-Number {
+                [CmdletBinding()]
+                [OutputType([int])]
+                param([Parameter(ValueFromPipeline)][int] $Record)
+                begin { if ($PSBoundParameters.ContainsKey('Record')) { 93 } }
+                process { if ($PSBoundParameters.ContainsKey('Record')) { $Record } else { 94 } }
+                end {
+                    [int] $bound = 70
+                    if ($PSBoundParameters.ContainsKey('Record')) { $bound = 71 }
+                    $bound
+                }
+            }
+            [int[]] $records = 1,2
+            if ($Empty) { $records = @() }
+            return $records | Send-Number | Receive-Number
+            """);
+        foreach (var pin in PowerShellCompilationSemanticHostArtifactPinCatalog.Pins)
+        {
+            var build = BuildStrictStreamingFixture(fixture, "StrictComposedBindingPresence", pin.ProfileId);
+            Assert.True(build.Succeeded, build.Error + Environment.NewLine + build.BuildOutput);
+            var host = StrictStreamingHostPath(pin) ??
+                Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe");
+            foreach (var empty in new[] { false, true })
+            {
+                var sourceArguments = new[] { "-NoProfile", "-NonInteractive", "-File", fixture.ScriptPath };
+                if (empty) sourceArguments = sourceArguments.Append("-Empty").ToArray();
+                var original = await ObserveExitedConsole(host, fixture.RootPath, sourceArguments, string.Empty);
+                Assert.Equal(0, original.Code);
+                Assert.Empty(original.Error);
+                Assert.Equal(empty ? new[] { "70" } : new[] { "1", "2", "71" },
+                    original.Output.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries));
+                var compiled = await ObserveExitedConsole(build.ArtifactPath!, fixture.RootPath,
+                    empty ? new[] { "--Empty" } : Array.Empty<string>(), string.Empty);
+                Assert.Equal(original, compiled);
+            }
+        }
+    }
+
+    [PinnedSemanticHostFact]
+    public async Task StrictUnboundedCompositionForwardsStageFinallyRecords()
+    {
+        using var fixture = OracleFixture.Create("""
+            function Send-Number {
+                [CmdletBinding()]
+                [OutputType([int])]
+                param([Parameter(ValueFromPipeline)][int] $Record)
+                begin {}
+                process { try { $Record } finally { 99 } }
+                end {}
+            }
+            function Receive-Number {
+                [CmdletBinding()]
+                param([Parameter(ValueFromPipeline)][int] $Record)
+                begin { [int] $value = 0 }
+                process { $value = $Record; $value }
+                end {}
+            }
+            return 1,2 | Send-Number | Receive-Number
+            """);
+        foreach (var pin in PowerShellCompilationSemanticHostArtifactPinCatalog.Pins)
+        {
+            var build = BuildStrictStreamingFixture(fixture, "StrictUnboundedFinally", pin.ProfileId);
+            Assert.True(build.Succeeded, build.Error + Environment.NewLine + build.BuildOutput);
+            var host = StrictStreamingHostPath(pin) ??
+                Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe");
+            var original = await ObserveExitedConsole(host, fixture.RootPath,
+                new[] { "-NoProfile", "-NonInteractive", "-File", fixture.ScriptPath }, string.Empty);
+            Assert.Equal(0, original.Code);
+            Assert.Empty(original.Error);
+            Assert.Equal(new[] { "1", "99", "2", "99" },
+                original.Output.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries));
+            Assert.Equal(original, await ObserveExitedConsole(build.ArtifactPath!, fixture.RootPath, Array.Empty<string>(), string.Empty));
+        }
+    }
+
+    [PinnedSemanticHostFact]
+    public async Task StrictCompositionRejectsFinallyForwardingAcrossAFallibleStage()
+    {
+        const string source = """
+            function Send-Number {
+                [CmdletBinding()]
+                [OutputType([int])]
+                param([Parameter(ValueFromPipeline)][int] $Record)
+                begin { try { 10 } finally { 99 } }
+                process { $Record }
+                end {}
+            }
+            function Receive-Number {
+                [CmdletBinding()]
+                [OutputType([int])]
+                param([Parameter(ValueFromPipeline)][int] $Record)
+                begin { throw [InvalidOperationException]::new('first') }
+                process {
+                    if ($Record -eq 99) { throw [ArgumentException]::new('second') }
+                    $Record
+                }
+                end {}
+            }
+            try { return 1,2 | Send-Number | Receive-Number }
+            catch [InvalidOperationException] { return 11 }
+            catch [ArgumentException] { return 22 }
+            """;
+        using var fixture = OracleFixture.Create(source);
+        using var mutation = OracleFixture.Create(source
+            .Replace("throw [InvalidOperationException]::new('first')", "[int] $total = 2147483647; $total += 1", StringComparison.Ordinal)
+            .Replace("throw [ArgumentException]::new('second')", "[int] $dividend = 1; $dividend %= 0", StringComparison.Ordinal));
+        foreach (var pin in PowerShellCompilationSemanticHostArtifactPinCatalog.Pins)
+        {
+            var host = StrictStreamingHostPath(pin) ??
+                Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe");
+            var original = await ObserveExitedConsole(host, fixture.RootPath,
+                new[] { "-NoProfile", "-NonInteractive", "-File", fixture.ScriptPath }, string.Empty);
+            Assert.Equal(new[] { "10", "11" }, original.Output.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries));
+            Assert.Equal(0, original.Code);
+            Assert.Empty(original.Error);
+            var build = BuildStrictStreamingFixture(fixture, "StrictFallibleFinally", pin.ProfileId);
+            Assert.False(build.Succeeded);
+            Assert.Contains("requires both stages to have no terminating error path", build.Error, StringComparison.Ordinal);
+            var mutationBuild = BuildStrictStreamingFixture(mutation, "StrictFallibleFinallyMutation", pin.ProfileId);
+            Assert.False(mutationBuild.Succeeded);
+            Assert.Contains("requires both stages to have no terminating error path", mutationBuild.Error, StringComparison.Ordinal);
+        }
+    }
+
+    [PinnedSemanticHostFact]
     public async Task StrictComposedLifecycleBindsNullBeforeForwardingTypedScalarRecords()
     {
         using var fixture = OracleFixture.Create("""

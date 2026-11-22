@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net472;net8.0;net10.0</TargetFrameworks>
+    <TargetFrameworks Condition="'$(PublishAot)' == 'true'">net8.0;net10.0</TargetFrameworks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <IsAotCompatible Condition="'$(TargetFramework)' != 'net472'">true</IsAotCompatible>
+    <PackageId>PowerForge.Modules</PackageId>
+    <PackageVersion>3.0.195</PackageVersion>
+    <VersionPrefix>3.0.195</VersionPrefix>
+    <Description>Resolve, install and restore PowerShell modules without hosting PowerShell.</Description>
+    <PackageTags>powershell;modules;restore;nuget;aot</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Remove="README.md" />
+    <None Include="README.md" Pack="true" PackagePath="\" />
+    <PackageReference Include="NuGet.Packaging" Version="7.9.0" />
+    <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.15" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' == 'net472'">
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+    <PackageReference Include="System.Text.Json" Version="10.0.15" />
+    <Reference Include="System.Net.Http" />
+    <Reference Include="System.IO.Compression" />
+    <Reference Include="System.IO.Compression.FileSystem" />
+  </ItemGroup>
+</Project>

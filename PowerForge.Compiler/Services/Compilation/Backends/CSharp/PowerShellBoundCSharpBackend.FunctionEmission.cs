@@ -103,9 +103,16 @@ internal sealed partial class PowerShellBoundCSharpBackend
         if (transfersCapturedReturn)
             builder.Append(new string(' ', bodyIndent * 4)).AppendLine("try")
                 .Append(new string(' ', bodyIndent * 4)).AppendLine("{");
-        if (!TryEmitStrictPipelineStage(builder, function, bodyIndent, GetTemporaryIdentifier, discardHelper, sourceMap))
-            foreach (var statement in function.Statements)
-                EmitStatement(builder, statement, bodyIndent + (transfersCapturedReturn ? 1 : 0), GetTemporaryIdentifier, discardHelper, sourceMap);
+        try
+        {
+            if (!TryEmitStrictPipelineStage(builder, function, bodyIndent, GetTemporaryIdentifier, discardHelper, sourceMap))
+                foreach (var statement in function.Statements)
+                    EmitStatement(builder, statement, bodyIndent + (transfersCapturedReturn ? 1 : 0), GetTemporaryIdentifier, discardHelper, sourceMap);
+        }
+        finally
+        {
+            _strictPipelineParameterBinding = null;
+        }
         if (transfersCapturedReturn)
             builder.Append(new string(' ', bodyIndent * 4)).AppendLine("}")
                 .Append(new string(' ', bodyIndent * 4)).AppendLine("catch (global::PowerForge.Generated.Runtime.PowerShellCapturedReturnSignal) { return; }");

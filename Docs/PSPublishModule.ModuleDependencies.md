@@ -25,17 +25,40 @@ the module package should not force PowerShell dependency resolution.
 `ApprovedModule` is a build-time helper contract for merge and missing-command
 workflows. It is not a runtime dependency declaration.
 
-The finalized manifest and artefacts omit approved modules, even when they are
-also listed as required. Use `-MergeFunctionsFromApprovedModules` to embed
-referenced script functions. An unqualified call through a donor alias can be
-merged when the alias resolves to a script function in that donor. PowerForge
-embeds the target and makes the alias available inside the built module. It
-reports aliases whose target cannot be merged or whose name would conflict in
-the built module.
+Use `-MergeFunctionsFromApprovedModules` to embed the public or private script
+functions your code calls. PowerForge follows helper calls in the scope of the
+original donor, including private helpers and unqualified aliases that resolve
+to script functions. It keeps the merged helper and alias private unless the
+consumer explicitly exports it.
 
-Use `RequiredModule` alone when code needs the original module at runtime, for
-example for module-qualified alias calls, binary commands or runtime state.
-Artefacts with `-AddRequiredModules` copy the remaining runtime dependencies.
+The finalized manifest and artefacts omit approved modules, even when they are
+also listed as required. A build stops if removing a donor would leave a
+detected call unresolved or change its binding. Examples include colliding
+helper names, a binary cmdlet, a module-qualified call, and a function that
+relies on the donor's private module variables or files relative to its module
+path. A helper may use its own parameters and local variables, including in
+parameter defaults, synchronous callbacks and nested functions that run in
+the enclosing function's scope.
+PowerForge follows literal function-local alias targets through the same
+dependency checks as direct calls. A function can shadow an ordinary consumer
+alias during its invocation. The build stops if the consumer alias is shared
+with child scopes or if `WhatIf` or `Confirm` can skip the alias assignment.
+PowerForge also checks variable removals that could make a read fall back to
+donor module state and explicit variable commands that access an enclosing
+scope. The analysis includes retained root module code and scripts loaded by
+the generated bootstrapper. If the generated bootstrapper needs approved
+helpers, enable `MergeModuleOnBuild` so those helpers are part of its merged
+script payload. Manifest-loaded scripts that can inspect runtime state must
+also be safe to run without the donor. A literal-only hook can run without
+the donor even when the donor exports aliases or other runtime state.
+PowerForge also checks aliases created in the consumer's script scope and
+verifies that a dependency resolved inside a donor matches the selected
+approved module identity. Dynamic calls or alias declarations that prevent
+this verification stop the build.
+
+Declare a module only as `RequiredModule` when the original module must be
+available at runtime. Artefacts with `-AddRequiredModules` copy those runtime
+dependencies.
 
 For launcher/configuration ZIPs with the main module and remaining dependencies
 under `Modules`, use the native [delivery bundle layout](PSPublishModule.ModuleDelivery.md).

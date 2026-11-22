@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <IsAotCompatible>true</IsAotCompatible>
+    <PublishAot>true</PublishAot>
+    <IlcTreatWarningsAsErrors>true</IlcTreatWarningsAsErrors>
+    <TrimmerSingleWarn>false</TrimmerSingleWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\PowerForge.Modules\PowerForge.Modules.csproj" GlobalPropertiesToRemove="PublishAot;RuntimeIdentifier;SelfContained" />
+    <ProjectReference Include="..\PowerForge.ConsoleUi.Terminal\PowerForge.ConsoleUi.Terminal.csproj" GlobalPropertiesToRemove="PublishAot;RuntimeIdentifier;SelfContained" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="..\PowerForge.Cli\CliJsonWriter.cs;..\PowerForge.Cli\ModuleCliJson.cs;..\PowerForge.Cli\Program.Command.Module.cs;..\PowerForge.Cli\Program.Command.ModuleInstall.cs;..\PowerForge.Cli\Program.SharedOptions.cs"
+             Link="Shared\%(Filename)%(Extension)" />
+    <Compile Include="..\PowerForge\ConsoleEnvironment.cs;..\PowerForge\ConsoleView.cs;..\PowerForge\Diagnostics\ConsoleEncoding.cs;..\PowerForge\Services\BufferedLogger.cs;..\PowerForge\Models\BufferedLogEntry.cs"
+             Link="Shared\%(Filename)%(Extension)" />
+  </ItemGroup>
+  <PropertyGroup>
+    <PowerForgeIncludeManagedWorker Condition="'$(PowerForgeIncludeManagedWorker)' == ''">true</PowerForgeIncludeManagedWorker>
+  </PropertyGroup>
+  <Target Name="PackagePowerForge" AfterTargets="Publish" Condition="'$(PublishAot)' == 'true'">
+    <PropertyGroup>
+      <_PowerForgePublishRoot>$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '$(PublishDir)'))</_PowerForgePublishRoot>
+      <_PowerForgeFullDir>$(_PowerForgePublishRoot)full/</_PowerForgeFullDir>
+      <_PowerForgeExeSuffix Condition="$(RuntimeIdentifier.StartsWith('win-'))">.exe</_PowerForgeExeSuffix>
+      <_PowerForgeFullProject>$(MSBuildProjectDirectory)/../PowerForge.Cli/PowerForge.Cli.csproj</_PowerForgeFullProject>
+      <_PowerForgeWorkerRemoveProperties>IncludeAllContentForSelfExtract;IncludeNativeLibrariesForSelfExtract;EnableCompressionInSingleFile</_PowerForgeWorkerRemoveProperties>
+      <_PowerForgeWorkerProperties>Configuration=$(Configuration);RuntimeIdentifier=$(RuntimeIdentifier);SelfContained=true;PublishAot=false;PublishSingleFile=false;PublishTrimmed=false;PublishReadyToRun=false;PublishDir=$(_PowerForgeFullDir)</_PowerForgeWorkerProperties>
+    </PropertyGroup>
+    <MSBuild Condition="'$(PowerForgeIncludeManagedWorker)' == 'true'" Projects="$(_PowerForgeFullProject)"
+             Targets="Restore" RemoveProperties="$(_PowerForgeWorkerRemoveProperties);TargetFramework" Properties="$(_PowerForgeWorkerProperties)" />
+    <MSBuild Condition="'$(PowerForgeIncludeManagedWorker)' == 'true'" Projects="$(_PowerForgeFullProject)"
+             Targets="Publish" RemoveProperties="$(_PowerForgeWorkerRemoveProperties)" Properties="$(_PowerForgeWorkerProperties);TargetFramework=net10.0" />
+    <Move Condition="'$(PowerForgeIncludeManagedWorker)' == 'true'"
+          SourceFiles="$(_PowerForgeFullDir)PowerForge.Cli$(_PowerForgeExeSuffix)"
+          DestinationFiles="$(_PowerForgeFullDir)powerforge-full$(_PowerForgeExeSuffix)" />
+    <Move SourceFiles="$(_PowerForgePublishRoot)$(AssemblyName)$(_PowerForgeExeSuffix)"
+          DestinationFiles="$(_PowerForgePublishRoot)powerforge$(_PowerForgeExeSuffix)" />
+    <ZipDirectory Condition="'$(PowerForgeNativeArchive)' != ''"
+                  SourceDirectory="$(_PowerForgePublishRoot)" DestinationFile="$(PowerForgeNativeArchive)" Overwrite="true" />
+  </Target>
+</Project>

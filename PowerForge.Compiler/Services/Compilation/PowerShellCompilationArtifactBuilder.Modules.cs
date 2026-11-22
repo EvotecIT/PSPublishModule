@@ -31,6 +31,10 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         var retainedSourcePaths = PowerShellHybridDependencyResolver.DiscoverModuleScopeDependencies(
             spec.SourcePath, runtimeHooks.Concat(typed.SourcePaths), conventionalDiscovery.Loaders,
             PowerShellModuleRuntimeAlternatives.Stage, snapshot);
+        var runtimeSourcePaths = (spec.RuntimeSourcePaths ?? Array.Empty<string>())
+            .Where(static path => !string.IsNullOrWhiteSpace(path))
+            .Select(static path => Path.GetFullPath(path.Trim().Trim('"')))
+            .ToArray();
         File.WriteAllText(
             modulePath,
             PowerShellHybridModuleComposer.ComposeRoot(
@@ -53,7 +57,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             typed,
             spec.TargetFramework,
             verifyCopiedInput,
-            snapshot);
+            snapshot,
+            retainedSourcePaths.Concat(runtimeSourcePaths));
         if (manifestFiles is not null)
         {
             var primaryManifest = manifestFiles[0].Path;
@@ -79,7 +84,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                      path => PowerShellHybridModuleComposer.ComposeDependency(path, typed, wrappedCompiledMethods, document: snapshot.Get(path)),
                      typed.SourcePaths.Where(path => !PowerShellCompilationPathSafety.PathEquals(path, spec.SourcePath)),
                      conventionalLoaders: conventionalDiscovery.Loaders, verifyCopiedInput: verifyCopiedInput, snapshot: snapshot,
-                     deliveryProfile: PowerShellCompilationTargetContractService.GetDefaultSemanticProfileId(spec.TargetFramework)))
+                     deliveryProfile: PowerShellCompilationTargetContractService.GetDefaultSemanticProfileId(spec.TargetFramework),
+                     runtimeSourcePaths: runtimeSourcePaths))
             files.Add(CreateArtifactFile(
                 dependency.Path,
                 dependency.IsGenerated ? "GeneratedModuleDependency" : "ModuleDependency"));

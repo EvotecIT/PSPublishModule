@@ -29,6 +29,31 @@ public sealed class ManagedModuleInstallContextTests
     }
 
     [Fact]
+    public async Task CancellingThePrefetchConsumerReleasesItsWaitAndDisposesTheLateBuffer()
+    {
+        using var context = new ManagedModuleInstallContext();
+        using var cancellation = new CancellationTokenSource();
+        var timeout = TimeSpan.FromSeconds(5);
+        var download = new TaskCompletionSource<ManagedModuleBufferedPackage>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var stream = new DisposalTrackingStream();
+        context.StartBufferedPackagePrefetch("pending", _ => download.Task, CancellationToken.None);
+        var take = context.CreateBranch().TryTakeBufferedPackagePrefetchAsync("pending", cancellation.Token);
+
+        try
+        {
+            cancellation.Cancel();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => take.WaitAsync(timeout));
+        }
+        finally
+        {
+            download.SetResult(new ManagedModuleBufferedPackage(new ManagedModuleDownloadResult(), stream));
+        }
+
+        await stream.Disposed.WaitAsync(timeout);
+        Assert.False(stream.CanRead);
+    }
+
+    [Fact]
     public void InstalledVersionCache_IsSharedAcrossBranchesAndKeepsVersionOrder()
     {
         using var moduleRoot = new TemporaryDirectory();
@@ -119,5 +144,19 @@ public sealed class ManagedModuleInstallContextTests
         Assert.Equal("1.2.0", branchSelected.Version);
         Assert.True(branchSelected.Shared);
         Assert.Equal(2, attempts);
+    }
+
+    private sealed class DisposalTrackingStream : MemoryStream
+    {
+        private readonly TaskCompletionSource<bool> _disposed = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        internal Task Disposed => _disposed.Task;
+
+        protected override void Dispose(bool disposing)
+        {
+            base.Dispose(disposing);
+            if (disposing)
+                _disposed.TrySetResult(true);
+        }
     }
 }

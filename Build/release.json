@@ -27,6 +27,7 @@
         "ExpectedVersion": "3.0.X",
         "AnchorProject": "PowerForge",
         "Projects": [
+          "PowerForge.Modules",
           "PowerForge.PowerShell",
           "PowerForge.Compiler",
           "PowerForge.PowerShell.ProviderSdk",

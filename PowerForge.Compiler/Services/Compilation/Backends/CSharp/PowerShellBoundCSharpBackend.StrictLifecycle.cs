@@ -4,6 +4,14 @@ namespace PowerForge;
 
 internal sealed partial class PowerShellBoundCSharpBackend
 {
+    private (PowerShellLoweredForEachStatement Loop, string IsBound)? _strictPipelineParameterBinding;
+
+    private string EmitParameterPresence(PowerShellLoweredParameterPresenceExpression presence)
+        => _strictPipelineParameterBinding is { } binding &&
+           string.Equals(presence.ParameterName, binding.Loop.Variable.Name, StringComparison.OrdinalIgnoreCase)
+            ? binding.IsBound
+            : $"__boundParameters.Contains({PowerShellCSharpLiteral.QuoteString(presence.ParameterName)})";
+
     private static void AppendDirectLifecycleOverload(StringBuilder builder, PowerShellLoweredFunction function,
         IReadOnlyList<string> parameterParts)
     {
@@ -27,6 +35,16 @@ internal sealed partial class PowerShellBoundCSharpBackend
         var process = lifecycle.Process;
         var returnsValue = function.ReturnType != typeof(void);
         var prefix = new string(' ', indent * 4);
+        // A pipeline parameter first becomes visible when a record enters process,
+        // and remains visible to end and clean after that record.
+        if (PowerShellLoweredTreeEnumerator.EnumerateExpressions(function.Statements)
+            .OfType<PowerShellLoweredParameterPresenceExpression>()
+            .Any(presence => string.Equals(presence.ParameterName, process.Variable.Name, StringComparison.OrdinalIgnoreCase)))
+        {
+            var isBound = allocate("pipelineParameterBound");
+            _strictPipelineParameterBinding = (process, isBound);
+            builder.Append(prefix).Append("var ").Append(isBound).AppendLine(" = false;");
+        }
         var stage = allocate("pipelineStage");
         var record = allocate("pipelineRecord");
         var attachmentName = RenderStorage(attachment.Symbol);
@@ -76,7 +94,11 @@ internal sealed partial class PowerShellBoundCSharpBackend
             builder.Append(prefix).Append("    ").Append(parameters).AppendLine(" =>");
             builder.Append(prefix).AppendLine("    {");
             if (bindRecord is not null)
+            {
                 builder.Append(prefix).Append("        ").AppendLine(bindRecord);
+                if (_strictPipelineParameterBinding is { } binding)
+                    builder.Append(prefix).Append("        ").Append(binding.IsBound).AppendLine(" = true;");
+            }
             foreach (var statement in statements)
                 EmitStatement(builder, statement, indent + 2, allocate, discardHelper, sourceMap, sink);
             builder.Append(prefix).Append("    }").AppendLine(separator);

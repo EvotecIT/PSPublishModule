@@ -29,6 +29,9 @@ public sealed class MissingFunctionsReport
     /// </summary>
     public string[] NonInlineableApprovedModules { get; }
 
+    // Unlike runtime surface inspection, these are dependencies found in the analyzed code.
+    internal string[] ApprovedModuleRuntimeReferences { get; set; }
+
     /// <summary>
     /// Creates a new <see cref="MissingFunctionsReport"/> instance.
     /// </summary>
@@ -46,5 +49,6 @@ public sealed class MissingFunctionsReport
         FunctionsTopLevelOnly = functionsTopLevelOnly ?? System.Array.Empty<string>();
         AnalysisComplete = analysisComplete;
         NonInlineableApprovedModules = nonInlineableApprovedModules ?? System.Array.Empty<string>();
+        ApprovedModuleRuntimeReferences = NonInlineableApprovedModules;
     }
 }
