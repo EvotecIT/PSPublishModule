@@ -8,7 +8,7 @@ internal sealed class ManagedModuleArchiveExtractor
 {
     private const int CopyBufferSize = 1024 * 1024;
     private const int ParallelExtractionFileThreshold = 8;
-    private const int MaximumParallelExtractionFiles = 256;
+    private const int MaximumParallelExtractionEntries = 256;
     private const int MaximumParallelExtraction = 4;
     private const long ParallelExtractionByteThreshold = 64L * 1024 * 1024;
     private static readonly string[] PackageMetadataPrefixes = { "_rels/", "package/services/metadata/" };
@@ -29,6 +29,9 @@ internal sealed class ManagedModuleArchiveExtractor
     }
 
 #if !NET472
+    private const long ParallelDependencyExtractionByteThreshold = 32L * 1024 * 1024;
+    private static readonly SemaphoreSlim ParallelDependencyExtraction = new(1, 1);
+
     public ManagedModuleArchiveExtractionResult ExtractBufferedPackage(
         MemoryStream packageStream,
         string destinationPath,
@@ -37,15 +40,16 @@ internal sealed class ManagedModuleArchiveExtractor
     {
         ValidateBufferedPackageArguments(packageStream, destinationPath);
         using var archive = new ZipArchive(packageStream, ZipArchiveMode.Read, leaveOpen: true);
-        if (ShouldExtractBufferedPackageInParallel(archive) && packageStream.TryGetBuffer(out var packageBuffer))
+        if (ShouldExtractBufferedPackageInParallel(archive, ParallelExtractionByteThreshold) &&
+            packageStream.TryGetBuffer(out var packageBuffer))
         {
-            return ExtractBufferedPackageInParallel(
+            return ExtractBufferedPackageInParallelAsync(
                 packageBuffer,
                 checked((int)packageStream.Length),
                 archive,
                 destinationPath,
                 packageId,
-                cancellationToken);
+                cancellationToken).GetAwaiter().GetResult();
         }
 
         return ExtractArchive(archive, destinationPath, packageId, cancellationToken);
@@ -64,7 +68,30 @@ internal sealed class ManagedModuleArchiveExtractor
         CancellationToken cancellationToken)
     {
         ValidateBufferedPackageArguments(packageStream, destinationPath);
+        var bufferedPackage = packageStream is MemoryStream { Position: 0 } memoryStream ? memoryStream : null;
         using var archive = new ZipArchive(packageStream, ZipArchiveMode.Read, leaveOpen: true);
+        // Let one dependency use parallel file workers. Other dependency branches
+        // keep extracting asynchronously without waiting for the worker budget.
+        if (bufferedPackage is not null && bufferedPackage.TryGetBuffer(out var packageBuffer) &&
+            ShouldExtractBufferedPackageInParallel(archive, ParallelDependencyExtractionByteThreshold) &&
+            ParallelDependencyExtraction.Wait(0, cancellationToken))
+        {
+            try
+            {
+                return await ExtractBufferedPackageInParallelAsync(
+                    packageBuffer,
+                    packageBuffer.Count,
+                    archive,
+                    destinationPath,
+                    packageId,
+                    cancellationToken).ConfigureAwait(false);
+            }
+            finally
+            {
+                ParallelDependencyExtraction.Release();
+            }
+        }
+
         return await ExtractArchiveAsync(archive, destinationPath, packageId, cancellationToken).ConfigureAwait(false);
     }
 
@@ -133,8 +160,12 @@ internal sealed class ManagedModuleArchiveExtractor
             throw new ArgumentException("Destination path is required.", nameof(destinationPath));
     }
 
-    private static bool ShouldExtractBufferedPackageInParallel(ZipArchive archive)
+    private static bool ShouldExtractBufferedPackageInParallel(ZipArchive archive, long byteThreshold)
     {
+        // Each file worker reopens the ZIP and reads its full central directory.
+        if (Environment.ProcessorCount <= 1 || archive.Entries.Count > MaximumParallelExtractionEntries)
+            return false;
+
         var fileCount = 0;
         long uncompressedBytes = 0;
         foreach (var entry in archive.Entries)
@@ -149,18 +180,14 @@ internal sealed class ManagedModuleArchiveExtractor
             }
 
             fileCount++;
-            if (fileCount > MaximumParallelExtractionFiles)
-                return false;
-            if (uncompressedBytes < ParallelExtractionByteThreshold)
-                uncompressedBytes += Math.Min(entry.Length, ParallelExtractionByteThreshold - uncompressedBytes);
+            if (uncompressedBytes < byteThreshold)
+                uncompressedBytes += Math.Min(entry.Length, byteThreshold - uncompressedBytes);
         }
 
-        return fileCount >= ParallelExtractionFileThreshold &&
-               uncompressedBytes >= ParallelExtractionByteThreshold &&
-               Environment.ProcessorCount > 1;
+        return fileCount >= ParallelExtractionFileThreshold && uncompressedBytes >= byteThreshold;
     }
 
-    private static ManagedModuleArchiveExtractionResult ExtractBufferedPackageInParallel(
+    private static async Task<ManagedModuleArchiveExtractionResult> ExtractBufferedPackageInParallelAsync(
         ArraySegment<byte> packageBuffer,
         int packageLength,
         ZipArchive archive,
@@ -214,7 +241,7 @@ internal sealed class ManagedModuleArchiveExtractor
             CancellationToken = cancellationToken,
             MaxDegreeOfParallelism = Math.Min(MaximumParallelExtraction, Math.Max(1, Environment.ProcessorCount))
         };
-        Parallel.ForEachAsync(files, options, (file, token) =>
+        await Parallel.ForEachAsync(files, options, (file, token) =>
         {
             using var packageCopy = new MemoryStream(
                 packageBuffer.Array!,
@@ -234,7 +261,7 @@ internal sealed class ManagedModuleArchiveExtractor
             CopyStream(source, destination, token);
             Interlocked.Add(ref bytesWritten, destination.Length);
             return ValueTask.CompletedTask;
-        }).GetAwaiter().GetResult();
+        }).ConfigureAwait(false);
 
         stopwatch.Stop();
         return new ManagedModuleArchiveExtractionResult(files.Count, bytesWritten, stopwatch.Elapsed, fromCache: false, cacheLockWaitElapsed: TimeSpan.Zero);
