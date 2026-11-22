@@ -286,7 +286,7 @@ internal static class Program
         return fullPath;
     }
 
-    private static IEnumerable<ScriptArgument> ParseArguments(IReadOnlyList<string> arguments)
+    private static IEnumerable<CommandParameter> ParseArguments(IReadOnlyList<string> arguments)
     {
         var positionalOnly = false;
         for (var index = 0; index < arguments.Count; index++)
@@ -300,7 +300,15 @@ internal static class Program
 
             if (!positionalOnly && TryParseParameter(value, out var name, out var inlineValue))
             {
-                name = ResolveParameterName(name);
+                var resolvedName = ResolveParameterName(name);
+                if (resolvedName is null && inlineValue is null)
+                {
+                    // PowerShell binds unknown names itself, including preserving a bare token in $args.
+                    yield return new CommandParameter("-" + name);
+                    continue;
+                }
+
+                name = resolvedName ?? name;
                 if (inlineValue is null && !SwitchParameters.Contains(name))
                 {
                     if (index + 1 >= arguments.Count || LooksLikeParameter(arguments[index + 1]))
@@ -308,19 +316,19 @@ internal static class Program
                     inlineValue = arguments[++index];
                 }
                 object? boundValue = inlineValue;
-                if (SwitchParameters.Contains(name) && inlineValue is not null)
-                    boundValue = ParseBooleanValue("Switch", name, inlineValue);
+                if (SwitchParameters.Contains(name))
+                    boundValue = inlineValue is null ? (object)SwitchParameter.Present : ParseBooleanValue("Switch", name, inlineValue);
                 else if (BooleanParameters.Contains(name))
                     boundValue = ParseBooleanValue("Boolean", name, inlineValue!);
-                yield return new ScriptArgument(name, boundValue);
+                yield return new CommandParameter(name, boundValue);
                 continue;
             }
 
-            yield return new ScriptArgument(null, value);
+            yield return new CommandParameter(null, value);
         }
     }
 
-    private static string ResolveParameterName(string name)
+    private static string? ResolveParameterName(string name)
     {
         var exact = Parameters.FirstOrDefault(candidate => candidate.Equals(name, StringComparison.OrdinalIgnoreCase));
         if (exact is not null) return exact;
@@ -335,7 +343,7 @@ internal static class Program
             .ToArray();
         return matches.Length switch
         {
-            0 => name,
+            0 => null,
             1 => matches[0],
             _ => throw new ArgumentException($"Parameter name '-{name}' is ambiguous.")
         };
@@ -375,18 +383,6 @@ internal static class Program
             "$false" or "false" => false,
             _ => throw new ArgumentException($"{kind} parameter '-{name}' requires an explicit Boolean value such as '$true' or '$false'.")
         };
-
-    private sealed class ScriptArgument
-    {
-        internal ScriptArgument(string? name, object? value)
-        {
-            Name = name;
-            Value = value;
-        }
-
-        internal string? Name { get; }
-        internal object? Value { get; }
-    }
 
     private sealed class EmbeddedDependency
     {

@@ -22,11 +22,9 @@ namespace PowerForge.Generated.Runtime
                 // CommandInfo dispatch forces cmdlet binding and internal origin in the SDK.
                 // Normal file discovery preserves authorization, basic arguments and the root frame.
                 powerShell.AddCommand(entry.Path, useLocalScope: false);
+                var parameters = powerShell.Commands.Commands[powerShell.Commands.Commands.Count - 1].Parameters;
                 foreach (var argument in arguments)
-                {
-                    if (argument.Name == null) powerShell.AddArgument(argument.Value);
-                    else powerShell.AddParameter(argument.Name, argument.Value);
-                }
+                    parameters.Add(argument);
                 return lookup;
             }
             catch { lookup.Dispose(); throw; }
