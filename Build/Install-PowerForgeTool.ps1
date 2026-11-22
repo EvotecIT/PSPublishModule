@@ -116,13 +116,12 @@ $CacheRoot = [IO.Path]::GetFullPath($CacheRoot)
 $installRoot = Join-Path $CacheRoot "$version/$rid/$expectedSha256"
 $suffix = if ($isWindowsHost) { '.exe' } else { '' }
 $executableName = [string] (Get-ManifestPropertyValue -Object $asset -Name 'executableName')
-$companionSha256 = [string] (Get-ManifestPropertyValue -Object $asset -Name 'companionSha256')
+$companionPayloadSha256 = ([string] (Get-ManifestPropertyValue -Object $asset -Name 'companionPayloadSha256')).ToLowerInvariant()
 $companionRelativePath = $null
-if ([string]::IsNullOrEmpty($executableName) -and [string]::IsNullOrEmpty($companionSha256)) {
+if ([string]::IsNullOrEmpty($executableName) -and [string]::IsNullOrEmpty($companionPayloadSha256)) {
     $executableName = "PowerForge$suffix"
-} elseif ($executableName -ceq "powerforge$suffix" -and $companionSha256 -match '^[a-fA-F0-9]{64}$') {
+} elseif ($schemaVersion -eq 2 -and $executableName -ceq "powerforge$suffix" -and $companionPayloadSha256 -match '^[a-f0-9]{64}$') {
     $companionRelativePath = "full/powerforge-full$suffix"
-    $companionSha256 = $companionSha256.ToLowerInvariant()
 } else {
     throw "PowerForge asset '$rid' has an invalid native launcher or managed companion entry."
 }
@@ -131,10 +130,49 @@ $markerPath = Join-Path $installRoot '.powerforge-install.json'
 
 function Test-ManagedCompanion {
     param([string] $Root)
+
     if (-not $companionRelativePath) { return $true }
-    $path = Join-Path $Root $companionRelativePath
-    return (Test-Path -LiteralPath $path -PathType Leaf) -and
-        (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant() -ceq $companionSha256
+    $directory = Get-Item -LiteralPath (Join-Path $Root 'full') -Force -ErrorAction SilentlyContinue
+    if (-not $directory -or -not $directory.PSIsContainer) { return $false }
+
+    $prefixLength = $directory.FullName.Length + 1
+    $directories = [Collections.Generic.Stack[IO.DirectoryInfo]]::new()
+    $directories.Push($directory)
+    $files = [Collections.Generic.Dictionary[string, string]]::new([StringComparer]::Ordinal)
+    while ($directories.Count) {
+        $current = $directories.Pop()
+        if ($current.Attributes -band [IO.FileAttributes]::ReparsePoint) { return $false }
+        foreach ($entry in Get-ChildItem -LiteralPath $current.FullName -Force) {
+            if ($entry.Attributes -band [IO.FileAttributes]::ReparsePoint) { return $false }
+            if ($entry.PSIsContainer) {
+                $directories.Push($entry)
+                continue
+            }
+            if (-not $isWindowsHost) {
+                # The Unix file provider exposes the type of devices and named pipes.
+                $unixStat = $entry.PSObject.Properties['UnixStat']
+                if ($unixStat -and $unixStat.Value.ItemType.ToString() -cne 'File') { return $false }
+            }
+            $relativePath = $entry.FullName.Substring($prefixLength).Replace([IO.Path]::DirectorySeparatorChar, [char] '/')
+            $files.Add("full/$relativePath", $entry.FullName)
+        }
+    }
+
+    # Match the release manifest's ordinal UTF-8 records of path, NUL, SHA-256, NUL.
+    $paths = [string[]] @($files.Keys)
+    [Array]::Sort($paths, [StringComparer]::Ordinal)
+    $payload = [Text.StringBuilder]::new()
+    foreach ($path in $paths) {
+        $digest = (Get-FileHash -LiteralPath $files[$path] -Algorithm SHA256).Hash.ToLowerInvariant()
+        $null = $payload.Append($path).Append([char] 0).Append($digest).Append([char] 0)
+    }
+    $sha256 = [Security.Cryptography.SHA256]::Create()
+    try {
+        $hash = $sha256.ComputeHash([Text.Encoding]::UTF8.GetBytes($payload.ToString()))
+        return [BitConverter]::ToString($hash).Replace('-', '').ToLowerInvariant() -ceq $companionPayloadSha256
+    } finally {
+        $sha256.Dispose()
+    }
 }
 
 function Test-PowerForgeForwarding {
@@ -278,7 +316,7 @@ if (-not $reused) {
     }
 }
 
-if (-not (Test-InstalledTool)) {
+if (-not $reused -and -not (Test-InstalledTool)) {
     throw "PowerForge installation did not converge at '$installRoot'."
 }
 if ($AddToPath -and $env:GITHUB_PATH) {

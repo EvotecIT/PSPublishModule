@@ -551,9 +551,10 @@ internal sealed partial class PowerForgeReleaseService
                 throw new ArgumentException("Native PowerForge archives can only be staged in a build without publishing.");
 
             if (!willRunTools || !selectedToolOutputs.Contains(PowerForgeReleaseToolOutputKind.Tool) ||
-                UsesDotNetToolWorkflow(spec.Tools!) || (runPackages && !coordinateModuleAndPackageVersions))
+                UsesDotNetToolWorkflow(spec.Tools!) || ((runModule || runPackages) && !coordinateModuleAndPackageVersions))
             {
-                throw new ArgumentException("Native archives require a standalone PowerForge tool plan with a shared release version.");
+                throw new ArgumentException(
+                    "Native archives require a standalone PowerForge tool-only plan or a module-and-package plan with a shared version resolved before building.");
             }
 
             var legacyTargets = GetSectionSelectedTargets(selectedTargets, toolTargetMatches, runAppleApps, appleTargetMatches);
@@ -5501,8 +5502,16 @@ internal sealed partial class PowerForgeReleaseService
 
         foreach (var entry in entries)
         {
-            if (!string.IsNullOrWhiteSpace(entry.StagedPath) && File.Exists(entry.StagedPath))
-                entry.StagedSha256 = ComputeSha256(entry.StagedPath!);
+            var stagedSha256 = !string.IsNullOrWhiteSpace(entry.StagedPath) && File.Exists(entry.StagedPath)
+                ? ComputeSha256(entry.StagedPath!)
+                : null;
+            if (entry.Source == NativePowerForgeArchiveSource &&
+                (stagedSha256 is null || !string.Equals(entry.StagedSha256, stagedSha256, StringComparison.OrdinalIgnoreCase)))
+            {
+                throw new InvalidDataException($"Staged native PowerForge archive differs from the validated archive: {entry.Path}");
+            }
+            if (stagedSha256 is not null)
+                entry.StagedSha256 = stagedSha256;
         }
 
         return entries;

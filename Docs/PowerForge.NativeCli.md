@@ -41,8 +41,9 @@ Build and smoke-test the native ZIP on each target OS. Place the verified
 `Build/Build-Project.ps1 -RunMode Build -NativeArchiveRoot <directory> -StageRoot <directory>`
 for the same version as the module and NuGet packages. Both directory
 arguments resolve relative to the current PowerShell location. Native archive
-inputs are supported in build-only runs. If the Windows PowerForge target
-requires signing, build its archive with `-EnableSigning:$true` and the same
+inputs are supported in tool-only builds and in unified builds that resolve
+one module and package version before building. If the Windows PowerForge
+target requires signing, build its archive with `-EnableSigning:$true` and the same
 configured certificate. Staging verifies the launcher and managed companion
 against the configured publisher.
 

@@ -36,8 +36,20 @@
           "properties": {
             "name": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*\\.zip$" },
             "sha256": { "type": "string", "pattern": "^[A-Fa-f0-9]{64}$" },
-            "executableSha256": { "type": "string", "pattern": "^[A-Fa-f0-9]{64}$" }
+            "executableSha256": { "type": "string", "pattern": "^[A-Fa-f0-9]{64}$" },
+            "executableName": { "type": "string" },
+            "companionPayloadSha256": { "type": "string", "pattern": "^[A-Fa-f0-9]{64}$" }
+          },
+          "dependentRequired": {
+            "executableName": ["executableSha256", "companionPayloadSha256"],
+            "companionPayloadSha256": ["executableName"]
           }
+        },
+        "^win-(arm64|x64)$": {
+          "properties": { "executableName": { "const": "powerforge.exe" } }
+        },
+        "^(osx|linux)-(arm64|x64)$": {
+          "properties": { "executableName": { "const": "powerforge" } }
         }
       }
     }
@@ -54,6 +66,17 @@
             "patternProperties": {
               "^(osx|linux|win)-(arm64|x64)$": {
                 "required": ["sha256", "executableSha256"]
+              }
+            }
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "assets": {
+            "patternProperties": {
+              "^(osx|linux|win)-(arm64|x64)$": {
+                "not": { "required": ["executableName"] }
               }
             }
           }

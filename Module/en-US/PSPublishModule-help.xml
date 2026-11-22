@@ -27183,6 +27183,18 @@ and parent directories for standard release config file names.</maml:para>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
+          <maml:name>NativeArchiveRoot</maml:name>
+          <maml:description>
+            <maml:para>Directory containing the Windows and Linux x64 native PowerForge archives for a build-only run at the shared version.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
           <maml:name>NoAppleResume</maml:name>
           <maml:description>
             <maml:para>Disables exact remote-build reuse on this run.</maml:para>
@@ -28434,6 +28446,18 @@ this switch requires ConfirmAppleAction and is intended only for deliberate reco
           <maml:name>ModuleVersion</maml:name>
           <maml:description>
             <maml:para>Optional module version override for the native module-release lane.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
+          <maml:name>NativeArchiveRoot</maml:name>
+          <maml:description>
+            <maml:para>Directory containing the Windows and Linux x64 native PowerForge archives for a build-only run at the shared version.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -29719,6 +29743,18 @@ and parent directories for standard release config file names.</maml:para>
         <maml:name>ModuleVersion</maml:name>
         <maml:description>
           <maml:para>Optional module version override for the native module-release lane.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
+        <maml:name>NativeArchiveRoot</maml:name>
+        <maml:description>
+          <maml:para>Directory containing the Windows and Linux x64 native PowerForge archives for a build-only run at the shared version.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>

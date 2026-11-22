@@ -48,6 +48,26 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
+    public void StageReleaseAssets_RejectsNativeArchiveChangedAfterValidation()
+    {
+        using var root = new TemporaryDirectory();
+        var archive = Path.Combine(root.Path, "PowerForgeNative-3.0.110-linux-x64.zip");
+        File.WriteAllText(archive, "validated archive bytes");
+        var entry = new PowerForgeReleaseAssetEntry
+        {
+            Path = archive,
+            Category = PowerForgeReleaseAssetCategory.Tool,
+            Source = "NativePowerForgeArchive",
+            StagedSha256 = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(archive)))
+        };
+        File.WriteAllText(archive, "replacement bytes");
+
+        var error = Assert.Throws<InvalidDataException>(() =>
+            PowerForgeReleaseService.StageReleaseAssets([entry], Path.Combine(root.Path, "staged"), null, null, null));
+        Assert.Contains("differs from the validated archive", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void TryBuildDotNetGitHubRunnableAssets_SignedZipIncludesDetachedEvidence()
     {
         string root = Directory.CreateTempSubdirectory().FullName;

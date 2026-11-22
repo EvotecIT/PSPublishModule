@@ -159,12 +159,17 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Theory]
-    [InlineData(false, false, false)]
-    [InlineData(true, false, false)]
-    [InlineData(true, true, false)]
-    [InlineData(true, false, true)]
-    public void Execute_StagesOnlyValidPowerForgeArchives(bool includeNativeArchive, bool missingImplementation, bool publishToolGitHub)
+    [InlineData(false, false, false, false)]
+    [InlineData(true, false, false, false)]
+    [InlineData(true, true, false, false)]
+    [InlineData(true, false, true, false)]
+    [InlineData(true, false, false, true)]
+    public void Execute_StagesOnlyValidPowerForgeArchives(
+        bool includeNativeArchive, bool missingImplementation, bool publishToolGitHub, bool moduleOwnsPackages)
     {
+        static string HashBytes(byte[] bytes) =>
+            Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes)).ToLowerInvariant();
+
         var root = CreateSandbox();
         try
         {
@@ -176,6 +181,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             var executableBytes = System.Text.Encoding.UTF8.GetBytes("verified PowerForge executable");
             var nativeBytes = System.Text.Encoding.UTF8.GetBytes("native PowerForge launcher");
             var companionBytes = System.Text.Encoding.UTF8.GetBytes("managed companion");
+            var implementationBytes = System.Text.Encoding.UTF8.GetBytes("managed implementation");
             using (var archive = System.IO.Compression.ZipFile.Open(zip, System.IO.Compression.ZipArchiveMode.Create))
             {
                 var entry = archive.CreateEntry("PowerForge");
@@ -192,7 +198,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 if (!missingImplementation)
                 {
                     using var implementation = archive.CreateEntry("full/PowerForge.Cli.dll").Open();
-                    implementation.Write(companionBytes);
+                    implementation.Write(implementationBytes);
                 }
             }
             File.WriteAllText(installer, "param()");
@@ -256,6 +262,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                     NativePowerForgeArchivePaths = includeNativeArchive ? new() { [runtime] = nativeZip } : new()
                 },
                 Tools = new PowerForgeToolReleaseSpec(),
+                Module = moduleOwnsPackages ? new PowerForgeModuleReleaseOptions { IncludesPackages = true } : null,
                 GitHub = new PowerForgeReleaseGitHubOptions
                 {
                     Owner = "EvotecIT",
@@ -266,10 +273,19 @@ public sealed partial class PowerForgeReleaseServiceTests
             var request = new PowerForgeReleaseRequest
             {
                 ConfigPath = Path.Combine(root, "release.json"),
-                ToolsOnly = true,
+                ToolsOnly = !moduleOwnsPackages,
                 PublishToolGitHub = publishToolGitHub,
-                ReleaseVersion = "3.0.110"
+                ReleaseVersion = moduleOwnsPackages ? null : "3.0.110",
+                ModuleRunMode = ConfigurationGateMode.Build
             };
+
+            if (moduleOwnsPackages)
+            {
+                var error = Assert.Throws<ArgumentException>(() => service.Execute(spec, request));
+                Assert.Contains("shared version resolved before building", error.Message, StringComparison.Ordinal);
+                Assert.False(File.Exists(lockManifest));
+                return;
+            }
 
             if (publishToolGitHub)
             {
@@ -292,7 +308,12 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.True(result.Success, result.ErrorMessage);
             Assert.Contains(lockManifest, result.ReleaseAssets);
             Assert.Contains(installer, result.ReleaseAssets);
-            using var document = System.Text.Json.JsonDocument.Parse(File.ReadAllText(lockManifest));
+            var manifestJson = File.ReadAllText(lockManifest);
+            var schemaPath = Path.Combine(PowerForgeCliTestHost.FindRepositoryRoot(), "Schemas", "powerforge.tool.schema.json");
+            var schema = Json.Schema.JsonSchema.FromText(File.ReadAllText(schemaPath));
+            var manifestNode = System.Text.Json.Nodes.JsonNode.Parse(manifestJson)!;
+            Assert.True(schema.Evaluate(manifestNode).IsValid);
+            using var document = System.Text.Json.JsonDocument.Parse(manifestJson);
             var json = document.RootElement;
             Assert.Equal(2, json.GetProperty("schemaVersion").GetInt32());
             Assert.Equal("3.0.110", json.GetProperty("version").GetString());
@@ -313,15 +334,24 @@ public sealed partial class PowerForgeReleaseServiceTests
                 Assert.Empty(Assert.Single(result.ToolPlan!.Targets).Combinations);
                 Assert.DoesNotContain(zip, result.ReleaseAssets);
                 Assert.Equal("powerforge", asset.GetProperty("executableName").GetString());
-                Assert.Equal(
-                    Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(companionBytes)).ToLowerInvariant(),
-                    asset.GetProperty("companionSha256").GetString());
+                var launcherDigest = HashBytes(companionBytes);
+                var implementationDigest = HashBytes(implementationBytes);
+                var payload = $"full/PowerForge.Cli.dll\0{implementationDigest}\0full/powerforge-full\0{launcherDigest}\0";
+                Assert.Equal(HashBytes(System.Text.Encoding.UTF8.GetBytes(payload)),
+                    asset.GetProperty("companionPayloadSha256").GetString());
+
+                var nativeAsset = manifestNode["assets"]![runtime]!.AsObject();
+                nativeAsset["executableName"] = "powerforge.exe";
+                Assert.False(schema.Evaluate(manifestNode).IsValid);
+                nativeAsset["executableName"] = "powerforge";
+                nativeAsset.Remove("companionPayloadSha256");
+                Assert.False(schema.Evaluate(manifestNode).IsValid);
             }
             else
             {
                 Assert.Single(Assert.Single(result.ToolPlan!.Targets).Combinations);
                 Assert.False(asset.TryGetProperty("executableName", out _));
-                Assert.False(asset.TryGetProperty("companionSha256", out _));
+                Assert.False(asset.TryGetProperty("companionPayloadSha256", out _));
             }
         }
         finally

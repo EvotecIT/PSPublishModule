@@ -241,9 +241,7 @@ internal sealed partial class PowerForgeReleaseService
                     sha256 = archiveSha256,
                     executableSha256 = ComputePowerForgeArchiveEntrySha256(archive, executableName),
                     executableName = native ? executableName : null,
-                    companionSha256 = native
-                        ? ComputePowerForgeArchiveEntrySha256(archive, "full/powerforge-full" + suffix)
-                        : null
+                    companionPayloadSha256 = native ? ComputePowerForgeCompanionPayloadSha256(archive) : null
                 };
             },
             StringComparer.OrdinalIgnoreCase);
@@ -336,9 +334,27 @@ internal sealed partial class PowerForgeReleaseService
 
     private static string ComputePowerForgeArchiveEntrySha256(ZipArchive archive, string executableName)
     {
-        using var stream = GetPowerForgeArchiveEntry(archive, executableName).Open();
+        return ComputePowerForgeArchiveEntrySha256(GetPowerForgeArchiveEntry(archive, executableName));
+    }
+
+    private static string ComputePowerForgeArchiveEntrySha256(ZipArchiveEntry entry)
+    {
+        using var stream = entry.Open();
         using var sha256 = SHA256.Create();
         return BitConverter.ToString(sha256.ComputeHash(stream)).Replace("-", string.Empty).ToLowerInvariant();
+    }
+
+    private static string ComputePowerForgeCompanionPayloadSha256(ZipArchive archive)
+    {
+        var files = PowerForgeReleaseArtifactVerifier.ValidateArchiveEntries(archive)
+            .Where(entry => entry.Key.StartsWith("full/", StringComparison.Ordinal))
+            .OrderBy(entry => entry.Key, StringComparer.Ordinal);
+        var payload = new StringBuilder();
+        // The installer hashes the same UTF-8 records, with NUL separators and ordinal paths.
+        foreach (var file in files)
+            payload.Append(file.Key).Append('\0').Append(ComputePowerForgeArchiveEntrySha256(file.Value)).Append('\0');
+
+        return ComputeSha256(Encoding.UTF8.GetBytes(payload.ToString()));
     }
 
     private static ZipArchiveEntry GetPowerForgeArchiveEntry(ZipArchive archive, string executableName)

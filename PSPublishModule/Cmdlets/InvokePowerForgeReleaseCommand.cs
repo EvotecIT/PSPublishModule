@@ -146,7 +146,7 @@ public sealed partial class InvokePowerForgeReleaseCommand : PSCmdlet
     [Parameter]
     public string? ReleaseVersion { get; set; }
 
-    /// <summary>Directory containing the Windows and Linux x64 native PowerForge archives for the shared release version.</summary>
+    /// <summary>Directory containing the Windows and Linux x64 native PowerForge archives for a build-only run at the shared version.</summary>
     [Parameter]
     public string? NativeArchiveRoot { get; set; }
 
