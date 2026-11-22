@@ -160,9 +160,9 @@ internal static class PowerShellHybridDependencyResolver
                 errors = document.Errors;
             }
             else ast = Parser.ParseFile(current, out tokens, out errors);
-            // A retained alternative can refer to types already declared in the importing module.
-            // Its authored file is loaded in that scope, outside the CLR compilation source set.
-            if (runtimeSelected)
+            // Retained source can resolve types in its importing scope. A standalone type error
+            // does not invalidate a literal load found during runtime-only discovery.
+            if (runtimeSelected || knownPathsOnly)
                 errors = errors.Where(static error => !IsStandaloneTypeResolutionError(error)).ToArray();
             if (errors.Length > 0)
             {
