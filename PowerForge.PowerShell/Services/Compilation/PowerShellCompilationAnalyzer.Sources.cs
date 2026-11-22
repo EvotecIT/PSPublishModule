@@ -77,7 +77,8 @@ public sealed partial class PowerShellCompilationAnalyzer
         cancellationToken.ThrowIfCancellationRequested();
         beforeDependencyAnalysis?.Invoke();
         var profile = target?.SemanticProfileId ?? _semanticProfileId;
-        var snapshot = input.GetSourceSnapshot(profile);
+        input = input.ResolveForProfile(profile);
+        var snapshot = input.SourceSnapshot;
         var dependencyPlanner = new PowerShellCompilationDependencyPlanner();
         var dependencies = dependencyPlanner.Analyze(
             input,

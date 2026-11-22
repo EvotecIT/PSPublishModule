@@ -21,6 +21,7 @@ public static class PowerShellCompilationExplainShaper
         if (plan is null) throw new ArgumentNullException(nameof(plan));
         if (string.IsNullOrWhiteSpace(targetFramework)) throw new ArgumentException("A target framework is required.", nameof(targetFramework));
         if (commandProviders is null) throw new ArgumentNullException(nameof(commandProviders));
+        input = input.ResolveForProfile(GetProfile(input, plan));
         var shaped = Shape(input, plan, targetFramework, out var entry, commandProviders: commandProviders);
         var emittedMethods = GetEmittedMethods(shaped, entry);
         var ledger = PowerShellCompilationUnitDispositionLedgerBuilder.Create(
@@ -29,7 +30,7 @@ public static class PowerShellCompilationExplainShaper
             shaped,
             input.SourcePath,
             emittedMethods: emittedMethods,
-            snapshot: input.GetSourceSnapshot(GetProfile(input, plan)));
+            snapshot: input.SourceSnapshot);
         return PowerShellCompilationExplanationService.CreateFinal(plan, ledger);
     }
 
@@ -60,7 +61,8 @@ public static class PowerShellCompilationExplainShaper
             return null;
         if (plan.Mode == PowerShellCompilationMode.Strict && !plan.CanProceed)
             return null;
-        var snapshot = input.GetSourceSnapshot(profile);
+        input = input.ResolveForProfile(profile);
+        var snapshot = input.SourceSnapshot;
         var documents = input.CompilationSourceFiles.Select(snapshot.Get).ToArray();
         if (input.Kind == PowerShellCompilationArtifactKind.Executable && plan.Mode == PowerShellCompilationMode.Strict)
         {

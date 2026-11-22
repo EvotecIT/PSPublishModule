@@ -51,7 +51,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             typed,
             spec.TargetFramework,
             verifyCopiedInput,
-            snapshot);
+            snapshot,
+            retainedSourcePaths);
         if (manifestFiles is not null)
         {
             var primaryManifest = manifestFiles[0].Path;

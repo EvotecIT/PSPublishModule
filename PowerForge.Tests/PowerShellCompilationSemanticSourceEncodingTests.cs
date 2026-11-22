@@ -53,14 +53,19 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
         if (!string.Equals(legacyName, modernName, StringComparison.OrdinalIgnoreCase))
             File.WriteAllText(Path.Combine(fixture.RootPath, legacyName), "function Get-Value { return 10 }");
 
+        const string legacyProfile = PowerShellCompilationSemanticOracleCatalog.WindowsPowerShell51ProfileId;
+        var desktopInput = new PowerShellCompilationInputResolver(legacyProfile).Resolve(fixture.ScriptPath,
+            PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Strict);
         foreach (var pin in PowerShellCompilationSemanticHostArtifactPinCatalog.Pins)
         {
             var input = new PowerShellCompilationInputResolver(pin.ProfileId).Resolve(fixture.ScriptPath,
                 PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Strict);
             Assert.Equal(2, input.CompilationSourceFiles.Length);
             var plan = new PowerShellCompilationAnalyzer(Array.Empty<PowerShellCompilationCommandProviderContract>(), pin.ProfileId)
-                .Analyze(input, PowerShellCompilationMode.Strict, "net10.0");
-            var explanation = PowerShellCompilationExplainShaper.CreateFinalExplanation(input, plan, "net10.0");
+                .Analyze(desktopInput, PowerShellCompilationMode.Strict, "net10.0");
+            Assert.Equal(input.CompilationSourceFiles.OrderBy(static path => path, StringComparer.OrdinalIgnoreCase),
+                plan.Files.Select(static file => file.FullPath).OrderBy(static path => path, StringComparer.OrdinalIgnoreCase));
+            var explanation = PowerShellCompilationExplainShaper.CreateFinalExplanation(desktopInput, plan, "net10.0");
             Assert.True(explanation.CanProceed);
             Assert.Equal(2, explanation.TypedUnits);
             var build = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
@@ -209,7 +214,7 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
         var legacy = CodePagesEncodingProvider.Instance.GetEncoding(0) ?? Encoding.UTF8;
         var modernName = legacy.GetString(Encoding.Latin1.GetBytes("café.ps1"));
         var manifest = "@{ RootModule = 'Module.psm1'; ModuleVersion = '1.0.0'; FunctionsToExport = @('Get-*'); FileList = @('Desktop.ps1', '" +
-            System.Management.Automation.Language.CodeGeneration.EscapeSingleQuotedStringContent(modernName) + "') }";
+            System.Management.Automation.Language.CodeGeneration.EscapeSingleQuotedStringContent(modernName) + "', 'Example.ps1') }";
         foreach (var (name, text) in new[] { ("Module.psm1", source), ("Desktop.ps1", desktopScript), (modernName, modernScript) })
         {
             Directory.CreateDirectory(moduleRoot);
@@ -218,6 +223,9 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
             File.WriteAllBytes(Path.Combine(moduleRoot, name), bytes);
             File.WriteAllText(Path.Combine(referenceRoot, name), legacy.GetString(bytes), new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
         }
+        var exampleBytes = Encoding.Latin1.GetBytes("# Sample file: café");
+        File.WriteAllBytes(Path.Combine(moduleRoot, "Example.ps1"), exampleBytes);
+        File.WriteAllBytes(Path.Combine(referenceRoot, "Example.ps1"), exampleBytes);
         File.WriteAllText(Path.Combine(moduleRoot, "Module.psd1"), manifest, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
         File.WriteAllText(Path.Combine(referenceRoot, "Module.psd1"), manifest, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
         var observer = Path.Combine(fixture.RootPath, "ObserveManifest.ps1");
@@ -241,8 +249,14 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
             Assert.True(build.Succeeded, build.Error + Environment.NewLine + build.BuildOutput);
             Assert.Equal(1, build.Manifest!.UnitDispositionLedger!.EmittedUnits);
             var retainedFile = Assert.Single(build.Manifest.Files, file => Path.GetFileName(file.Path) == modernName);
-            var needsRewrite = pin.ProfileId != profile && legacy.CodePage != Encoding.UTF8.CodePage;
+            var needsRewrite = pin.ProfileId == profile || legacy.CodePage != Encoding.UTF8.CodePage;
             Assert.Equal(needsRewrite ? "GeneratedModuleDependency" : "ModuleDependency", retainedFile.Role);
+            var publishedDirectory = Path.GetDirectoryName(build.ArtifactPath!)!;
+            if (needsRewrite)
+                Assert.True(File.ReadAllBytes(Path.Combine(publishedDirectory, modernName)).AsSpan().StartsWith(Encoding.UTF8.GetPreamble()));
+            var example = Assert.Single(build.Manifest.Files, file => Path.GetFileName(file.Path) == "Example.ps1");
+            Assert.Equal("ModuleDependency", example.Role);
+            Assert.Equal(exampleBytes, File.ReadAllBytes(Path.Combine(publishedDirectory, "Example.ps1")));
             var host = StrictStreamingHostPath(pin) ??
                 Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe");
             var native = await ObserveExitedConsole(host, fixture.RootPath,

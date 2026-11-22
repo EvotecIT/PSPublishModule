@@ -113,7 +113,8 @@ internal static class PowerShellCompiledModuleManifest
         PowerShellTypedCompilationResult typed,
         string targetFramework,
         Action<string, string> verifyCopiedInput,
-        PowerShellSourceSnapshot snapshot)
+        PowerShellSourceSnapshot snapshot,
+        IEnumerable<string>? retainedSourcePaths = null)
     {
         var sourceManifest = ResolveSourceManifest(sourcePath, moduleManifestPath);
         if (!File.Exists(sourceManifest))
@@ -215,6 +216,7 @@ internal static class PowerShellCompiledModuleManifest
             mutator.TrySetTopLevelStringArray(targetManifest, "FileList", rewrittenFileList);
         }
 
+        var runtimeSources = new HashSet<string>(retainedSourcePaths ?? Array.Empty<string>(), PowerShellCompilationPathSafety.PathComparer);
         var copied = new List<PowerShellStagedModuleFile> { new(targetManifest, isGenerated: true) };
         foreach (var reference in ReadReferencedFileClosure(sourceManifest))
         {
@@ -239,7 +241,7 @@ internal static class PowerShellCompiledModuleManifest
             Directory.CreateDirectory(Path.GetDirectoryName(targetFile) ?? moduleDirectory);
             File.Copy(sourceFile, targetFile, overwrite: false);
             verifyCopiedInput(sourceFile, targetFile);
-            var portableText = hybrid && PowerShellCompilationInputResolver.IsPowerShellSource(sourceFile)
+            var portableText = hybrid && runtimeSources.Contains(sourceFile) && PowerShellCompilationInputResolver.IsPowerShellSource(sourceFile)
                 ? snapshot.GetDeliveryRewrite(sourceFile, PowerShellCompilationTargetContractService.GetDefaultSemanticProfileId(targetFramework), targetFile)
                 : null;
             if (portableText is not null)

@@ -5,6 +5,9 @@ namespace PowerForge;
 /// </summary>
 public sealed class PowerShellCompilationResolvedInput
 {
+    private readonly Func<string, PowerShellCompilationResolvedInput> _resolveForProfile;
+    private PowerShellCompilationResolvedInput? _alternateInput;
+
     internal PowerShellCompilationResolvedInput(
         string requestedPath,
         string sourcePath,
@@ -15,8 +18,9 @@ public sealed class PowerShellCompilationResolvedInput
         PowerShellCompilationMode mode,
         string[] sourceFiles,
         string[] compilationSourceFiles,
-        string[]? recursiveSourceDirectories = null,
-        PowerShellSourceSnapshot? sourceSnapshot = null)
+        PowerShellSourceSnapshot sourceSnapshot,
+        Func<string, PowerShellCompilationResolvedInput> resolveForProfile,
+        string[]? recursiveSourceDirectories = null)
     {
         RequestedPath = requestedPath;
         SourcePath = sourcePath;
@@ -29,7 +33,8 @@ public sealed class PowerShellCompilationResolvedInput
         SourceFiles = sourceFiles;
         CompilationSourceFiles = compilationSourceFiles;
         RecursiveSourceDirectories = recursiveSourceDirectories ?? Array.Empty<string>();
-        SourceSnapshot = sourceSnapshot ?? new PowerShellSourceSnapshot(moduleRoot, null);
+        SourceSnapshot = sourceSnapshot;
+        _resolveForProfile = resolveForProfile;
         var dependencyPlanner = new PowerShellCompilationDependencyPlanner();
         Dependencies = dependencyPlanner.Analyze(this);
         DependencyGraph = PowerShellCompilationDependencyGraphBuilder.Build(
@@ -78,14 +83,11 @@ public sealed class PowerShellCompilationResolvedInput
 
     internal string[] RecursiveSourceDirectories { get; }
     internal PowerShellSourceSnapshot SourceSnapshot { get; }
-    private PowerShellSourceSnapshot? _alternateSourceSnapshot;
-
-    internal PowerShellSourceSnapshot GetSourceSnapshot(string? profile)
+    internal PowerShellCompilationResolvedInput ResolveForProfile(string profile)
     {
-        if (profile is null || SourceSnapshot.SemanticProfileId == profile)
-            return SourceSnapshot;
-        return LazyInitializer.EnsureInitialized(ref _alternateSourceSnapshot,
-            () => new PowerShellSourceSnapshot(ModuleRoot, profile))!;
+        profile = PowerShellCompilationSemanticOracleCatalog.Get(profile).ProfileId;
+        if (SourceSnapshot.SemanticProfileId == profile) return this;
+        return LazyInitializer.EnsureInitialized(ref _alternateInput, () => _resolveForProfile(profile))!;
     }
 }
 
@@ -184,7 +186,9 @@ public sealed class PowerShellCompilationInputResolver
                 executableMode,
                 closure,
                 closure,
-                sourceSnapshot: snapshot);
+                snapshot,
+                profile => new PowerShellCompilationInputResolver(profile).Resolve(
+                    requestedPaths, resolvedKind, executableMode, entryPoint, allowDynamicModuleRuntimeSources));
         }
         var resolvedMode = mode ?? (resolvedKind == PowerShellCompilationArtifactKind.BinaryModule
             ? PowerShellCompilationMode.Strict
@@ -207,6 +211,7 @@ public sealed class PowerShellCompilationInputResolver
                 $"Loose compilation source '{requestedPath}' traverses a symbolic link or junction.");
         }
 
+        var pathsForResolution = requestedPaths.ToArray();
         return new PowerShellCompilationResolvedInput(
             sourcePath,
             sourcePath,
@@ -217,7 +222,9 @@ public sealed class PowerShellCompilationInputResolver
             resolvedMode,
             requestedPaths,
             requestedPaths,
-            sourceSnapshot: new PowerShellSourceSnapshot(moduleRoot, _semanticProfileId));
+            new PowerShellSourceSnapshot(moduleRoot, _semanticProfileId),
+            profile => new PowerShellCompilationInputResolver(profile).Resolve(
+                pathsForResolution, resolvedKind, resolvedMode, allowDynamicModuleRuntimeSources: allowDynamicModuleRuntimeSources));
     }
 
     private static string FindCommonSourceRoot(IReadOnlyCollection<string> sourcePaths)
@@ -355,8 +362,10 @@ public sealed class PowerShellCompilationInputResolver
             resolvedMode,
             sourceFiles,
             compilationSourceFiles,
-            recursiveSourceDirectories,
-            snapshot);
+            snapshot,
+            profile => new PowerShellCompilationInputResolver(profile).Resolve(
+                requestedPath, resolvedKind, resolvedMode, allowDynamicModuleRuntimeSources),
+            recursiveSourceDirectories);
     }
 
     private static (string SourcePath, string? ManifestPath, string ArtifactName) ResolveFile(string path)

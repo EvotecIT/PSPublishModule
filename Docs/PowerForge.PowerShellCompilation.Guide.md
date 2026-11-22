@@ -70,7 +70,11 @@ PowerShell 7 profile reads UTF-8 and the Windows PowerShell 5.1 profile uses
 the active Windows code page. The selected profile also applies to scripts
 loaded by literal dot-source statements, module source discovery and literal
 paths used to identify bundled resources. Package uses the build host's source
-encoding rules when no semantic profile is selected. Use a UTF-8 BOM for
+encoding rules when no semantic profile is selected. Selecting a different
+profile resolves the source dependencies again. Hybrid modules targeting
+Windows PowerShell ship retained runtime scripts with a Unicode byte order
+mark when their bytes would otherwise depend on the recipient's code page.
+Files carried only as manifest inventory keep their original bytes. Use a UTF-8 BOM for
 non-ASCII source when building for Windows PowerShell 5.1 on another operating
 system.
 
