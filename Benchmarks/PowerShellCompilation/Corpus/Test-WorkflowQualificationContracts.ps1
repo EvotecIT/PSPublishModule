@@ -465,7 +465,8 @@ try {
     if(Test-Path -LiteralPath ($script:withdrawnInput+'.withdrawn')) {throw 'Source holding directory leaked.'}
 } finally { Set-Item -LiteralPath Function:\Invoke-WorkflowObserver -Value $savedObserver }
 
-Assert-WorkflowTestInvocation ([pscustomobject]@{testArguments=@('', 'two words', '--literal', 'żółć');testWorkingDirectory='scenarios'}) -RequireArguments
+$unicodeArgument = -join @([char] 0x017c, [char] 0x00f3, [char] 0x0142, [char] 0x0107)
+Assert-WorkflowTestInvocation ([pscustomobject]@{testArguments=@('', 'two words', '--literal', $unicodeArgument);testWorkingDirectory='scenarios'}) -RequireArguments
 $checked.Add('fixture argv preserves literal strings and project-relative scenario cwd')
 Assert-RejectedContract 'non-string fixture argv' {Assert-WorkflowTestInvocation ([pscustomobject]@{testArguments=@(2)}) -RequireArguments} 'only strings'
 Assert-RejectedContract 'NUL in fixture argv' {Assert-WorkflowTestInvocation ([pscustomobject]@{testArguments=@("a$([char]0)b")}) -RequireArguments} 'without NUL'
@@ -514,8 +515,39 @@ try {
 }
 
 . (Join-Path $PSScriptRoot 'Workflows/Unfamiliar/Unfamiliar.Fixtures.ps1')
+. (Join-Path $PSScriptRoot 'Corpus.WorkflowBaseline.ps1')
+$profile = [pscustomobject]@{ referenceHost = '7.6.6'; operatingSystem = 'Windows'; architecture = 'x64' }
+$hostIdentity = @{ version = '7.6.6'; operatingSystem = 'Windows'; architecture = 'x64' }
+Assert-WorkflowReferenceHost $hostIdentity $profile 'net10.0'
+foreach ($mismatch in @(
+    @{ key = 'version'; value = '7.6.5' },
+    @{ key = 'architecture'; value = 'arm64' },
+    @{ key = 'operatingSystem'; value = 'Other' }
+)) {
+    $other = $hostIdentity.Clone()
+    $other[$mismatch.key] = $mismatch.value
+    Assert-RejectedContract ('reject reference host ' + $mismatch.key) {
+        Assert-WorkflowReferenceHost $other $profile 'net10.0'
+    } 'oracle must be Windows x64 PowerShell 7.6.6'
+}
+
 $htmlRoot = Join-Path $WorkspacePath ('report-effect-' + [guid]::NewGuid().ToString('N'))
 $null = New-Item -ItemType Directory -Path $htmlRoot
+$hiddenPath = Join-Path $htmlRoot '.effect.txt'
+[IO.File]::WriteAllText($hiddenPath, 'before')
+if ($env:OS -eq 'Windows_NT') { [IO.File]::SetAttributes($hiddenPath, [IO.FileAttributes]::Hidden) }
+$before = Get-WorkflowEffectSnapshot $htmlRoot
+if ($env:OS -eq 'Windows_NT') { [IO.File]::SetAttributes($hiddenPath, [IO.FileAttributes]::Normal) }
+[IO.File]::WriteAllText($hiddenPath, 'after')
+if ($env:OS -eq 'Windows_NT') { [IO.File]::SetAttributes($hiddenPath, [IO.FileAttributes]::Hidden) }
+$after = Get-WorkflowEffectSnapshot $htmlRoot
+[IO.File]::Delete($hiddenPath)
+$deleted = Get-WorkflowEffectSnapshot $htmlRoot
+if (-not $before.Contains('.effect.txt') -or -not $after.Contains('.effect.txt') -or
+    $before['.effect.txt'] -ceq $after['.effect.txt'] -or $deleted.Contains('.effect.txt')) {
+    throw 'Effect snapshots must preserve hidden file changes and removals.'
+}
+$checked.Add('observe hidden file changes and removals')
 $reportPath = Join-Path $htmlRoot 'report.html'
 $started = [datetime]::new(2026, 1, 1, 9, 0, 0)
 $completed = $started.AddSeconds(3)
@@ -549,6 +581,24 @@ Assert-RejectedContract 'reject duplicate HTML revision metadata' {
     ConvertTo-UnfamiliarReportEffectHash $reportPath $started $completed
 } 'one viewport and one revision'
 
+$revisionTag = '<meta name="revised" content="2026-01-01 09:00:00">'
+$viewportTag = '<meta name="viewport" content="same">'
+[IO.File]::WriteAllText($reportPath, $viewportTag + '<!-- ' + $revisionTag + ' -->')
+Assert-RejectedContract 'reject HTML revision metadata inside a comment' {
+    ConvertTo-UnfamiliarReportEffectHash $reportPath $started $completed
+} 'one viewport and one revision'
+[IO.File]::WriteAllText($reportPath, $firstHtml + '<!-- ' + $revisionTag + ' -->')
+$withComment = ConvertTo-UnfamiliarReportEffectHash $reportPath $started $completed
+[IO.File]::WriteAllText($reportPath, $secondHtml + '<!-- ' + $revisionTag.Replace('09:00:00', '09:00:01') + ' -->')
+if ((ConvertTo-UnfamiliarReportEffectHash $reportPath $started $completed) -ceq $withComment) {
+    throw 'The report comparison ignored a changed comment.'
+}
+$checked.Add('observe literal changes in HTML comments')
+[IO.File]::WriteAllText($reportPath, $firstHtml + '<!-->' + $revisionTag)
+Assert-RejectedContract 'reject duplicate revision after an abruptly closed HTML comment' {
+    ConvertTo-UnfamiliarReportEffectHash $reportPath $started $completed
+} 'one viewport and one revision'
+
 $cssStart = '<style>' + [Environment]::NewLine
 $cssEnd = '</style><div class="a">Fixture</div>'
 $ruleA = '.a { color: red; }' + [Environment]::NewLine
@@ -577,6 +627,27 @@ Assert-RejectedContract 'reject duplicate CSS selectors' {
 Assert-RejectedContract 'reject noncontiguous CSS rule block' {
     ConvertTo-SingleClassReportEffectHash $reportPath
 } 'contiguous block'
+$prefix = '@media print { p { color: black; } }' + [Environment]::NewLine
+[IO.File]::WriteAllText($reportPath, $cssStart + $prefix + $ruleA + $ruleB + $cssEnd)
+$mediaHash = ConvertTo-SingleClassReportEffectHash $reportPath
+[IO.File]::WriteAllText($reportPath, $cssStart + $prefix + $ruleB + $ruleA + $cssEnd)
+if ((ConvertTo-SingleClassReportEffectHash $reportPath) -cne $mediaHash) {
+    throw 'A complete preceding media rule changed the independent class-rule comparison.'
+}
+$checked.Add('accept complete CSS media rule before the sortable classes')
+$selectorPrefix = 'p' + [Environment]::NewLine
+[IO.File]::WriteAllText($reportPath, $cssStart + $selectorPrefix + $ruleB + $ruleA + $cssEnd)
+Assert-RejectedContract 'reject continued CSS selector before sortable rules' {
+    ConvertTo-SingleClassReportEffectHash $reportPath
+} 'complete standalone'
+[IO.File]::WriteAllText($reportPath, $cssStart + $selectorPrefix + $ruleA + $ruleB + $cssEnd)
+Assert-RejectedContract 'reject reordered continued CSS selector before sortable rules' {
+    ConvertTo-SingleClassReportEffectHash $reportPath
+} 'complete standalone'
+[IO.File]::WriteAllText($reportPath, $cssStart + [string][char]0x00a0 + [Environment]::NewLine + $ruleA + $ruleB + $cssEnd)
+Assert-RejectedContract 'reject non-CSS whitespace in a continued CSS selector' {
+    ConvertTo-SingleClassReportEffectHash $reportPath
+} 'complete standalone'
 $commentOpen = '.a { /* start of comment }' + [Environment]::NewLine
 $commentClose = '.c { end of comment */ }' + [Environment]::NewLine
 [IO.File]::WriteAllText($reportPath, $cssStart + $commentOpen + $ruleB + $commentClose + $cssEnd)

@@ -35,7 +35,7 @@ internal static partial class PowerShellPackagedScriptRewriter
     private static PackagedSourceOperand[] PlanDotSources(ScriptBlockAst ast, string sourcePath,
         IReadOnlyCollection<string> embeddedScriptPaths, bool allowDerivedPaths)
     {
-        var allowed = embeddedScriptPaths.Select(Path.GetFullPath).ToHashSet(PowerShellCompilationPathSafety.PathComparer);
+        var allowed = IndexSourcePaths(embeddedScriptPaths);
         var directory = Path.GetDirectoryName(Path.GetFullPath(sourcePath))!;
         var plans = new List<PackagedSourceOperand>();
         foreach (var command in ast.FindAll(static node => node is CommandAst { InvocationOperator: TokenKind.Dot },
@@ -53,9 +53,9 @@ internal static partial class PowerShellPackagedScriptRewriter
             {
                 throw new InvalidOperationException($"Packaged executable generation cannot resolve dot-sourced command '{command.Extent.Text}' to an embedded dependency.", exception);
             }
-            if (!allowed.Contains(targetPath))
+            if (!allowed.TryGetValue(targetPath, out var embeddedPath))
                 throw new InvalidOperationException($"Packaged executable generation does not support dot-sourced command '{command.Extent.Text}' because resolved dependency '{targetPath}' is not embedded with the artifact.");
-            plans.Add(new PackagedSourceOperand(fact, targetPath));
+            plans.Add(new PackagedSourceOperand(fact, embeddedPath));
         }
         return plans.ToArray();
     }
@@ -65,7 +65,7 @@ internal static partial class PowerShellPackagedScriptRewriter
     {
         var plans = new Dictionary<CommandAst, PackagedSourceOperand>();
         if (retainedScriptPaths is not { Count: > 0 }) return plans;
-        var allowed = retainedScriptPaths.ToHashSet(PowerShellCompilationPathSafety.PathComparer);
+        var allowed = IndexSourcePaths(retainedScriptPaths);
         var directory = Path.GetDirectoryName(Path.GetFullPath(sourcePath))!;
         foreach (var command in ast.FindAll(static node => node is CommandAst { InvocationOperator: TokenKind.Ampersand },
                      searchNestedScriptBlocks: true).Cast<CommandAst>())
@@ -74,10 +74,17 @@ internal static partial class PowerShellPackagedScriptRewriter
             var relative = fact.RelativePath.Replace('/', Path.DirectorySeparatorChar).Replace('\\', Path.DirectorySeparatorChar);
             if (WildcardPattern.ContainsWildcardCharacters(relative)) continue;
             var target = Path.GetFullPath(Path.Combine(directory, relative));
-            if (allowed.Contains(target))
-                plans.Add(command, new PackagedSourceOperand(fact, target, "ValidateCalledSource"));
+            if (allowed.TryGetValue(target, out var retainedPath))
+                plans.Add(command, new PackagedSourceOperand(fact, retainedPath, "ValidateCalledSource"));
         }
         return plans;
+    }
+
+    private static Dictionary<string, string> IndexSourcePaths(IEnumerable<string> paths)
+    {
+        var comparer = PowerShellCompilationPathSafety.PathComparer;
+        return paths.Select(Path.GetFullPath).Distinct(comparer)
+            .ToDictionary(static path => path, static path => path, comparer);
     }
 
     private static SourceReplacement[] AddSourceOperandGuards(IEnumerable<PackagedSourceOperand> plans, string artifactSourceRoot,

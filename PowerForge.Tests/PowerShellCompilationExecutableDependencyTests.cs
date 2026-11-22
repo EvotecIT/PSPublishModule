@@ -62,6 +62,36 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Single(Directory.EnumerateFiles(result.GeneratedSourcePath!, "Dependency*.ps1", SearchOption.AllDirectories));
     }
 
+    [WindowsTheory]
+    [InlineData(PowerShellCompilationMode.Package)]
+    [InlineData(PowerShellCompilationMode.Hybrid)]
+    public void Build_PackagedExecutableUsesCatalogSpellingForRetainedCalls(PowerShellCompilationMode mode)
+    {
+        using var fixture = ArtifactFixture.Create("""
+            & "$PSScriptRoot/Helper.ps1" 'first'
+            & "$PSScriptRoot/helper.ps1" 'second'
+            """);
+        File.WriteAllText(Path.Combine(fixture.RootPath, "Helper.ps1"),
+            "param([string] $Name)\n\"helper:$Name\"");
+
+        var input = new PowerShellCompilationInputResolver().Resolve(
+            fixture.ScriptPath, PowerShellCompilationArtifactKind.Executable, mode);
+        var artifact = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            input.SourcePath, fixture.OutputPath, "PowerForge.CatalogSpelling",
+            input.Kind, input.Mode, allowUnreviewedDependencyResolution: true)
+        {
+            CompilationSourcePaths = input.CompilationSourceFiles,
+            RuntimeSourcePaths = input.SourceFiles
+        });
+
+        Assert.True(artifact.Succeeded, artifact.Error + Environment.NewLine + artifact.BuildOutput);
+        var process = RunProcess(artifact.ArtifactPath!);
+        Assert.Equal(0, process.ExitCode);
+        Assert.Empty(process.StandardError);
+        Assert.Equal(new[] { "helper:first", "helper:second" },
+            process.StandardOutput.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries));
+    }
+
     private static void AssertPackagedPathsEqual(string expected, string actual)
     {
         var comparison = OperatingSystem.IsWindows() || OperatingSystem.IsMacOS()

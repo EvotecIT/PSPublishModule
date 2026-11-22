@@ -14,6 +14,7 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 . (Join-Path $PSScriptRoot 'Corpus.Runner.Common.ps1')
 . (Join-Path $PSScriptRoot 'Corpus.Assessment.Acquisition.ps1')
+. (Join-Path $PSScriptRoot 'Corpus.WorkflowBaseline.ps1')
 
 function Get-ObservationHash {
     param([AllowEmptyString()][string] $Text)
@@ -66,7 +67,7 @@ foreach ($path in $EvidencePath) {
     $evidenceFile = (Resolve-Path -LiteralPath $path).Path
     if ($evidenceFile -eq $output) { throw 'The published baseline cannot overwrite its input evidence.' }
     $report = Get-Content -LiteralPath $evidenceFile -Raw | ConvertFrom-Json -AsHashtable
-    if ($report.schemaVersion -ne 1 -or $report.packetId -cne $packet.Packet.packetId -or $report.packetSha256 -cne $packet.Sha256) {
+    if ($report.schemaVersion -ne 2 -or $report.packetId -cne $packet.Packet.packetId -or $report.packetSha256 -cne $packet.Sha256) {
         throw "Evidence '$path' does not identify the selected packet."
     }
     $fixtureHashes = [ordered]@{}
@@ -84,7 +85,7 @@ foreach ($path in $EvidencePath) {
         $key = "$($lane.id)/$($lane.target)"
         if (-not $expected.Contains($key)) { throw "Evidence '$path' reports an undeclared lane '$key'." }
         $reference = $report.hosts[$lane.target]
-        if ($reference -cne $expected[$key].referenceHost) { throw "Evidence for '$key' used an unpinned reference host '$reference'." }
+        Assert-WorkflowReferenceHost $reference $expected[$key] $key
         $hosts[$lane.target] = $reference
         if ($rawByLane.ContainsKey($key)) {
             $previous = $rawByLane[$key]
@@ -150,7 +151,7 @@ $workflowsWithParity = @($lanes | Group-Object { $_.id } | Where-Object {
     @($_.Group | Where-Object { $_.status -cne 'parity' }).Count -eq 0
 }).Count
 $published = [ordered]@{
-    schemaVersion = 1
+    schemaVersion = 2
     packetId = $packet.Packet.packetId
     packetSha256 = $packet.Sha256
     compilerVersion = $compiler

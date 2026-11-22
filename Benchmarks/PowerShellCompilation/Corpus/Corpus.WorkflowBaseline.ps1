@@ -1,10 +1,21 @@
+function Assert-WorkflowReferenceHost {
+    param($Identity, $Profile, [string] $Target)
+
+    if ($null -eq $Identity -or $Identity.version -cne $Profile.referenceHost -or
+        $Identity.operatingSystem -cne $Profile.operatingSystem -or $Identity.architecture -cne $Profile.architecture) {
+        $expected = "$($Profile.operatingSystem) $($Profile.architecture) PowerShell $($Profile.referenceHost)"
+        throw "The '$Target' oracle must be $expected."
+    }
+}
+
 function Get-WorkflowEffectSnapshot {
     param([string] $Root)
 
+    $prefix = [IO.Path]::GetFullPath($Root).TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
     $files = [ordered]@{}
-    foreach ($file in (Get-ChildItem -LiteralPath $Root -File -Recurse | Sort-Object FullName)) {
+    foreach ($file in (Get-ChildItem -LiteralPath $Root -File -Recurse -Force | Sort-Object FullName)) {
         if ($file.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'A scenario effect must not be a reparse point.' }
-        $relativePath = [IO.Path]::GetRelativePath($Root, $file.FullName).Replace('\', '/')
+        $relativePath = $file.FullName.Substring($prefix.Length).Replace('\', '/')
         $files[$relativePath] = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
     }
     return $files
@@ -32,6 +43,13 @@ function Invoke-WorkflowCase {
     param($Entry, $Case, [string] $EntryPath, [string] $AuthoredPath, [string] $HostPath, [bool] $Original)
 
     $root = [string] $Case.workingDirectory
+    $environment = @{
+        NO_COLOR = '1'
+        POWERSHELL_TELEMETRY_OPTOUT = '1'
+        TEMP = $root
+        TMP = $root
+    }
+    if ($Entry.id -ceq 'Get-OSSConhostLog') { Set-UnfamiliarGitIsolation $environment $root }
     $before = Get-WorkflowEffectSnapshot $root
     if ($Entry.workloadKind -eq 'Module' -or $Original) {
         $executable = $HostPath
@@ -47,12 +65,7 @@ function Invoke-WorkflowCase {
     }
     $arguments += @($Case.arguments)
     $started = [DateTime]::Now
-    $process = Invoke-OwnedProcess -FileName $executable -Arguments $arguments -WorkingDirectory $root -TimeoutSeconds 75 -Environment @{
-        NO_COLOR = '1'
-        POWERSHELL_TELEMETRY_OPTOUT = '1'
-        TEMP = $root
-        TMP = $root
-    }
+    $process = Invoke-OwnedProcess -FileName $executable -Arguments $arguments -WorkingDirectory $root -TimeoutSeconds 75 -Environment $environment
     $completed = [DateTime]::Now
     Write-Utf8Json ($root + '.process.json') $process
     $after = Get-WorkflowEffectSnapshot $root
@@ -137,6 +150,7 @@ function Invoke-WorkflowBaselineLane {
         PATH = (Split-Path -Parent $HostPath) + [IO.Path]::PathSeparator + $env:PATH
         POWERSHELL_TELEMETRY_OPTOUT = '1'
     }
+    if ($Entry.id -ceq 'Get-OSSConhostLog') { Set-UnfamiliarGitIsolation $environment $LaneRoot }
     try {
         $inputs = Get-CorpusProperty $Entry 'sourceInputs'
         if ($null -ne $inputs) {

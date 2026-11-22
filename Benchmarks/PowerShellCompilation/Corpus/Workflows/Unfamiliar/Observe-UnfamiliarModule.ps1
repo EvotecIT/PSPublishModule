@@ -41,7 +41,11 @@ try {
         'PSSVG' {
             $width = if ($positive) { 8 } else { 0 }
             $rectangle = SVG.rect -Width $width -Height 4
-            (SVG.svg -Content $rectangle -Width 16 -Height 16).OuterXml
+            $svg = (SVG.svg -Content $rectangle -Width 16 -Height 16).OuterXml
+            if ($positive -and ($svg -isnot [string] -or [string]::IsNullOrWhiteSpace($svg))) {
+                throw 'The SVG success case must produce serialized XML.'
+            }
+            $svg
         }
         'MarkdownPS' {
             $rows = @(
