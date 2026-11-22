@@ -547,6 +547,9 @@ internal sealed partial class PowerForgeReleaseService
         PowerForgeReleaseAssetEntry[] nativeArchives = Array.Empty<PowerForgeReleaseAssetEntry>();
         if (!string.IsNullOrWhiteSpace(request.NativeArchiveRoot) || spec.Outputs?.NativePowerForgeArchivePaths?.Count > 0)
         {
+            if (result.PublishesFromSelectedLanes)
+                throw new ArgumentException("Native PowerForge archives can only be staged in a build without publishing.");
+
             if (!willRunTools || !selectedToolOutputs.Contains(PowerForgeReleaseToolOutputKind.Tool) ||
                 UsesDotNetToolWorkflow(spec.Tools!) || (runPackages && !coordinateModuleAndPackageVersions))
             {
@@ -561,8 +564,6 @@ internal sealed partial class PowerForgeReleaseService
             nativeArchives = ResolveNativePowerForgeArchives(spec, configDirectory, powerForgeTarget,
                 request.NativeArchiveRoot, temporaryReleaseDirectory);
         }
-        var deferPackagePublishing = HasAfterStagingValidation(spec) ||
-                                    (nativeArchives.Length > 0 && result.PublishesFromSelectedLanes);
 
         if (runModule)
         {
@@ -724,7 +725,7 @@ internal sealed partial class PowerForgeReleaseService
                 request,
                 configurationOverride,
                 publishUnifiedGitHub,
-                deferPublishing: deferPackagePublishing);
+                deferPublishing: HasAfterStagingValidation(spec));
             result.Packages = packages;
             if (!packages.Success)
             {
@@ -891,7 +892,7 @@ internal sealed partial class PowerForgeReleaseService
                 publishUnifiedGitHub,
                 request.ResolvedReleaseVersion,
                 spec.Module!.VersionPrimaryProject,
-                deferPublishing: deferPackagePublishing);
+                deferPublishing: HasAfterStagingValidation(spec));
             result.Packages = packages;
             if (!packages.Success)
             {
@@ -987,7 +988,7 @@ internal sealed partial class PowerForgeReleaseService
             }
         }
 
-        if (runPackages && deferPackagePublishing && !request.PlanOnly && !request.ValidateOnly)
+        if (runPackages && HasAfterStagingValidation(spec) && !request.PlanOnly && !request.ValidateOnly)
         {
             if (!ValidateReleaseValidationIntegrityBeforePublication(
                     request,

@@ -38,20 +38,20 @@ Publication is a separate release operation.
 Build and smoke-test the native ZIP on each target OS. Place the verified
 `PowerForgeNative-<version>-win-x64.zip` and
 `PowerForgeNative-<version>-linux-x64.zip` together. Pass that directory to
-`Build/Build-Project.ps1 -NativeArchiveRoot <directory> -StageRoot <directory>`
+`Build/Build-Project.ps1 -RunMode Build -NativeArchiveRoot <directory> -StageRoot <directory>`
 for the same version as the module and NuGet packages. Both directory
-arguments resolve relative to the current PowerShell location. For a signed
-release, build the Windows archive with `-EnableSigning:$true` and an
-effective native release configuration that specifies the same certificate
-as the unified PowerForge target. The build verifies the Windows launcher
-and managed companion against that publisher before accepting the archive.
+arguments resolve relative to the current PowerShell location. Native archive
+inputs are supported in build-only runs. If the Windows PowerForge target
+requires signing, build its archive with `-EnableSigning:$true` and the same
+configured certificate. Staging verifies the launcher and managed companion
+against the configured publisher.
 
-The unified release includes one standalone archive per runtime. Its tool
-manifest directs the installer to the native archive on Windows and Linux
-x64. Other runtimes continue to use their managed standalone archives.
-The installer preserves the managed companion for forwarded commands.
-The `PowerForge.Build` .NET tool stays on the managed CLI, and `PowerForge`
-and `PowerForge.Modules` ship on the same NuGet release track.
+The staged output includes one standalone archive per runtime. The tool
+manifest selects the native archives for Windows and Linux x64 and the
+managed standalone archives for other runtimes. The installer keeps the
+managed companion for forwarded commands. The `PowerForge.Build` .NET tool
+still runs the managed CLI, and `PowerForge` and `PowerForge.Modules` share
+the same version track.
 
 ## Build from source
 

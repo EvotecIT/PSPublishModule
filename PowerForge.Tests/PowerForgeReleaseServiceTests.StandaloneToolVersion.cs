@@ -159,10 +159,11 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Theory]
-    [InlineData(false, false)]
-    [InlineData(true, false)]
-    [InlineData(true, true)]
-    public void Execute_StagesOnlyValidPowerForgeArchives(bool includeNativeArchive, bool missingImplementation)
+    [InlineData(false, false, false)]
+    [InlineData(true, false, false)]
+    [InlineData(true, true, false)]
+    [InlineData(true, false, true)]
+    public void Execute_StagesOnlyValidPowerForgeArchives(bool includeNativeArchive, bool missingImplementation, bool publishToolGitHub)
     {
         var root = CreateSandbox();
         try
@@ -266,8 +267,17 @@ public sealed partial class PowerForgeReleaseServiceTests
             {
                 ConfigPath = Path.Combine(root, "release.json"),
                 ToolsOnly = true,
+                PublishToolGitHub = publishToolGitHub,
                 ReleaseVersion = "3.0.110"
             };
+
+            if (publishToolGitHub)
+            {
+                var error = Assert.Throws<ArgumentException>(() => service.Execute(spec, request));
+                Assert.Contains("build without publishing", error.Message, StringComparison.Ordinal);
+                Assert.False(File.Exists(lockManifest));
+                return;
+            }
 
             if (missingImplementation)
             {
