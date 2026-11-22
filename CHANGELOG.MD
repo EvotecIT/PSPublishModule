@@ -2,6 +2,7 @@
 
 ## Unreleased
 ### What's Changed
+- Put an iPhone Duo simulator into the closed or open pose before a capture with `apple-simulator run --duo-pose`. PowerForge confirms the pose from a screenshot of the outer or inner display at its App Store size, then passes the display to the command in `POWERFORGE_DUO_DISPLAY`. Xcode has no public hinge command, so PowerForge asks the person to set the pose in Device Hub and waits for it. With `--duo-fold-tool` (or `POWERFORGE_DUO_FOLD_TOOL`) it first tries the pinned duoctl 0.2.1 release, which uses private simulator interfaces, and falls back to the prompt when that doesn't produce the pose.
 - Preserve calls through approved module aliases when their script targets are merged. Report aliases that cannot be embedded or would conflict in the built module.
 - Follow approved-module helper calls in their original donor scope and fail the build when the merged package cannot preserve a command binding or runtime requirement.
 - Resolve the export assemblies and Windows PowerShell dependencies of binary modules when the module is built, so the generated `.psm1` and `.Libraries.ps1` no longer search `Lib` on every import. An export assembly that matches more than one nested `Lib` file now fails the build instead of the import. The generated loader runs in its own scope and leaves only its `$PowerForge…` state in the module.

@@ -57,6 +57,87 @@ exit. Programs that deliberately detach into another Unix session/process group
 are outside that cooperative scope; do not launch persistent services through
 this validation wrapper.
 
+## Capture on an iPhone Duo
+
+App Store Connect has separate screenshot sets for the iPhone Duo: the outer
+display at 1398x2034 and the inner display at 2007x2853, in portrait or
+landscape. `--duo-pose` makes sure the right display is live before the
+command starts:
+
+```bash
+powerforge apple-simulator run --owner "local-capture/duo-inner" --device <UUID> \
+  --require-shutdown --duo-pose open --duo-orientation portrait --output json -- \
+  ./scripts/capture.sh
+```
+
+| Option | Values | Default |
+| --- | --- | --- |
+| `--duo-pose` | `closed` (outer display) or `open` (inner display) | not set: the device is left as it is |
+| `--duo-orientation` | `any`, `portrait` or `landscape` | `any` |
+| `--duo-fold-tool` | path to the pinned duoctl executable | `POWERFORGE_DUO_FOLD_TOOL`, else none |
+| `--duo-pose-timeout-seconds` | how long to wait for a person to set the pose | 300 |
+
+After boot, PowerForge takes a screenshot of the target display with
+`xcrun simctl io <UUID> screenshot --display=primary` (outer) or
+`--display=primary-1` (inner). The display counts as live when the screenshot
+isn't black and has the display's App Store size in an accepted orientation.
+The command then runs with:
+
+- `POWERFORGE_DUO_POSE`: `closed` or `open`
+- `POWERFORGE_DUO_DISPLAY`: `primary` or `primary-1`, for `simctl io screenshot --display`
+- `POWERFORGE_DUO_SIZE`: the live display's size, such as `2007x2853`
+
+Capture with `xcrun simctl io <UUID> screenshot --display="$POWERFORGE_DUO_DISPLAY"`
+and compare the file's size with `POWERFORGE_DUO_SIZE`. The JSON result's
+`duoPose` records the size, orientation and whether the pose was `already`
+live, set by the `fold-tool`, or set by a person after a `prompt`.
+
+### Set the pose by hand
+
+Xcode 27 has no public command for the Duo's hinge: `simctl` and `devicectl`
+can't fold the simulator, and powering a display off doesn't move iOS to the
+other one. Without a fold tool, PowerForge prints which pose and orientation to
+choose in Device Hub to standard error, then checks the display every second
+until it's live. Nothing else is needed: no marker file, no key press. A
+freshly booted Duo starts closed in portrait, so an outer-display capture
+usually doesn't need a prompt.
+
+### Fold automatically with duoctl (opt-in)
+
+[duoctl](https://github.com/skarol/duoctl) (MIT) folds and rotates the Duo
+simulator from the command line. It compiles a small helper with Xcode's clang
+into `~/.cache/duoctl` and runs it inside the simulator with `simctl spawn`,
+where it sends the same HID events as Device Hub's hinge slider and rotation
+control. It needs no Accessibility permission.
+
+**duoctl relies on private, undocumented simulator interfaces.** An Xcode or
+simulator runtime update can break it. PowerForge treats it as a convenience:
+
+- It only runs duoctl when its `--version` reports exactly
+  `duoctl 0.2.1`, the release PowerForge was checked against.
+- It doesn't trust duoctl's exit code. duoctl confirms each change through
+  `devicectl`, which doesn't list simulators on device-specific runtimes such
+  as `iOS-27-2-iPhone19-4`, so it can report a failure after folding correctly.
+  The screenshot check decides.
+- When the display still isn't live in the requested orientation after one
+  fold and one rotate, PowerForge falls back to the Device Hub prompt instead
+  of failing the run.
+
+duoctl is a build tool. Install it on the capture Mac, never in what the app
+ships. Pin the release by tag and commit:
+
+```bash
+git clone --depth 1 --branch v0.2.1 https://github.com/skarol/duoctl.git "$TOOLS/duoctl"
+test "$(git -C "$TOOLS/duoctl" rev-parse HEAD)" = c6ff3e961a9858fb061907448e702d7d1617dc4a
+export POWERFORGE_DUO_FOLD_TOOL="$TOOLS/duoctl/skills/duoctl/scripts/duoctl"
+```
+
+On Xcode 27.2 with the `iOS-27-2-iPhone19-4` runtime, duoctl folds reliably but
+its `rotate` can't confirm the result, so it doesn't change the orientation.
+Opening the Duo there leaves the inner display in landscape (2853x2007). Use
+`--duo-orientation any` or `landscape` for a fully automatic inner capture, or
+`portrait` to be asked to rotate in Device Hub.
+
 ## Coordinate a shared Mac
 
 Cooperating sessions use an exclusive lock and one latest receipt in
