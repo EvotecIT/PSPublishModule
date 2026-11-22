@@ -33,6 +33,36 @@ public sealed class ProjectVersionServiceTests
     }
 
     [Fact]
+    public void Discover_accepts_root_with_bin_in_its_name_and_skips_build_output_directories()
+    {
+        var parent = CreateTempDirectory();
+        try
+        {
+            var root = Directory.CreateDirectory(Path.Combine(parent, "Robin")).FullName;
+            var file = Path.Combine(root, "Sample.csproj");
+            const string project = "<Project><PropertyGroup><VersionPrefix>1.2.3</VersionPrefix></PropertyGroup></Project>";
+            File.WriteAllText(file, project);
+            foreach (var directory in new[] { "bin", "OBJ", "IgnoreSamples" })
+            {
+                var ignored = Directory.CreateDirectory(Path.Combine(root, directory)).FullName;
+                File.WriteAllText(Path.Combine(ignored, "Other.csproj"), project);
+            }
+
+            var result = Assert.Single(new ProjectVersionService().Discover(new ProjectVersionQueryRequest
+            {
+                RootPath = root,
+                ExcludeFolders = new[] { "Ignore" }
+            }));
+            Assert.Equal(file, result.Source);
+            Assert.Equal("1.2.3", result.Version);
+        }
+        finally
+        {
+            DeleteTempDirectory(parent);
+        }
+    }
+
+    [Fact]
     public void Update_increments_version_across_project_files()
     {
         var root = CreateTempDirectory();

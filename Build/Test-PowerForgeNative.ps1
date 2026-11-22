@@ -98,6 +98,21 @@ try {
         throw "Native NuGet verification accepted a mismatched package or missed the hash check. $verification"
     }
 
+    $manifestDocument = Get-Content -LiteralPath $releaseManifest -Raw | ConvertFrom-Json
+    $manifestDocument.assets[0].sha256 = (Get-FileHash -LiteralPath $nupkg -Algorithm SHA256).Hash
+    $manifestDocument | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $releaseManifest
+    $workerlessPath = $env:PATH
+    try {
+        # Signature validation uses the installed SDK. The copied launcher still has no managed companion.
+        $env:PATH = $previousPath
+        $verification = & $launcher nuget verify --manifest $releaseManifest --source-commit $commit --author-fingerprints $fingerprint 2>&1
+        if ($LASTEXITCODE -ne 1 -or ($verification -join "`n") -notmatch 'NU3004') {
+            throw "The SDK did not reject the unsigned package. $verification"
+        }
+    } finally {
+        $env:PATH = $workerlessPath
+    }
+
     $install = Join-Path $work 'installed modules'
     $installed = Read-CommandResult -Executable $launcher -Arguments @(
         '--quiet', 'module', 'install', 'PowerForgeNativeSmoke', '--version', '1.0.0',
@@ -167,7 +182,7 @@ try {
         throw 'The bundled managed CLI did not expose the full command help.'
     }
 
-    Write-Output 'Native install, frozen restore, package integrity, version, manifest inspection and managed forwarding passed.'
+    Write-Output 'Native module search, install, frozen restore, version discovery, manifest inspection, NuGet verification and managed forwarding passed.'
 } finally {
     $env:PATH = $previousPath
     if (Test-Path -LiteralPath $work) { Remove-Item -LiteralPath $work -Recurse -Force }

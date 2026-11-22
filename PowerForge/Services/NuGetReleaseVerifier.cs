@@ -76,7 +76,10 @@ internal static class NuGetReleaseVerifier
         var verification = await VerifySignatureAsync(packagePath, true, fingerprints, processRunner, dotnetExecutable,
             timeout, cancellationToken).ConfigureAwait(false);
         if (!verification.Succeeded)
-            throw new InvalidOperationException($"NuGet signature verification failed for '{Path.GetFileName(packagePath)}': {verification.StdErr}");
+        {
+            var diagnostic = string.IsNullOrWhiteSpace(verification.StdErr) ? verification.StdOut : verification.StdErr;
+            throw new InvalidOperationException($"NuGet signature verification failed for '{Path.GetFileName(packagePath)}': {diagnostic.Trim()}");
+        }
     }
 
     internal static async Task<NuGetReleaseAsset> ReadAssetAsync(string path, CancellationToken cancellationToken)
