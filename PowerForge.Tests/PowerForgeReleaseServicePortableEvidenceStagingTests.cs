@@ -48,7 +48,7 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
-    public void StageReleaseAssets_RejectsNativeArchiveChangedAfterValidation()
+    public void StageReleaseAssets_RejectsChangedNativeArchiveWithoutReplacingPreviousOutput()
     {
         using var root = new TemporaryDirectory();
         var archive = Path.Combine(root.Path, "PowerForgeNative-3.0.110-linux-x64.zip");
@@ -61,10 +61,16 @@ public sealed partial class PowerForgeReleaseServiceTests
             StagedSha256 = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(archive)))
         };
         File.WriteAllText(archive, "replacement bytes");
+        var stageRoot = Path.Combine(root.Path, "staged");
+        var previousArchive = Path.Combine(stageRoot, "tools", Path.GetFileName(archive));
+        Directory.CreateDirectory(Path.GetDirectoryName(previousArchive)!);
+        File.WriteAllText(previousArchive, "previous release bytes");
 
         var error = Assert.Throws<InvalidDataException>(() =>
-            PowerForgeReleaseService.StageReleaseAssets([entry], Path.Combine(root.Path, "staged"), null, null, null));
+            PowerForgeReleaseService.StageReleaseAssets([entry], stageRoot, null, null, null));
         Assert.Contains("differs from the validated archive", error.Message, StringComparison.Ordinal);
+        Assert.Equal("previous release bytes", File.ReadAllText(previousArchive));
+        Assert.Equal([previousArchive], Directory.GetFiles(Path.GetDirectoryName(previousArchive)!));
     }
 
     [Fact]

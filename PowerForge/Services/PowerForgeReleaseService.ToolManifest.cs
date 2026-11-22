@@ -1,4 +1,6 @@
+using System.Diagnostics;
 using System.IO.Compression;
+using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -42,12 +44,14 @@ internal sealed partial class PowerForgeReleaseService
         PowerForgeToolReleaseTargetPlan target,
         KeyValuePair<string, string>[] inputs,
         TemporaryReleaseDirectory temporaryReleaseDirectory,
-        bool verifyContents)
+        bool verifyContents,
+        CancellationToken cancellationToken)
     {
         var version = target.Version;
         if (string.IsNullOrWhiteSpace(spec.Outputs?.PowerForgeToolManifestPath) ||
             !Regex.IsMatch(version, @"^\d+\.\d+\.\d+$", RegexOptions.CultureInvariant))
             throw new InvalidOperationException("Native PowerForge archives require a tool manifest and an exact release version.");
+        var commit = verifyContents ? NormalizePowerForgeToolManifestCommit(spec.GitHub?.Commitish) : null;
 
         return inputs.Select(pair =>
         {
@@ -56,7 +60,8 @@ internal sealed partial class PowerForgeReleaseService
             if (!Path.GetFileName(path).Equals($"PowerForgeNative-{version}-{runtime}.zip", StringComparison.Ordinal))
                 throw new InvalidOperationException($"The native PowerForge archive must match release {version} and runtime {runtime}: {path}");
             var archiveSha256 = verifyContents
-                ? VerifyNativePowerForgeArchive(path, runtime, target.Sign, temporaryReleaseDirectory)
+                ? VerifyNativePowerForgeArchive(
+                    path, runtime, version, commit, target.Sign, temporaryReleaseDirectory, cancellationToken)
                 : null;
 
             return new PowerForgeReleaseAssetEntry
@@ -76,7 +81,8 @@ internal sealed partial class PowerForgeReleaseService
     }
 
     private static string VerifyNativePowerForgeArchive(
-        string path, string runtime, DotNetPublishSignOptions? sign, TemporaryReleaseDirectory temporaryReleaseDirectory)
+        string path, string runtime, string version, string? commit, DotNetPublishSignOptions? sign,
+        TemporaryReleaseDirectory temporaryReleaseDirectory, CancellationToken cancellationToken)
     {
         if (!File.Exists(path))
             throw new FileNotFoundException($"Native PowerForge archive was not found: {path}", path);
@@ -95,9 +101,12 @@ internal sealed partial class PowerForgeReleaseService
         foreach (var entry in entries.Values)
         {
             using var stream = entry.Open();
-            if (PowerForgeReleaseArtifactVerifier.CopyBounded(stream, Stream.Null, entry.Length, entry.FullName) != entry.Length)
+            if (PowerForgeReleaseArtifactVerifier.CopyBounded(
+                    stream, Stream.Null, entry.Length, entry.FullName, cancellationToken) != entry.Length)
                 throw new InvalidDataException($"Native PowerForge archive entry '{entry.FullName}' is incomplete.");
         }
+        VerifyNativePowerForgeImplementationIdentity(implementation, runtime, version, commit,
+            temporaryReleaseDirectory, cancellationToken);
         if (suffix.Length > 0 && sign?.Enabled == true)
         {
             var signatureRoot = temporaryReleaseDirectory.GetOrCreateSubdirectory("native-signatures");
@@ -109,20 +118,74 @@ internal sealed partial class PowerForgeReleaseService
         return ComputeSha256(input);
     }
 
+    private static void VerifyNativePowerForgeImplementationIdentity(
+        ZipArchiveEntry entry, string runtime, string version, string? commit,
+        TemporaryReleaseDirectory temporaryReleaseDirectory, CancellationToken cancellationToken)
+    {
+        var directory = temporaryReleaseDirectory.GetOrCreateSubdirectory("native-implementations");
+        var path = Path.Combine(directory, runtime + ".dll");
+        using (var input = entry.Open())
+        using (var output = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None))
+            PowerForgeReleaseArtifactVerifier.CopyBounded(input, output, entry.Length, entry.FullName, cancellationToken);
+
+        try
+        {
+            if (!string.Equals(AssemblyName.GetAssemblyName(path).Name, "PowerForge.Cli", StringComparison.Ordinal))
+                throw new InvalidDataException($"Native PowerForge archive entry '{entry.FullName}' must contain the PowerForge CLI assembly.");
+        }
+        catch (BadImageFormatException exception)
+        {
+            throw new InvalidDataException($"Native PowerForge archive entry '{entry.FullName}' is not a valid PowerForge CLI assembly.", exception);
+        }
+
+        var productVersion = FileVersionInfo.GetVersionInfo(path).ProductVersion ?? string.Empty;
+        var buildMetadata = productVersion.IndexOf('+');
+        var actualVersion = buildMetadata < 0 ? productVersion : productVersion.Substring(0, buildMetadata);
+        if (!string.Equals(actualVersion, version, StringComparison.Ordinal))
+            throw new InvalidDataException($"Native PowerForge archive entry '{entry.FullName}' version '{actualVersion}' does not match '{version}'.");
+        if (commit is not null && !string.Equals(productVersion, version + "+" + commit, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException($"Native PowerForge archive entry '{entry.FullName}' revision in '{productVersion}' does not match '{commit}'.");
+    }
+
     private static void VerifyNativePowerForgeSigner(ZipArchiveEntry entry, string directory, DotNetPublishSignOptions sign)
     {
         if (!DotNetPublishPipelineRunner.IsWindows())
             throw new InvalidOperationException("Verify signed Windows native PowerForge archives on a Windows host.");
         var path = Path.Combine(directory, entry.Name);
         entry.ExtractToFile(path, overwrite: true);
-        var signature = DotNetPublishReleaseArtifactVerifier.VerifyAuthenticode(path);
-        var thumbprint = DotNetPublishReleaseArtifactVerifier.NormalizeThumbprint(sign.Thumbprint);
-        var matchesPublisher = thumbprint.Length > 0
-            ? signature.Thumbprint.Equals(thumbprint, StringComparison.OrdinalIgnoreCase)
-            : !string.IsNullOrWhiteSpace(sign.SubjectName) &&
-              DotNetPublishReleaseArtifactVerifier.CertificateSubjectsEqual(signature.Subject, sign.SubjectName!);
-        if (!signature.IsValid || !matchesPublisher)
+        if (!DotNetPublishPipelineRunner.HasConfiguredPublisherSignature(path, sign))
             throw new InvalidDataException($"Native PowerForge archive entry '{entry.FullName}' lacks a valid signature from the configured publisher.");
+    }
+
+    private static void StageNativePowerForgeArchive(
+        PowerForgeReleaseAssetEntry entry, string sourcePath, string destinationPath)
+    {
+        var temporaryPath = destinationPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        try
+        {
+            using (var input = File.OpenRead(sourcePath))
+            using (var output = new FileStream(temporaryPath, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None))
+            {
+                input.CopyTo(output);
+                output.Position = 0;
+                VerifyNativePowerForgeStagingDigest(entry, ComputeSha256(output));
+            }
+            if (File.Exists(destinationPath))
+                File.Replace(temporaryPath, destinationPath, destinationBackupFileName: null);
+            else
+                File.Move(temporaryPath, destinationPath);
+        }
+        finally
+        {
+            if (File.Exists(temporaryPath))
+                File.Delete(temporaryPath);
+        }
+    }
+
+    private static void VerifyNativePowerForgeStagingDigest(PowerForgeReleaseAssetEntry entry, string? digest)
+    {
+        if (digest is null || !string.Equals(entry.StagedSha256, digest, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException($"Staged native PowerForge archive differs from the validated archive: {entry.Path}");
     }
 
     private static string[] ResolveAdditionalReleaseAssetPaths(

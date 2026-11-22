@@ -159,14 +159,17 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Theory]
-    [InlineData(false, null, false, false)]
-    [InlineData(true, "full/PowerForge.Cli.dll", false, false)]
-    [InlineData(true, null, false, false)]
-    [InlineData(true, @"full\PowerForge.Cli.dll", false, false)]
-    [InlineData(true, "full/PowerForge.Cli.dll", true, false)]
-    [InlineData(true, "full/PowerForge.Cli.dll", false, true)]
+    [InlineData(false, null, false, false, null)]
+    [InlineData(true, "full/PowerForge.Cli.dll", false, false, null)]
+    [InlineData(true, "full/PowerForge.Cli.dll", false, false, "version")]
+    [InlineData(true, "full/PowerForge.Cli.dll", false, false, "revision")]
+    [InlineData(true, null, false, false, null)]
+    [InlineData(true, @"full\PowerForge.Cli.dll", false, false, null)]
+    [InlineData(true, "full/PowerForge.Cli.dll", true, false, null)]
+    [InlineData(true, "full/PowerForge.Cli.dll", false, true, null)]
     public void Execute_StagesOnlyValidPowerForgeArchives(
-        bool includeNativeArchive, string? implementationEntry, bool publishToolGitHub, bool moduleOwnsPackages)
+        bool includeNativeArchive, string? implementationEntry, bool publishToolGitHub, bool moduleOwnsPackages,
+        string? mismatchedIdentity)
     {
         static string HashBytes(byte[] bytes) =>
             Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes)).ToLowerInvariant();
@@ -174,15 +177,24 @@ public sealed partial class PowerForgeReleaseServiceTests
         var root = CreateSandbox();
         try
         {
+            var repositoryRoot = PowerForgeCliTestHost.FindRepositoryRoot();
+            var cliProject = System.Xml.Linq.XDocument.Load(Path.Combine(repositoryRoot, "PowerForge.Cli", "PowerForge.Cli.csproj"));
+            var cliVersion = Version.Parse(cliProject.Descendants("VersionPrefix").Single().Value);
+            var version = !includeNativeArchive ? "3.0.110"
+                : mismatchedIdentity == "version" ? $"{cliVersion.Major}.{cliVersion.Minor}.{cliVersion.Build + 1}"
+                : cliVersion.ToString(3);
             var runtime = includeNativeArchive ? "linux-x64" : "osx-arm64";
-            var zip = Path.Combine(root, $"PowerForge-3.0.110-net10.0-{runtime}-SingleContained.zip");
-            var nativeZip = Path.Combine(root, $"PowerForgeNative-3.0.110-{runtime}.zip");
+            var zip = Path.Combine(root, $"PowerForge-{version}-net10.0-{runtime}-SingleContained.zip");
+            var nativeZip = Path.Combine(root, $"PowerForgeNative-{version}-{runtime}.zip");
             var installer = Path.Combine(root, "Install-PowerForgeTool.ps1");
             var lockManifest = Path.Combine(root, "PowerForge-tool-manifest.json");
             var executableBytes = System.Text.Encoding.UTF8.GetBytes("verified PowerForge executable");
             var nativeBytes = System.Text.Encoding.UTF8.GetBytes("native PowerForge launcher");
             var companionBytes = System.Text.Encoding.UTF8.GetBytes("managed companion");
-            var implementationBytes = System.Text.Encoding.UTF8.GetBytes("managed implementation");
+            var implementationBytes = includeNativeArchive && implementationEntry is not null
+                ? File.ReadAllBytes(PowerForgeCliTestHost.ResolveAssemblyPath(repositoryRoot,
+                    Environment.GetEnvironmentVariable(PowerForgeCliTestHost.AssemblyPathEnvironmentVariable)))
+                : Array.Empty<byte>();
             using (var archive = System.IO.Compression.ZipFile.Open(zip, System.IO.Compression.ZipArchiveMode.Create))
             {
                 var entry = archive.CreateEntry("PowerForge");
@@ -268,7 +280,8 @@ public sealed partial class PowerForgeReleaseServiceTests
                 {
                     Owner = "EvotecIT",
                     Repository = "PSPublishModule",
-                    TagTemplate = "v{Version}"
+                    TagTemplate = "v{Version}",
+                    Commitish = mismatchedIdentity == "revision" ? new string('0', 40) : null
                 }
             };
             var request = new PowerForgeReleaseRequest
@@ -276,7 +289,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 ConfigPath = Path.Combine(root, "release.json"),
                 ToolsOnly = !moduleOwnsPackages,
                 PublishToolGitHub = publishToolGitHub,
-                ReleaseVersion = moduleOwnsPackages ? null : "3.0.110",
+                ReleaseVersion = moduleOwnsPackages ? null : version,
                 ModuleRunMode = ConfigurationGateMode.Build
             };
 
@@ -310,6 +323,13 @@ public sealed partial class PowerForgeReleaseServiceTests
                 Assert.False(File.Exists(lockManifest));
                 return;
             }
+            if (mismatchedIdentity is not null)
+            {
+                var error = Assert.Throws<InvalidDataException>(() => service.Execute(spec, request));
+                Assert.Contains($"PowerForge.Cli.dll' {mismatchedIdentity}", error.Message, StringComparison.Ordinal);
+                Assert.False(File.Exists(lockManifest));
+                return;
+            }
 
             var result = service.Execute(spec, request);
 
@@ -317,15 +337,15 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.Contains(lockManifest, result.ReleaseAssets);
             Assert.Contains(installer, result.ReleaseAssets);
             var manifestJson = File.ReadAllText(lockManifest);
-            var schemaPath = Path.Combine(PowerForgeCliTestHost.FindRepositoryRoot(), "Schemas", "powerforge.tool.schema.json");
+            var schemaPath = Path.Combine(repositoryRoot, "Schemas", "powerforge.tool.schema.json");
             var schema = Json.Schema.JsonSchema.FromText(File.ReadAllText(schemaPath));
             var manifestNode = System.Text.Json.Nodes.JsonNode.Parse(manifestJson)!;
             Assert.True(schema.Evaluate(manifestNode).IsValid);
             using var document = System.Text.Json.JsonDocument.Parse(manifestJson);
             var json = document.RootElement;
             Assert.Equal(2, json.GetProperty("schemaVersion").GetInt32());
-            Assert.Equal("3.0.110", json.GetProperty("version").GetString());
-            Assert.Equal("v3.0.110", json.GetProperty("releaseTag").GetString());
+            Assert.Equal(version, json.GetProperty("version").GetString());
+            Assert.Equal("v" + version, json.GetProperty("releaseTag").GetString());
             Assert.False(json.TryGetProperty("commit", out _));
             var asset = json.GetProperty("assets").GetProperty(runtime);
             var selectedZip = includeNativeArchive ? nativeZip : zip;

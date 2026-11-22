@@ -1,7 +1,8 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)]
-    [string] $PackageDirectory
+    [string] $PackageDirectory,
+    [string] $ExpectedInformationalVersion
 )
 
 $ErrorActionPreference = 'Stop'
@@ -101,6 +102,9 @@ try {
     if ($version.command -ne 'version' -or -not $version.result.version -or
         $version.result.version -ne $direct.result.version) {
         throw 'The standalone native launcher did not report the same version as the managed CLI.'
+    }
+    if ($ExpectedInformationalVersion -and $version.result.version -cne $ExpectedInformationalVersion) {
+        throw "The native bundle reports '$($version.result.version)' instead of '$ExpectedInformationalVersion'."
     }
 
     $inspectPath = Join-Path $work 'Sample.psd1'

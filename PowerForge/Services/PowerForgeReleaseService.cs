@@ -580,7 +580,8 @@ internal sealed partial class PowerForgeReleaseService
                     }
 
                     nativeArchives = ResolveNativePowerForgeArchives(spec, configDirectory, powerForgeTarget,
-                        inputs, temporaryReleaseDirectory, verifyContents: !request.PlanOnly);
+                        inputs, temporaryReleaseDirectory, verifyContents: !request.PlanOnly,
+                        cancellationToken: request.CancellationToken);
                     preparedNativeToolPlan = plan;
                 }
             }
@@ -5458,6 +5459,7 @@ internal sealed partial class PowerForgeReleaseService
                 entry.StagedPath = destinationFullPath;
                 return new
                 {
+                    Asset = entry,
                     SourceFullPath = sourceFullPath,
                     DestinationFullPath = destinationFullPath,
                     SourceIsFile = sourceIsFile
@@ -5510,7 +5512,10 @@ internal sealed partial class PowerForgeReleaseService
             Directory.CreateDirectory(Path.GetDirectoryName(plannedEntry.DestinationFullPath)!);
             if (plannedEntry.SourceIsFile)
             {
-                File.Copy(plannedEntry.SourceFullPath, plannedEntry.DestinationFullPath, overwrite: true);
+                if (plannedEntry.Asset.Source == NativePowerForgeArchiveSource)
+                    StageNativePowerForgeArchive(plannedEntry.Asset, plannedEntry.SourceFullPath, plannedEntry.DestinationFullPath);
+                else
+                    File.Copy(plannedEntry.SourceFullPath, plannedEntry.DestinationFullPath, overwrite: true);
             }
             else
             {
@@ -5525,11 +5530,8 @@ internal sealed partial class PowerForgeReleaseService
             var stagedSha256 = !string.IsNullOrWhiteSpace(entry.StagedPath) && File.Exists(entry.StagedPath)
                 ? ComputeSha256(entry.StagedPath!)
                 : null;
-            if (entry.Source == NativePowerForgeArchiveSource &&
-                (stagedSha256 is null || !string.Equals(entry.StagedSha256, stagedSha256, StringComparison.OrdinalIgnoreCase)))
-            {
-                throw new InvalidDataException($"Staged native PowerForge archive differs from the validated archive: {entry.Path}");
-            }
+            if (entry.Source == NativePowerForgeArchiveSource)
+                VerifyNativePowerForgeStagingDigest(entry, stagedSha256);
             if (stagedSha256 is not null)
                 entry.StagedSha256 = stagedSha256;
         }

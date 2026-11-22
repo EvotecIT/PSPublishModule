@@ -58,7 +58,7 @@ jobs:
             unzip -q $archive -d $installed
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
-          ./Build/Test-PowerForgeNative.ps1 -PackageDirectory $installed
+          ./Build/Test-PowerForgeNative.ps1 -PackageDirectory $installed -ExpectedInformationalVersion "$version+$env:GITHUB_SHA"
           "archive=$archive" >> $env:GITHUB_OUTPUT
       - name: Upload the verified native archive
         uses: actions/upload-artifact@v7
