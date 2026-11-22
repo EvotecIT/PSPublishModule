@@ -159,13 +159,14 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Theory]
-    [InlineData(false, false, false, false)]
-    [InlineData(true, false, false, false)]
-    [InlineData(true, true, false, false)]
-    [InlineData(true, false, true, false)]
-    [InlineData(true, false, false, true)]
+    [InlineData(false, null, false, false)]
+    [InlineData(true, "full/PowerForge.Cli.dll", false, false)]
+    [InlineData(true, null, false, false)]
+    [InlineData(true, @"full\PowerForge.Cli.dll", false, false)]
+    [InlineData(true, "full/PowerForge.Cli.dll", true, false)]
+    [InlineData(true, "full/PowerForge.Cli.dll", false, true)]
     public void Execute_StagesOnlyValidPowerForgeArchives(
-        bool includeNativeArchive, bool missingImplementation, bool publishToolGitHub, bool moduleOwnsPackages)
+        bool includeNativeArchive, string? implementationEntry, bool publishToolGitHub, bool moduleOwnsPackages)
     {
         static string HashBytes(byte[] bytes) =>
             Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes)).ToLowerInvariant();
@@ -195,9 +196,9 @@ public sealed partial class PowerForgeReleaseServiceTests
                     launcher.Write(nativeBytes);
                 using (var companion = archive.CreateEntry("full/powerforge-full").Open())
                     companion.Write(companionBytes);
-                if (!missingImplementation)
+                if (implementationEntry is not null)
                 {
-                    using var implementation = archive.CreateEntry("full/PowerForge.Cli.dll").Open();
+                    using var implementation = archive.CreateEntry(implementationEntry).Open();
                     implementation.Write(implementationBytes);
                 }
             }
@@ -230,7 +231,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                         }
                     ]
                 },
-                runTools: plan => missingImplementation
+                runTools: plan => includeNativeArchive && implementationEntry != "full/PowerForge.Cli.dll"
                     ? throw new InvalidOperationException("The malformed archive must be rejected before building.")
                     : new PowerForgeToolReleaseResult
                 {
@@ -295,10 +296,17 @@ public sealed partial class PowerForgeReleaseServiceTests
                 return;
             }
 
-            if (missingImplementation)
+            if (includeNativeArchive && implementationEntry is null)
             {
                 var error = Assert.Throws<InvalidOperationException>(() => service.Execute(spec, request));
                 Assert.Contains("full/PowerForge.Cli.dll", error.Message, StringComparison.Ordinal);
+                Assert.False(File.Exists(lockManifest));
+                return;
+            }
+            if (includeNativeArchive && implementationEntry != "full/PowerForge.Cli.dll")
+            {
+                var error = Assert.Throws<InvalidDataException>(() => service.Execute(spec, request));
+                Assert.Contains("must use forward slashes", error.Message, StringComparison.Ordinal);
                 Assert.False(File.Exists(lockManifest));
                 return;
             }
@@ -419,6 +427,61 @@ public sealed partial class PowerForgeReleaseServiceTests
 
         Assert.True(result.Success, result.ErrorMessage);
         Assert.Equal(runtime, Assert.Single(Assert.Single(result.ToolPlan!.Targets).Combinations).Runtime);
+    }
+
+    [Fact]
+    public void Execute_PlansNativeArchivesBeforeTheyExistButValidatesTheirContents()
+    {
+        using var root = new TemporaryDirectory();
+        var service = CreateService(_ => new PowerForgeToolReleasePlan
+        {
+            ProjectRoot = root.Path,
+            Targets =
+            [
+                new PowerForgeToolReleaseTargetPlan
+                {
+                    Name = "PowerForge",
+                    Version = "3.0.110",
+                    Sign = new DotNetPublishSignOptions { Enabled = true },
+                    Combinations =
+                    [
+                        new PowerForgeToolReleaseCombinationPlan
+                        {
+                            Runtime = "win-x64",
+                            Framework = "net10.0",
+                            Flavor = PowerForgeToolReleaseFlavor.SingleContained
+                        }
+                    ]
+                }
+            ]
+        });
+        var spec = new PowerForgeReleaseSpec
+        {
+            Tools = new PowerForgeToolReleaseSpec(),
+            Outputs = new PowerForgeReleaseOutputsOptions
+            {
+                PowerForgeToolManifestPath = Path.Combine(root.Path, "tool-manifest.json")
+            }
+        };
+        var request = new PowerForgeReleaseRequest
+        {
+            ConfigPath = Path.Combine(root.Path, "release.json"),
+            ToolsOnly = true,
+            ReleaseVersion = "3.0.110",
+            NativeArchiveRoot = root.Path,
+            PlanOnly = true
+        };
+
+        var plan = service.Execute(spec, request);
+
+        Assert.True(plan.Success, plan.ErrorMessage);
+        Assert.Empty(Assert.Single(plan.ToolPlan!.Targets).Combinations);
+        Assert.False(File.Exists(spec.Outputs.PowerForgeToolManifestPath));
+
+        request.PlanOnly = false;
+        request.ValidateOnly = true;
+        var error = Assert.Throws<FileNotFoundException>(() => service.Execute(spec, request));
+        Assert.Equal(Path.Combine(root.Path, "PowerForgeNative-3.0.110-win-x64.zip"), error.FileName);
     }
 
     [Fact]

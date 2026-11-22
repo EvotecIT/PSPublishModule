@@ -41,42 +41,23 @@ internal sealed partial class PowerForgeReleaseService
         string configDirectory,
         PowerForgeToolReleaseTargetPlan target,
         KeyValuePair<string, string>[] inputs,
-        TemporaryReleaseDirectory temporaryReleaseDirectory)
+        TemporaryReleaseDirectory temporaryReleaseDirectory,
+        bool verifyContents)
     {
         var version = target.Version;
         if (string.IsNullOrWhiteSpace(spec.Outputs?.PowerForgeToolManifestPath) ||
             !Regex.IsMatch(version, @"^\d+\.\d+\.\d+$", RegexOptions.CultureInvariant))
             throw new InvalidOperationException("Native PowerForge archives require a tool manifest and an exact release version.");
 
-        var archives = inputs.Select(pair =>
+        return inputs.Select(pair =>
         {
             var runtime = pair.Key.ToLowerInvariant();
             var path = ResolveOutputPath(configDirectory, pair.Value);
             if (!Path.GetFileName(path).Equals($"PowerForgeNative-{version}-{runtime}.zip", StringComparison.Ordinal))
                 throw new InvalidOperationException($"The native PowerForge archive must match release {version} and runtime {runtime}: {path}");
-            if (!File.Exists(path))
-                throw new FileNotFoundException($"Native PowerForge archive was not found: {path}", path);
-            var suffix = runtime == "win-x64" ? ".exe" : string.Empty;
-            using var archive = ZipFile.OpenRead(path);
-            var entries = PowerForgeReleaseArtifactVerifier.ValidateArchiveEntries(archive);
-            PowerForgeReleaseArtifactVerifier.ValidateModuleArchiveBounds(entries);
-            var launcher = GetPowerForgeArchiveEntry(archive, "powerforge" + suffix);
-            var companion = GetPowerForgeArchiveEntry(archive, "full/powerforge-full" + suffix);
-            var implementation = GetPowerForgeArchiveEntry(archive, "full/PowerForge.Cli.dll");
-            if (launcher.Length == 0 || companion.Length == 0 || implementation.Length == 0)
-                throw new InvalidDataException($"Native PowerForge archive contains an empty executable or managed implementation: {path}");
-            foreach (var entry in entries.Values)
-            {
-                using var stream = entry.Open();
-                if (PowerForgeReleaseArtifactVerifier.CopyBounded(stream, Stream.Null, entry.Length, entry.FullName) != entry.Length)
-                    throw new InvalidDataException($"Native PowerForge archive entry '{entry.FullName}' is incomplete.");
-            }
-            if (suffix.Length > 0 && target.Sign?.Enabled == true)
-            {
-                var signatureRoot = temporaryReleaseDirectory.GetOrCreateSubdirectory("native-signatures");
-                VerifyNativePowerForgeSigner(launcher, signatureRoot, target.Sign);
-                VerifyNativePowerForgeSigner(companion, signatureRoot, target.Sign);
-            }
+            var archiveSha256 = verifyContents
+                ? VerifyNativePowerForgeArchive(path, runtime, target.Sign, temporaryReleaseDirectory)
+                : null;
 
             return new PowerForgeReleaseAssetEntry
             {
@@ -89,10 +70,43 @@ internal sealed partial class PowerForgeReleaseService
                 Framework = "net10.0",
                 Style = nameof(PowerForgeToolReleaseFlavor.Portable),
                 IsFinalPackageOutput = true,
-                StagedSha256 = ComputeSha256(path)
+                StagedSha256 = archiveSha256
             };
         }).ToArray();
-        return archives;
+    }
+
+    private static string VerifyNativePowerForgeArchive(
+        string path, string runtime, DotNetPublishSignOptions? sign, TemporaryReleaseDirectory temporaryReleaseDirectory)
+    {
+        if (!File.Exists(path))
+            throw new FileNotFoundException($"Native PowerForge archive was not found: {path}", path);
+        var suffix = runtime == "win-x64" ? ".exe" : string.Empty;
+        using var input = File.OpenRead(path);
+        using var archive = new ZipArchive(input, ZipArchiveMode.Read, leaveOpen: true);
+        if (archive.Entries.Any(entry => entry.FullName.IndexOf('\\') >= 0))
+            throw new InvalidDataException($"Native PowerForge archive paths must use forward slashes: {path}");
+        var entries = PowerForgeReleaseArtifactVerifier.ValidateArchiveEntries(archive);
+        PowerForgeReleaseArtifactVerifier.ValidateModuleArchiveBounds(entries);
+        var launcher = GetPowerForgeArchiveEntry(archive, "powerforge" + suffix);
+        var companion = GetPowerForgeArchiveEntry(archive, "full/powerforge-full" + suffix);
+        var implementation = GetPowerForgeArchiveEntry(archive, "full/PowerForge.Cli.dll");
+        if (launcher.Length == 0 || companion.Length == 0 || implementation.Length == 0)
+            throw new InvalidDataException($"Native PowerForge archive contains an empty executable or managed implementation: {path}");
+        foreach (var entry in entries.Values)
+        {
+            using var stream = entry.Open();
+            if (PowerForgeReleaseArtifactVerifier.CopyBounded(stream, Stream.Null, entry.Length, entry.FullName) != entry.Length)
+                throw new InvalidDataException($"Native PowerForge archive entry '{entry.FullName}' is incomplete.");
+        }
+        if (suffix.Length > 0 && sign?.Enabled == true)
+        {
+            var signatureRoot = temporaryReleaseDirectory.GetOrCreateSubdirectory("native-signatures");
+            VerifyNativePowerForgeSigner(launcher, signatureRoot, sign);
+            VerifyNativePowerForgeSigner(companion, signatureRoot, sign);
+        }
+
+        input.Position = 0;
+        return ComputeSha256(input);
     }
 
     private static void VerifyNativePowerForgeSigner(ZipArchiveEntry entry, string directory, DotNetPublishSignOptions sign)
@@ -342,6 +356,11 @@ internal sealed partial class PowerForgeReleaseService
     private static string ComputePowerForgeArchiveEntrySha256(ZipArchiveEntry entry)
     {
         using var stream = entry.Open();
+        return ComputeSha256(stream);
+    }
+
+    private static string ComputeSha256(Stream stream)
+    {
         using var sha256 = SHA256.Create();
         return BitConverter.ToString(sha256.ComputeHash(stream)).Replace("-", string.Empty).ToLowerInvariant();
     }

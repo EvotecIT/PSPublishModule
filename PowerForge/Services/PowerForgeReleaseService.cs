@@ -580,7 +580,7 @@ internal sealed partial class PowerForgeReleaseService
                     }
 
                     nativeArchives = ResolveNativePowerForgeArchives(spec, configDirectory, powerForgeTarget,
-                        inputs, temporaryReleaseDirectory);
+                        inputs, temporaryReleaseDirectory, verifyContents: !request.PlanOnly);
                     preparedNativeToolPlan = plan;
                 }
             }
