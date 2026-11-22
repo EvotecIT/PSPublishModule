@@ -73,7 +73,7 @@ Export-ModuleMember -Function Get-InfobloxDNSRecord,Set-OfflineDnsConfiguration 
         'PowerForge.Compiler/Services/Compilation/Binding/PowerShellNativeFunctionBindingPolicy.cs',
         'PowerForge.Compiler/Services/Compilation/Binding/PowerShellSemanticBinder.Statements.cs')}
     summary['compilerBinaryHashes'] = {name: digest(cli.parent / name) for name in (
-        'PowerForge.Cli.dll', 'PowerForge.PowerShell.dll', 'PowerForge.dll')}
+        'PowerForge.Cli.dll', 'PowerForge.Compiler.dll', 'PowerForge.PowerShell.dll', 'PowerForge.dll')}
     (output / 'summary.json').write_bytes((json.dumps(summary, indent=2) + '\n').encode('utf-8'))
     print(json.dumps(summary, indent=2))
 

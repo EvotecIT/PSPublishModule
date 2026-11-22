@@ -188,7 +188,7 @@ public sealed class TypeAcceleratorRegistration
                     continue;
                 }
 
-                foreach (var type in exported)
+                foreach (var type in exported.Concat(TypeAcceleratorForwardedTypes.Read(assembly, message => Warn(message))))
                 {
                     if (enumsOnly && !type.IsEnum) continue;
                     Add(type, source);

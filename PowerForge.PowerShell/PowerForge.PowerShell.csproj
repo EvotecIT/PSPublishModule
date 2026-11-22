@@ -60,5 +60,6 @@
   <ItemGroup>
     <ProjectReference Include="..\PowerForge\PowerForge.csproj" />
     <ProjectReference Include="..\PowerForge.Compiler\PowerForge.Compiler.csproj" />
+    <Compile Include="..\PowerForge.ModuleLoader\TypeAcceleratorForwardedTypes.cs" Link="Services\TypeAcceleratorForwardedTypes.cs" />
   </ItemGroup>
 </Project>

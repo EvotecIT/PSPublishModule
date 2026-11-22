@@ -1,6 +1,8 @@
+using System.Reflection;
 using System.Runtime.CompilerServices;
 
 // Keep existing callers compiled against PowerForge.PowerShell working after the assembly split.
+[assembly: AssemblyMetadata("PowerForge.TypeForwarderAnchor", "PowerForge.PowerShellCompilationHostService")]
 [assembly: TypeForwardedTo(typeof(global::PowerForge.AstModuleManifestMutator))]
 [assembly: TypeForwardedTo(typeof(global::PowerForge.AuthenticodeSigningService))]
 [assembly: TypeForwardedTo(typeof(global::PowerForge.Generated.Runtime.PowerShellCommandVariableScope))]

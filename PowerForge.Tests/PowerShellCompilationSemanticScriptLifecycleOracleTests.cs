@@ -45,7 +45,7 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
             File.WriteAllText(Path.Combine(fixture.RootPath, "CompiledRoot.cs"), PowerShellHybridNativeEntryEmitter.GenerateSource(compiled, PowerShellSourceParser.ParseFile(script)));
             var project = Path.Combine(fixture.RootPath, "Lifecycle.csproj");
             File.WriteAllText(project, File.ReadAllText(template)
-                .Replace("..\\..\\..\\PowerForge.PowerShell", Path.Combine(repository, "PowerForge.PowerShell"), StringComparison.Ordinal)
+                .Replace("..\\..\\..\\PowerForge.Compiler", Path.Combine(repository, "PowerForge.Compiler"), StringComparison.Ordinal)
                 .Replace("7.6.5", "7.6.6", StringComparison.Ordinal));
             var build = await new ProcessRunner().RunAsync(PowerShellCompilationSdkProcessEnvironment.CreateInheritedRequest(
                 fixture.RootPath, new[] { "build", project, "-c", "Release", "-f", framework, "--nologo" },
