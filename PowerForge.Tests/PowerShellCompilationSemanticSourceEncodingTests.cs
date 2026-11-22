@@ -238,7 +238,8 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
         {
             var target = pin.ProfileId == profile ? "net472" : "net10.0";
             var input = new PowerShellCompilationInputResolver(profile).Resolve(moduleRoot,
-                PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Hybrid);
+                PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Hybrid,
+                allowDynamicModuleRuntimeSources: true);
             Assert.Single(input.CompilationSourceFiles);
             Assert.Contains(Path.Combine(moduleRoot, "Call-Helper.ps1"), input.SourceFiles);
             var build = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
@@ -248,6 +249,7 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
                 ModuleManifestPath = input.ModuleManifestPath,
                 TargetFramework = target,
                 SemanticProfileId = profile,
+                ResourceMode = PowerShellCompilationResourceMode.CompleteModule,
                 CompilationSourcePaths = input.CompilationSourceFiles,
                 RuntimeSourcePaths = input.SourceFiles
             });

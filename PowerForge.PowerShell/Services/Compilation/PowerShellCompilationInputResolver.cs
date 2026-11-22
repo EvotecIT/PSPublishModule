@@ -332,21 +332,19 @@ public sealed class PowerShellCompilationInputResolver
                 .ToArray();
             if (hybridModule)
                 _ = PowerShellHybridDependencyResolver.DiscoverRetainedModuleAlternatives(sourcePath, compilationSourceFiles, snapshot);
-            sourceFiles = (allowDynamicModuleRuntimeSources && resolvedMode != PowerShellCompilationMode.Strict
-                    ? new[] { sourcePath }
-                        .Concat(runtimeHooks)
-                        .Concat(conventionalSources)
-                        .Distinct(PowerShellCompilationPathSafety.PathComparer)
+            var runtimeEntries = runtimeHooks.Concat(conventionalSources);
+            var runtimePaths = allowDynamicModuleRuntimeSources && resolvedMode != PowerShellCompilationMode.Strict
+                ? PowerShellHybridDependencyResolver.DiscoverKnownRuntimeDependencies(
+                    sourcePath,
+                    new[] { sourcePath }.Concat(runtimeEntries).Distinct(PowerShellCompilationPathSafety.PathComparer)
                         .SelectMany(path => PowerShellHybridDependencyResolver.DiscoverModuleScopeDependencies(
                             path, null, null, PowerShellCompilationPathSafety.PathEquals(path, sourcePath)
-                                ? runtimeAlternatives
-                                : PowerShellModuleRuntimeAlternatives.Reject, snapshot))
-                        .Distinct(PowerShellCompilationPathSafety.PathComparer)
-                    : PowerShellHybridDependencyResolver.DiscoverDependencies(
-                        sourcePath,
-                        runtimeHooks.Concat(conventionalSources),
-                        conventionalLoaders: conventionalDiscovery.Loaders,
-                        runtimeAlternatives: runtimeAlternatives, snapshot: snapshot))
+                                ? runtimeAlternatives : PowerShellModuleRuntimeAlternatives.Reject, snapshot))
+                        .Distinct(PowerShellCompilationPathSafety.PathComparer),
+                    conventionalDiscovery.Loaders, runtimeAlternatives, snapshot)
+                : PowerShellHybridDependencyResolver.DiscoverDependencies(sourcePath, runtimeEntries,
+                    conventionalLoaders: conventionalDiscovery.Loaders, runtimeAlternatives: runtimeAlternatives, snapshot: snapshot);
+            sourceFiles = runtimePaths
                 .Where(file => IsPowerShellSource(file))
                 .OrderBy(file => FrameworkCompatibility.GetRelativePath(moduleRoot, file), StringComparer.OrdinalIgnoreCase)
                 .ToArray();

@@ -17,7 +17,8 @@ internal static class PowerShellHybridDependencyResolver
         IReadOnlyCollection<PowerShellConventionalLoaderIdentity>? conventionalLoaders = null,
         Action<string, string>? verifyCopiedInput = null,
         PowerShellSourceSnapshot? snapshot = null,
-        string? deliveryProfile = null)
+        string? deliveryProfile = null,
+        IEnumerable<string>? runtimeSourcePaths = null)
     {
         var sourceRoot = Path.GetFullPath(Path.GetDirectoryName(sourcePath) ?? Directory.GetCurrentDirectory());
         var comparer = PowerShellCompilationPathSafety.PathComparer;
@@ -27,11 +28,16 @@ internal static class PowerShellHybridDependencyResolver
         var discoveryEntries = (additionalEntryPaths ?? Array.Empty<string>())
             .Concat(explicitDependencyPaths ?? Array.Empty<string>());
         var copied = new List<PowerShellStagedModuleFile>();
-        foreach (var dependency in DiscoverDependenciesCore(sourcePath, discoveryEntries, moduleScopeOnly: true, conventionalLoaders,
-                     runtimeAlternatives: PowerShellModuleRuntimeAlternatives.Stage, snapshot: snapshot))
+        var dependencies = DiscoverDependenciesCore(sourcePath, discoveryEntries, moduleScopeOnly: true, conventionalLoaders,
+                runtimeAlternatives: PowerShellModuleRuntimeAlternatives.Stage, snapshot: snapshot)
+            .Concat(runtimeSourcePaths ?? Array.Empty<string>())
+            .Distinct(comparer);
+        foreach (var dependency in dependencies)
         {
             if (entryPaths.Contains(dependency))
                 continue;
+            PowerShellCompilationPathSafety.EnsureContained(sourceRoot, dependency, $"Runtime source '{dependency}' escapes the hybrid module source root.");
+            PowerShellCompilationPathSafety.EnsureNoLinks(sourceRoot, dependency, $"Runtime source '{dependency}' traverses a symbolic link or junction.");
             var target = Path.GetFullPath(Path.Combine(moduleDirectory, FrameworkCompatibility.GetRelativePath(sourceRoot, dependency)));
             PowerShellCompilationPathSafety.EnsureContained(Path.GetFullPath(moduleDirectory), target, $"Dot-source target for '{dependency}' escapes the hybrid module staging root.");
             Directory.CreateDirectory(Path.GetDirectoryName(target) ?? moduleDirectory);
@@ -85,6 +91,15 @@ internal static class PowerShellHybridDependencyResolver
         => DiscoverDependenciesCore(sourcePath, additionalEntryPaths, moduleScopeOnly: true,
             conventionalLoaders, runtimeAlternatives: runtimeAlternatives, snapshot: snapshot);
 
+    // After validating module-scope loads, preserve every existing literal nested source
+    // without requiring CompleteModule's dynamic invocations to be statically resolvable.
+    internal static string[] DiscoverKnownRuntimeDependencies(string sourcePath, IEnumerable<string> entryPaths,
+        IReadOnlyCollection<PowerShellConventionalLoaderIdentity> conventionalLoaders,
+        PowerShellModuleRuntimeAlternatives runtimeAlternatives,
+        PowerShellSourceSnapshot snapshot)
+        => DiscoverDependenciesCore(sourcePath, entryPaths, moduleScopeOnly: false,
+            conventionalLoaders, runtimeAlternatives: runtimeAlternatives, snapshot: snapshot, knownPathsOnly: true);
+
     internal static string[] DiscoverRetainedModuleAlternatives(string sourcePath, IEnumerable<string> compilationSources,
         PowerShellSourceSnapshot? snapshot = null)
     {
@@ -109,7 +124,8 @@ internal static class PowerShellHybridDependencyResolver
         PowerShellModuleRuntimeAlternatives runtimeAlternatives = PowerShellModuleRuntimeAlternatives.Reject,
         IReadOnlyDictionary<string, ParsedSourceDocument>? sourceDocuments = null,
         string? semanticProfileId = null,
-        PowerShellSourceSnapshot? snapshot = null)
+        PowerShellSourceSnapshot? snapshot = null,
+        bool knownPathsOnly = false)
     {
         var primarySource = Path.GetFullPath(sourcePath);
         var sourceRoot = Path.GetFullPath(Path.GetDirectoryName(sourcePath) ?? Directory.GetCurrentDirectory());
@@ -149,10 +165,13 @@ internal static class PowerShellHybridDependencyResolver
             if (runtimeSelected)
                 errors = errors.Where(static error => !IsStandaloneTypeResolutionError(error)).ToArray();
             if (errors.Length > 0)
+            {
+                if (knownPathsOnly) continue;
                 throw new InvalidOperationException(
                     $"Dot-sourced hybrid module dependency '{current}' could not be parsed: " +
                     string.Join("; ", errors.Take(3).Select(error =>
                         $"{error.Extent.StartLineNumber}:{error.Extent.StartColumnNumber} {error.Message}")));
+            }
             var dotSourceCommands = moduleScopeOnly
                 ? PowerShellCompilationSourcePathPlanner.GetModuleScopeDotSources(ast)
                 : ast.FindAll(
@@ -187,6 +206,7 @@ internal static class PowerShellHybridDependencyResolver
                 }
                 else
                 {
+                    if (knownPathsOnly) continue;
                     throw new InvalidOperationException($"Dot-source expression at {current}:{command.Extent.StartLineNumber} must be a literal $PSScriptRoot path or a supported guarded script-root assignment for portable staging.");
                 }
 
@@ -194,8 +214,14 @@ internal static class PowerShellHybridDependencyResolver
                 {
                     var relativePath = NormalizeRelativePath(path);
                     if (Path.IsPathRooted(relativePath) || WildcardPattern.ContainsWildcardCharacters(relativePath))
+                    {
+                        if (knownPathsOnly) continue;
                         throw new InvalidOperationException($"Dot-source path '{relativePath}' at {current}:{command.Extent.StartLineNumber} must be a contained literal path without wildcards.");
+                    }
                     var dependency = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(current)!, relativePath));
+                    if (knownPathsOnly && (!PowerShellCompilationPathSafety.IsContained(sourceRoot, dependency) ||
+                        !PowerShellCompilationInputResolver.IsPowerShellSource(dependency) || !File.Exists(dependency)))
+                        continue;
                     PowerShellCompilationPathSafety.EnsureContained(sourceRoot, dependency, $"Dot-source path at {current}:{command.Extent.StartLineNumber} escapes the hybrid module source root.");
                     if (selectedAtImport && PowerShellCompilationPathSafety.PathEquals(dependency, primarySource))
                         throw new InvalidOperationException($"Module switch alternative '{relativePath}' selects the importing source itself.");
