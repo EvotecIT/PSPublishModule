@@ -30,22 +30,26 @@ property access all edit one object.
   for each static `Replace(owner, value)` overload, for values that must go through a helper.
 - `[FluentInline]` on a settings-type property gives the owner every method of that settings type, applied to the
   property and returning the owner: with `[FluentInline] ChartOptions Options { get; }`, `chart.Legend(l => ...)` and
-  `chart.Theme(...)` set `chart.Options.Legend` and `chart.Options.Theme`. `Options(o => ...)` is still generated. The
-  property must be readable and not nullable; one level is inlined (an inlined type's own `[FluentInline]` properties keep
-  only their configure method on it).
+  `chart.Theme(...)` set `chart.Options.Legend` and `chart.Options.Theme`. `[FluentForward]` methods of the settings type
+  come along too, applied to the property. `Options(o => ...)` is still generated. The property must be readable and not
+  nullable; one level is inlined (an inlined type's own `[FluentInline]` properties keep only their configure method on
+  it).
 - `[FluentPreset("Stacked", ChartBarMode.Stacked)]` on a property generates `Stacked()`, which assigns that constant (an
-  enum member, bool, number, string or null). `[FluentPreset("PlainLine", typeof(LineVisualStyle), nameof(LineVisualStyle.Plain))]`
+  enum member, bool, number, string or null; an integer that fits also works for `byte`, `short`, `uint` and the other
+  integral types, as `byte size = 1` does). `[FluentPreset("PlainLine", typeof(LineVisualStyle), nameof(LineVisualStyle.Plain))]`
   assigns the static member instead: a parameterless static method is called, a static property or field is read.
   Repeat the attribute for several presets; `Summary` replaces the generated documentation. Presets also come through
   `[FluentInline]`.
 - `[Fluent(Copy = "Clone")]` on a settings type names a parameterless instance method (public or internal, declared or
   inherited) that returns a copy of the type or of a base it can be cast to. A settable property of that type, or of a
   type deriving from it, then gets a copy-then-commit `X(o => ...)`: the callback edits a copy of the current value (or
-  of a new one), and a further copy is assigned only once the callback returns. A throwing callback leaves the owner
-  unchanged, and the instance the callback saw is never the one stored. Read-only properties are still configured in place.
+  of a new one), and a further copy is assigned only once the callback returns. A throwing callback leaves the owner's
+  settings object unchanged, and the instance the callback saw is never the one stored. This covers the top-level settings
+  object only: nested reference state (a list, a child object) is shared between the copies unless the copy method clones
+  it. Read-only properties are still configured in place.
 - A settings type from a referenced library works too: a property of that type gets `X(o => ...)`, and a derived type
   can inline it, so blocks in one package inherit the options of a base class in another. Such a type is configured in
-  place, because its copy method is not visible outside its own library.
+  place, even when it names a copy method, because that method is usually not visible outside its own library.
 - A delegate property without a verb (PFF001), a method that collides with an existing one or that a delegate-valued
   member would capture (PFF002), two members that map to one method (PFF003), a forward target without a usable
   overload (PFF004), a name that is not an identifier (PFF005), a preset whose value cannot be assigned or whose property
