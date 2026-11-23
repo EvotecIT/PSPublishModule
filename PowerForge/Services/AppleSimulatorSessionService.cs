@@ -8,14 +8,25 @@ public sealed partial class AppleSimulatorSessionService
 {
     private readonly IProcessRunner _simulatorRunner;
     private readonly IProcessRunner _commandRunner;
+    private readonly TextWriter _promptWriter;
+    private readonly Func<TimeSpan, CancellationToken, Task> _delay;
 
     /// <summary>Creates a lifecycle owner with existing process-runner boundaries.</summary>
-    /// <param name="simulatorRunner">Simulator command executor; defaults to the standard runner.</param>
+    /// <param name="simulatorRunner">Simulator and fold-tool command executor; defaults to the standard runner.</param>
     /// <param name="commandRunner">Foreground validation executor; defaults to a runner owning its descendant scope.</param>
-    public AppleSimulatorSessionService(IProcessRunner? simulatorRunner = null, IProcessRunner? commandRunner = null)
+    /// <param name="promptWriter">Where iPhone Duo pose prompts go; defaults to standard error.</param>
+    public AppleSimulatorSessionService(IProcessRunner? simulatorRunner = null, IProcessRunner? commandRunner = null, TextWriter? promptWriter = null)
+        : this(simulatorRunner, commandRunner, promptWriter, null)
+    {
+    }
+
+    internal AppleSimulatorSessionService(IProcessRunner? simulatorRunner, IProcessRunner? commandRunner, TextWriter? promptWriter,
+        Func<TimeSpan, CancellationToken, Task>? delay)
     {
         _simulatorRunner = simulatorRunner ?? new ProcessRunner();
         _commandRunner = commandRunner ?? new ProcessRunner(ownProcessTree: true);
+        _promptWriter = promptWriter ?? Console.Error;
+        _delay = delay ?? ((wait, token) => Task.Delay(wait, token));
     }
 
     /// <summary>Runs bounded validation, preserving pre-existing booted devices and independently attempting owned shutdown.</summary>
@@ -71,8 +82,17 @@ public sealed partial class AppleSimulatorSessionService
             }
             RequireSuccess(await SimctlAsync(deviceSet, new[] { "bootstatus", deviceId }, request.SimulatorTimeout, cancellationToken).ConfigureAwait(false), "Simulator readiness");
             cancellationToken.ThrowIfCancellationRequested();
+            var environment = command.EnvironmentVariables;
+            if (request.DuoPose is not null)
+            {
+                result.DuoPose = await EnsureDuoPoseAsync(deviceId, deviceSet, request.DuoPose, request.SimulatorTimeout, cancellationToken).ConfigureAwait(false);
+                var merged = new Dictionary<string, string?>(StringComparer.Ordinal);
+                if (environment is not null) foreach (var pair in environment) merged[pair.Key] = pair.Value;
+                foreach (var pair in DuoPoseEnvironment(result.DuoPose)) merged[pair.Key] = pair.Value;
+                environment = merged;
+            }
             var foreground = new ProcessRunRequest(command.FileName, command.WorkingDirectory, command.Arguments,
-                command.Timeout, command.EnvironmentVariables, command.CaptureOutput, command.CaptureError,
+                command.Timeout, environment, command.CaptureOutput, command.CaptureError,
                 command.OutputLineReceived, command.ErrorLineReceived, command.InheritEnvironment)
             {
                 MaxCapturedOutputCharacters = Math.Min(command.MaxCapturedOutputCharacters, 16384),
