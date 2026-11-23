@@ -205,7 +205,7 @@ public sealed class PowerShellCompilationProjectDiagnosticsTests
         var child = Path.Combine(fixture.Root, "Child.ps1");
         File.WriteAllText(child, "# Dedicated child scope\n. \"$PSScriptRoot/Shared.ps1\"\n");
 
-        var result = new PowerShellCompilationHostService().Check(new PowerShellCompilationCheckRequest(fixture.Source)
+        var result = new PowerShellCompiler().Check(new PowerShellCompilationRequest(fixture.Source)
         {
             Mode = PowerShellCompilationMode.Hybrid
         });

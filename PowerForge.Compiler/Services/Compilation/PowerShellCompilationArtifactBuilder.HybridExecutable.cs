@@ -17,6 +17,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         IReadOnlyList<ParsedSourceDocument> sourceDocuments,
         PowerShellSourceSnapshot snapshot)
     {
+        var sourceRoot = GetSourceRoot(spec);
         var document = snapshot.Get(spec.SourcePath);
         var capabilities = PowerShellCompilationBuildSpec.GetCapabilities(spec.Kind, spec.Mode);
         var entry = PowerShellHybridExecutableEntryPlanner.TryPlan(
@@ -37,7 +38,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         typed = PowerShellBinaryCmdletSourceGenerator.PrepareForBinaryModule(typed, exportedFunctions: null, spec.TargetFramework,
             spec.SemanticProfileId, capabilities, sourceDocuments, plan, transpiler);
         WriteCompiledPowerShellSource(Path.Combine(workspace, "CompiledPowerShell.cs"), typed.SourceCode,
-            spec.SourcePath, compilationSourcePaths);
+            spec.SourcePath, sourceRoot, compilationSourcePaths);
         WriteBinaryHostRuntime(workspace, typed, requiresExecutableEntryHost: entry is not null,
             requiresNativeEntryHost: nativeEntry);
         if (entry is not null)
@@ -45,7 +46,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 Path.Combine(workspace, "CompiledPowerShellEntry.cs"),
                 nativeEntry ? PowerShellHybridNativeEntryEmitter.GenerateSource(entry, document)
                     : PowerShellHybridExecutableEntryEmitter.GenerateSource(entry),
-                spec.SourcePath, compilationSourcePaths, includeSyntheticEntry: !nativeEntry);
+                spec.SourcePath, sourceRoot, compilationSourcePaths, includeSyntheticEntry: !nativeEntry);
         File.WriteAllText(
             Path.Combine(workspace, "CompiledCmdlets.cs"),
             PowerShellBinaryCmdletSourceGenerator.Generate(typed, exportedFunctions: null, targetFramework: spec.TargetFramework),

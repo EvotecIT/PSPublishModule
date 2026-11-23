@@ -1,11 +1,7 @@
 namespace PowerForge.Compiler.App.Engine;
 
-/// <summary>
-/// Settings files are the engine's own <c>powerforge.psproject.json</c>, read and written through
-/// <see cref="PowerShellCompilationProjectManifestService"/>, so a file saved here builds the same way with
-/// <c>powerforge powershell project build</c> in CI.
-/// </summary>
-internal sealed partial class InterimCompileEngine
+/// <summary>Reads and writes single-input settings through the compiler's portable project manifest.</summary>
+internal sealed partial class CompilerAppEngine
 {
     /// <summary>The file name the engine's project commands look for.</summary>
     internal const string DefaultSettingsFileName = "powerforge.psproject.json";
@@ -31,8 +27,8 @@ internal sealed partial class InterimCompileEngine
             var settingsPath = Path.GetFullPath(request.SettingsPath.Trim().Trim('"'));
             var inputPath = Path.GetFullPath(request.InputPath);
             var service = new PowerShellCompilationProjectManifestService();
-            var kind = new PowerShellCompilationInputResolver().Resolve(inputPath, request.Target.ExactContract?.ArtifactKind).Kind;
-            var contract = CreateTarget(kind, request.Mode, request.Target);
+            var spec = Compiler.Prepare(CreateRequest(inputPath, request.Mode, request.Files, request.Target));
+            var contract = spec.TargetContract ?? CreateTarget(spec.Kind, spec.Mode, request.Target);
 
             // A fresh manifest gives the engine's own name, lock path and output folder for this target.
             var fresh = service.Create(settingsPath, inputPath, Path.GetFileNameWithoutExtension(inputPath.TrimEnd('\\', '/')), contract);
@@ -80,9 +76,17 @@ internal sealed partial class InterimCompileEngine
     internal static BuildSettings ToSettings(string settingsPath, PowerShellCompilationProjectManifest manifest)
     {
         var root = Path.GetDirectoryName(settingsPath) ?? Directory.GetCurrentDirectory();
-        var input = !string.IsNullOrWhiteSpace(manifest.EntryPoint)
-            ? manifest.EntryPoint!
-            : manifest.Sources.Length == 1 ? manifest.Sources[0] : ".";
+        if (manifest.Sources.Length != 1)
+            throw new InvalidOperationException("The app opens settings for one script or module. Use powerforge powershell project for a loose source set.");
+        if (!string.IsNullOrWhiteSpace(manifest.EntryPoint))
+            throw new InvalidOperationException("Use powerforge powershell project to build a project with an explicit entrypoint.");
+        if (HasCustomDiagnostics(manifest.Diagnostics))
+            throw new InvalidOperationException("Use powerforge powershell project to build with a project-specific diagnostics policy.");
+        if (manifest.ProviderPackages.Length != 0 || manifest.Artifacts.Any(static artifact =>
+                artifact.ProviderLock is not null || artifact.ExpectedAbiSha256 is not null ||
+                artifact.ArtifactName is not null || artifact.EmitSource || artifact.EmitIr))
+            throw new InvalidOperationException("Use powerforge powershell project to build with project-specific artifact settings, providers, or ABI locks.");
+        var input = manifest.Sources[0];
         var resources = manifest.Resources ?? new PowerShellCompilationProjectResourcePolicy();
         return new BuildSettings(
             settingsPath,
@@ -98,6 +102,17 @@ internal sealed partial class InterimCompileEngine
                     Path.GetFullPath(Path.Combine(root, artifact.OutputDirectory)),
                     artifact.Target))
                 .ToArray());
+    }
+
+    private static bool HasCustomDiagnostics(PowerShellCompilationDiagnosticsPolicy policy)
+    {
+        var defaults = new PowerShellCompilationDiagnosticsPolicy();
+        return policy.SchemaVersion != defaults.SchemaVersion ||
+            policy.LocalOnly != defaults.LocalOnly ||
+            policy.AutomaticUpload != defaults.AutomaticUpload ||
+            policy.ArtifactEvidenceRetention != defaults.ArtifactEvidenceRetention ||
+            policy.RecommendedFailureBundleRetentionDays != defaults.RecommendedFailureBundleRetentionDays ||
+            policy.RedactedData is { Length: > 0 };
     }
 
     private static bool SameFullPath(string left, string right) =>

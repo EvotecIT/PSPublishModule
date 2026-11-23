@@ -60,6 +60,86 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
         }
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ReviewedBuild_PreservesTheCommonRootForLooseSources(bool reverseOrder)
+    {
+        var root = Directory.CreateTempSubdirectory("pfc-prepare-").FullName;
+        try
+        {
+            var first = Path.Combine(Directory.CreateDirectory(Path.Combine(root, "Public")).FullName, "First.ps1");
+            var second = Path.Combine(Directory.CreateDirectory(Path.Combine(root, "Private")).FullName, "Second.ps1");
+            File.WriteAllText(first, "function Get-First { return 1 }");
+            File.WriteAllText(second, "function Get-Second { return 2 }");
+            var compiler = new PowerShellCompiler();
+            var paths = reverseOrder ? new[] { second, first } : new[] { first, second };
+            var request = new PowerShellCompilationRequest(paths.Append(paths[0]))
+            {
+                Kind = PowerShellCompilationArtifactKind.BinaryModule,
+                OutputDirectory = Path.Combine(root, "output")
+            };
+
+            var spec = compiler.Prepare(request);
+            var check = compiler.Check(request);
+
+            Assert.Equal(PowerShellCompilationMode.Strict, spec.Mode);
+            Assert.Equal(paths, spec.CompilationSourcePaths);
+            Assert.True(check.CanProceed, string.Join(Environment.NewLine, check.Diagnostics.Select(item => item.Message)));
+            Assert.Equal(PowerShellCompilationArtifactKind.BinaryModule, check.ArtifactKind);
+            Assert.Equal(paths[0], check.SourcePath);
+            Assert.Equal(spec.CompilationSourcePaths, check.SourceFiles);
+            Assert.Equal(spec.Mode, check.Explanation?.Mode);
+            Assert.False(Directory.Exists(spec.OutputDirectory));
+
+            spec.EmitSource = true;
+            var built = compiler.BuildReviewed(spec, check.ProposedReview!);
+            Assert.True(built.Succeeded, built.Error + built.BuildOutput);
+            Assert.Equal(2, built.Manifest!.CompiledMethods);
+            Assert.Equal(check.ProposedReview!.DependencyLock!.LockSha256, built.Manifest.DependencyGraph!.LockSha256);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Build_MapsOmittedLooseSourceToThePublishedDocument()
+    {
+        var root = Directory.CreateTempSubdirectory("pfc-loose-map-").FullName;
+        try
+        {
+            var typed = Path.Combine(Directory.CreateDirectory(Path.Combine(root, "Public")).FullName, "Typed.ps1");
+            var omitted = Path.Combine(Directory.CreateDirectory(Path.Combine(root, "Private")).FullName, "Dynamic.ps1");
+            const string omittedSource = "function Get-DynamicValue { param([string] $Path) return Get-Item -LiteralPath $Path }";
+            File.WriteAllText(typed, "function Get-TypedValue { return 42 }");
+            File.WriteAllText(omitted, omittedSource);
+            var compiler = new PowerShellCompiler();
+            var request = new PowerShellCompilationRequest(new[] { typed, omitted })
+            {
+                Kind = PowerShellCompilationArtifactKind.Library,
+                Mode = PowerShellCompilationMode.Hybrid,
+                OutputDirectory = Path.Combine(root, "output")
+            };
+            var spec = compiler.Prepare(request);
+            spec.EmitSource = true;
+            spec.ExpectedDependencyLock = new PowerShellCompilationDependencyPlanner().AnalyzeGraph(spec);
+
+            var built = compiler.Build(spec);
+
+            Assert.True(built.Succeeded, built.Error + built.BuildOutput);
+            Assert.Equal(1, built.Manifest!.OmittedUnits);
+            var mapped = Assert.Single(built.Manifest.FailureMap!.Entries, entry => entry.UnitName == "Get-DynamicValue");
+            Assert.Equal("Private/Dynamic.ps1", mapped.RelativePath);
+            Assert.Equal(omittedSource, File.ReadAllText(Path.Combine(built.GeneratedSourcePath!, mapped.DocumentId)));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     [Fact]
     public void ReviewedBuild_RejectsStagedResourceDriftAndPreservesPublishedModule()
     {
@@ -75,8 +155,8 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
             var manifest = Path.Combine(moduleRoot, "Example.psd1");
             File.WriteAllText(manifest, "@{ RootModule = 'Example.psm1'; ModuleVersion = '1.0.0'; FunctionsToExport = @('Get-Example') }");
             File.WriteAllText(resource, "reviewed content");
-            var host = new PowerShellCompilationHostService();
-            var request = new PowerShellCompilationCheckRequest(manifest)
+            var host = new PowerShellCompiler();
+            var request = new PowerShellCompilationRequest(manifest)
             {
                 OutputDirectory = output, IncludeResource = new[] { "label.txt" }
             };
@@ -84,18 +164,14 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
             Assert.True(check.CanProceed, string.Join(Environment.NewLine, check.Diagnostics.Select(item => item.Message)));
             Assert.Contains(check.Dependencies, item => item.RelativePath == "label.txt" &&
                 item.Disposition == PowerShellCompilationDependencyDisposition.CopiedAdjacent);
-            var spec = new PowerShellCompilationBuildSpec(source, output, "Example",
-                PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Hybrid)
-            {
-                ModuleManifestPath = manifest, IncludeResource = request.IncludeResource
-            };
-            var built = host.Compile(spec, check.ProposedReview!);
+            var spec = host.Prepare(request);
+            var built = host.BuildReviewed(spec, check.ProposedReview!);
             Assert.True(built.Succeeded, built.Error + built.BuildOutput);
             var deployed = Path.Combine(Path.GetDirectoryName(built.ArtifactPath)!, "label.txt");
             Assert.Equal("reviewed content", File.ReadAllText(deployed));
             var artifactBytes = File.ReadAllBytes(built.ArtifactPath!);
 
-            var changed = host.Compile(spec, check.ProposedReview!, progress: new AtPhase(PowerShellCompilationHostPhase.Publishing,
+            var changed = host.BuildReviewed(spec, check.ProposedReview!, progress: new AtPhase(PowerShellCompilationHostPhase.Publishing,
                 () => File.WriteAllText(resource, "changed during publication")));
 
             Assert.False(changed.Succeeded);
@@ -127,8 +203,8 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
                 ? ". \"$PSScriptRoot/label.ps1\""
                 : "Get-Content -LiteralPath \"$PSScriptRoot/label.txt\"");
             File.WriteAllText(resource, scriptDependency ? "'reviewed content'" : "reviewed content");
-            var host = new PowerShellCompilationHostService();
-            var request = new PowerShellCompilationCheckRequest(source)
+            var host = new PowerShellCompiler();
+            var request = new PowerShellCompilationRequest(source)
             {
                 Mode = PowerShellCompilationMode.Package,
                 OutputDirectory = output,
@@ -144,7 +220,7 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
                 IncludeResource = request.IncludeResource,
                 CompilationSourcePaths = scriptDependency ? new[] { resource } : Array.Empty<string>()
             };
-            var changed = host.Compile(spec, check.ProposedReview!, progress: new AtPhase(
+            var changed = host.BuildReviewed(spec, check.ProposedReview!, progress: new AtPhase(
                 PowerShellCompilationHostPhase.Shaping, () => File.WriteAllText(resource, "unreviewed content")));
 
             Assert.False(changed.Succeeded);
@@ -177,7 +253,7 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
                 }
                 . (Join-Path $PSScriptRoot $path)
                 """);
-            var check = new PowerShellCompilationHostService().Check(new PowerShellCompilationCheckRequest(source)
+            var check = new PowerShellCompiler().Check(new PowerShellCompilationRequest(source)
             {
                 Mode = mode,
                 OutputDirectory = Path.Combine(root, "output")
@@ -213,8 +289,8 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
                 function Get-Example { $script:value }
                 Export-ModuleMember -Function Get-Example
                 """);
-            var host = new PowerShellCompilationHostService();
-            var check = host.Check(new PowerShellCompilationCheckRequest(source) { OutputDirectory = output });
+            var host = new PowerShellCompiler();
+            var check = host.Check(new PowerShellCompilationRequest(source) { OutputDirectory = output });
             Assert.True(check.CanProceed, string.Join(Environment.NewLine, check.Diagnostics.Select(item => item.Message)));
             foreach (var file in new[] { "Active.ps1", "Inactive.ps1" })
                 Assert.Contains(check.Dependencies, item => item.RelativePath == file &&
@@ -237,7 +313,7 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
             spec.CompilationSourcePaths = Array.Empty<string>();
             spec.AllowUnreviewedDependencyResolution = false;
             File.WriteAllText(inactive, "$script:value = 15");
-            var changed = host.Compile(spec, check.ProposedReview!);
+            var changed = host.BuildReviewed(spec, check.ProposedReview!);
             Assert.False(changed.Succeeded);
             Assert.Contains("dependency lock drifted", changed.Error, StringComparison.OrdinalIgnoreCase);
             Assert.Empty(Directory.EnumerateFileSystemEntries(output));
@@ -313,7 +389,7 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
         {
             var source = Path.Combine(root, "Example.ps1");
             File.WriteAllText(source, "return 21");
-            var proposed = new PowerShellCompilationHostService().Check(new PowerShellCompilationCheckRequest(source)
+            var proposed = new PowerShellCompiler().Check(new PowerShellCompilationRequest(source)
             {
                 Mode = PowerShellCompilationMode.Strict
             }).ProposedReview;
@@ -347,26 +423,27 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
     [Fact]
     public void Doctor_RejectsAnUnknownOracleAndAnIncompatibleRuntimeContract()
     {
-        var host = new PowerShellCompilationHostService();
+        var host = new PowerShellCompiler();
         var target = PowerShellCompilationTargetContractService.Create(PowerShellCompilationArtifactKind.Executable,
             PowerShellCompilationMode.Strict, "net10.0", null, false, true,
             PowerShellCompilationExecutableOptimization.None, explicitContract: true);
         var profile = target.SemanticProfileId;
         target.SemanticProfileId = "Unknown/Profile";
         target.ContractSha256 = string.Empty;
-        var unknown = Assert.Single(host.Doctor(target).Diagnostics);
+        var unknown = Assert.Single(host.CheckEnvironment(target).Diagnostics);
+        Assert.Equal("powershell.doctor.target", unknown.FeatureId);
         Assert.Contains("Unknown PowerForge semantic-oracle profile", unknown.Message, StringComparison.Ordinal);
 
         target.SemanticProfileId = profile;
         target.RuntimeRequirement = PowerShellCompilationRuntimeRequirement.PowerShell;
-        var invalid = Assert.Single(host.Doctor(target).Diagnostics);
+        var invalid = Assert.Single(host.CheckEnvironment(target).Diagnostics);
         Assert.Contains("conflicts with the resolved semantic, runtime, or deployment build contract", invalid.Message,
             StringComparison.Ordinal);
 
         var unsupported = PowerShellCompilationTargetContractService.Create(PowerShellCompilationArtifactKind.Executable,
             PowerShellCompilationMode.Hybrid, "net10.0", "win-x64", true, true,
             PowerShellCompilationExecutableOptimization.NativeAot, explicitContract: true);
-        var invalidOptimization = Assert.Single(host.Doctor(unsupported).Diagnostics);
+        var invalidOptimization = Assert.Single(host.CheckEnvironment(unsupported).Diagnostics);
         Assert.Contains("optimization is supported only for Strict", invalidOptimization.Message, StringComparison.Ordinal);
     }
 
@@ -376,7 +453,7 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
     [InlineData("Package", "-Version 6.9", "PowerShell 6.9", false)]
     [InlineData("Package", "\u2013Modules ExampleNotInstalled", "-Modules", false)]
     [InlineData("Package", "-PSEdition Desktop", "'Desktop'", false)]
-    [InlineData("Hybrid", "-Version 5.1", "Helper.ps1", true)]
+    [InlineData("Hybrid", "-Version 99.0", "Helper.ps1", true)]
     public async Task Check_ReportsPackageDirectiveDiagnosticWithoutWritingReview(
         string mode, string requirement, string expectedFinding, bool onDependency)
     {
@@ -424,9 +501,9 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
             File.WriteAllText(script, "return 42");
             using var cancellation = new CancellationTokenSource();
             var progress = new CancelAtShaping(cancellation);
-            var request = new PowerShellCompilationCheckRequest(script) { Mode = PowerShellCompilationMode.Strict };
+            var request = new PowerShellCompilationRequest(script) { Mode = PowerShellCompilationMode.Strict };
 
-            Assert.Throws<OperationCanceledException>(() => new PowerShellCompilationHostService().Check(
+            Assert.Throws<OperationCanceledException>(() => new PowerShellCompiler().Check(
                 request, cancellation.Token, progress));
             Assert.Equal(new[] { PowerShellCompilationHostPhase.Resolving, PowerShellCompilationHostPhase.Analyzing,
                 PowerShellCompilationHostPhase.Shaping }, progress.Observed);

@@ -65,7 +65,7 @@ internal static class PowerShellGeneratedSourcePublisher
 
     private static void CopyMappedSources(string sourceDirectory, PowerShellCompilationBuildSpec spec)
     {
-        var sourceRoot = Path.GetDirectoryName(Path.GetFullPath(spec.SourcePath)) ?? Directory.GetCurrentDirectory();
+        var sourceRoot = PowerShellCompilationArtifactBuilder.GetSourceRoot(spec);
         foreach (var sourcePath in new[] { spec.SourcePath }
                      .Concat(spec.CompilationSourcePaths ?? Array.Empty<string>())
                      .Select(Path.GetFullPath)
@@ -89,7 +89,7 @@ internal static class PowerShellGeneratedSourcePublisher
         PowerShellCompilationBuildSpec spec,
         IReadOnlyCollection<PowerShellCompiledMethod>? methods)
     {
-        var sourceRoot = Path.GetDirectoryName(Path.GetFullPath(spec.SourcePath)) ?? Directory.GetCurrentDirectory();
+        var sourceRoot = PowerShellCompilationArtifactBuilder.GetSourceRoot(spec);
         var sourcePaths = new[] { spec.SourcePath }
             .Concat(spec.CompilationSourcePaths ?? Array.Empty<string>())
             .Select(Path.GetFullPath)

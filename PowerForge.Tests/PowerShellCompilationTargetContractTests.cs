@@ -110,7 +110,8 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             singleFile: false,
             PowerShellCompilationExecutableOptimization.None,
             explicitContract: true);
-        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+        target.TargetFramework = " net10.0 ";
+        var spec = new PowerShellCompilationBuildSpec(
             fixture.ScriptPath,
             fixture.OutputPath,
             "PowerForge.ExplicitTarget",
@@ -131,9 +132,13 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                 EstimatedOverheadRatio = 0.5,
                 Advisory = "profile advisory"
             }
-        });
+        };
+        var result = new PowerShellCompiler().Build(spec);
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        Assert.Empty(spec.SemanticProfileId);
+        Assert.True(spec.SingleFile);
+        Assert.Equal(" net10.0 ", target.TargetFramework);
         Assert.True(result.Manifest!.TargetContract!.Explicit);
         Assert.Equal(target.ContractSha256, result.Manifest.TargetContract.ContractSha256);
         Assert.Equal(target.ContractSha256, result.Manifest.Toolchain!.TargetContractSha256);

@@ -150,7 +150,6 @@ public sealed class BuildPowerShellArtifactCommand : AsyncPSCmdlet
     protected override async Task ProcessRecordAsync()
     {
         var requestedPaths = Path.Select(path => SessionState.Path.GetUnresolvedProviderPathFromPSPath(path))
-            .Distinct(PowerShellCompilationPathSafety.PathComparer)
             .ToArray();
         var entryPointPath = string.IsNullOrWhiteSpace(EntryPoint)
             ? null
@@ -164,67 +163,56 @@ public sealed class BuildPowerShellArtifactCommand : AsyncPSCmdlet
                 Mode));
             return;
         }
-        PowerShellCompilationResolvedInput resolved;
-        string profileId;
-        PowerShellCompilationTargetContract? target;
+        var compiler = new PowerShellCompiler();
+        PowerShellCompilationBuildSpec spec;
         try
         {
-            target = TargetContract is null ? null : PowerShellCompilationTargetContractService.Normalize(TargetContract.Copy());
-            var kind = Kind ?? target?.ArtifactKind ?? (entryPointPath is not null ? PowerShellCompilationArtifactKind.Executable
-                : requestedPaths.Length > 1 ? PowerShellCompilationArtifactKind.Library
-                : PowerShellCompilationInputResolver.InferDefaultArtifactKind(requestedPaths[0]));
-            var mode = Mode ?? target?.Mode ?? PowerShellCompilationBuildSpec.GetDefaultMode(kind);
-            profileId = target?.SemanticProfileId ??
-                PowerShellCompilationArtifactBuilder.GetDefaultBuildSemanticProfileId(mode, TargetFramework);
-            resolved = new PowerShellCompilationInputResolver(profileId).Resolve(requestedPaths, Kind ?? target?.ArtifactKind,
-                Mode ?? target?.Mode, entryPointPath);
+            spec = compiler.Prepare(new PowerShellCompilationRequest(requestedPaths)
+            {
+                EntryPoint = entryPointPath,
+                OutputDirectory = string.IsNullOrWhiteSpace(OutputDirectory)
+                    ? null
+                    : SessionState.Path.GetUnresolvedProviderPathFromPSPath(OutputDirectory),
+                ArtifactName = string.IsNullOrWhiteSpace(Name) ? null : Name,
+                Kind = Kind,
+                Mode = Mode,
+                Target = TargetContract,
+                TargetFramework = MyInvocation.BoundParameters.ContainsKey(nameof(TargetFramework)) ? TargetFramework : null,
+                RuntimeIdentifier = RuntimeIdentifier,
+                SelfContained = MyInvocation.BoundParameters.ContainsKey(nameof(SelfContained)) ? SelfContained.IsPresent : null,
+                SingleFile = MyInvocation.BoundParameters.ContainsKey(nameof(SingleFile)) ? SingleFile : null,
+                Optimization = MyInvocation.BoundParameters.ContainsKey(nameof(Optimization)) ? Optimization : null,
+                ResourceMode = ResourceMode,
+                IncludeResource = IncludeResource,
+                ExcludeResource = ExcludeResource
+            }, CancelToken);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             ThrowTerminatingError(new ErrorRecord(ex, "PowerShellArtifactInputResolutionFailed", ErrorCategory.InvalidArgument, requestedPaths));
             return;
         }
-        var outputPath = string.IsNullOrWhiteSpace(OutputDirectory)
-            ? PowerShellCompilationOutputPolicy.GetDefaultOutputDirectory(resolved)
-            : SessionState.Path.GetUnresolvedProviderPathFromPSPath(OutputDirectory);
-        var artifactName = string.IsNullOrWhiteSpace(Name) ? resolved.ArtifactName : Name!;
-        if (!ShouldProcess(outputPath, $"Build {resolved.Kind} artifact '{artifactName}' from '{resolved.RequestedPath}'"))
+        if (!ShouldProcess(spec.OutputDirectory, $"Build {spec.Kind} artifact '{spec.ArtifactName}' from '{entryPointPath ?? requestedPaths[0]}'"))
             return;
 
-        var spec = new PowerShellCompilationBuildSpec(resolved.SourcePath, outputPath, artifactName, resolved.Kind, resolved.Mode)
-        {
-            ModuleManifestPath = resolved.ModuleManifestPath,
-            CompilationSourcePaths = resolved.CompilationSourceFiles,
-            RuntimeSourcePaths = resolved.SourceFiles,
-            ResourceMode = ResourceMode,
-            IncludeResource = IncludeResource,
-            ExcludeResource = ExcludeResource,
-            TargetFramework = TargetFramework,
-            SemanticProfileId = profileId,
-            RuntimeIdentifier = RuntimeIdentifier,
-            SelfContained = SelfContained.IsPresent,
-            SingleFile = SingleFile,
-            Optimization = Optimization,
-            TargetContract = target,
-            UseBuildCache = UseBuildCache,
-            BuildCacheDirectory = BuildCacheDirectory,
-            SignArtifact = SignArtifact.IsPresent,
-            CertificateThumbprint = CertificateThumbprint,
-            CertificateStoreLocation = (PowerForge.CertificateStoreLocation)(int)CertificateStoreLocation,
-            TimeStampServer = TimeStampServer,
-            SigningTimeoutSeconds = SigningTimeoutSeconds,
-            KeepBuildWorkspace = KeepBuildWorkspace.IsPresent,
-            EmitSource = EmitSource.IsPresent,
-            EmitIrSnapshots = EmitIrSnapshots.IsPresent,
-            ExpectedPublicAbiSha256 = ExpectedPublicAbiSha256,
-            TimeoutSeconds = TimeoutSeconds,
-            ExpectedDependencyLock = DependencyLock,
-            AllowUnreviewedDependencyResolution = AllowUnreviewedDependencies.IsPresent
-        };
+        spec.UseBuildCache = UseBuildCache;
+        spec.BuildCacheDirectory = BuildCacheDirectory;
+        spec.SignArtifact = SignArtifact.IsPresent;
+        spec.CertificateThumbprint = CertificateThumbprint;
+        spec.CertificateStoreLocation = (PowerForge.CertificateStoreLocation)(int)CertificateStoreLocation;
+        spec.TimeStampServer = TimeStampServer;
+        spec.SigningTimeoutSeconds = SigningTimeoutSeconds;
+        spec.KeepBuildWorkspace = KeepBuildWorkspace.IsPresent;
+        spec.EmitSource = EmitSource.IsPresent;
+        spec.EmitIrSnapshots = EmitIrSnapshots.IsPresent;
+        spec.ExpectedPublicAbiSha256 = ExpectedPublicAbiSha256;
+        spec.TimeoutSeconds = TimeoutSeconds;
+        spec.ExpectedDependencyLock = DependencyLock;
+        spec.AllowUnreviewedDependencyResolution = AllowUnreviewedDependencies.IsPresent;
         // Phases, heartbeats and build warnings are host lines; the generated build output streams to Verbose.
         var logger = new CmdletLogger(this, MyInvocation.BoundParameters.ContainsKey("Verbose"));
         var stopwatch = Stopwatch.StartNew();
-        var result = await Task.Run(() => new PowerShellCompilationArtifactBuilder().Build(spec, logger, CancelToken), CancelToken);
+        var result = await Task.Run(() => compiler.Build(spec, logger, CancelToken), CancelToken);
         stopwatch.Stop();
         if (!result.Succeeded)
         {

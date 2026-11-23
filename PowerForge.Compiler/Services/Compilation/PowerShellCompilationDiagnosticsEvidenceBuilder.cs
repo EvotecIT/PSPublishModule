@@ -23,7 +23,8 @@ internal static class PowerShellCompilationDiagnosticsEvidenceBuilder
         PowerShellCompilationPlan plan,
         IEnumerable<PowerShellCompiledMethod> methods,
         PowerShellCompilationUnitDispositionLedger ledger,
-        IEnumerable<PowerShellCompiledRegion>? promotedRegions = null)
+        IEnumerable<PowerShellCompiledRegion>? promotedRegions = null,
+        string? identityRoot = null)
     {
         var entries = new List<PowerShellCompilationFailureMapEntry>();
         foreach (var method in methods.Where(static item => item.Lifecycle?.Execution != PowerShellCompilationLifecycleExecution.HostedSteppablePipeline)
@@ -126,7 +127,7 @@ internal static class PowerShellCompilationDiagnosticsEvidenceBuilder
             }));
         }
         var mappedUnitIds = entries.Select(static item => item.UnitId).ToHashSet(StringComparer.Ordinal);
-        var identityRoot = plan.Files.Length == 0
+        identityRoot ??= plan.Files.Length == 0
             ? Directory.GetCurrentDirectory()
             : Path.GetDirectoryName(Path.GetFullPath(plan.Files[0].FullPath)) ?? Directory.GetCurrentDirectory();
         foreach (var disposition in ledger.Entries

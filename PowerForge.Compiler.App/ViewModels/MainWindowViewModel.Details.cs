@@ -197,7 +197,7 @@ public sealed partial class MainWindowViewModel
         }
 
         var folder = Directory.Exists(InputPath) ? InputPath : Path.GetDirectoryName(InputPath) ?? string.Empty;
-        var suggested = HasSettingsFile ? SettingsPath : Path.Combine(folder, InterimCompileEngine.DefaultSettingsFileName);
+        var suggested = HasSettingsFile ? SettingsPath : Path.Combine(folder, CompilerAppEngine.DefaultSettingsFileName);
         var path = suggested;
         if (askForPath)
         {

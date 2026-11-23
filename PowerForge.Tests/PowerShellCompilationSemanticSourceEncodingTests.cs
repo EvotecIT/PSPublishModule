@@ -8,7 +8,7 @@ namespace PowerForge.Tests;
 public sealed partial class PowerShellCompilationSemanticOracleTests
 {
     [Fact]
-    public void ArtifactCmdletResolvesDuplicatePathsWithThePackageProfile()
+    public void ArtifactCmdletResolvesDuplicatePathsAsOneScript()
     {
         using var fixture = OracleFixture.Create(". \"$PSScriptRoot/café.ps1\"");
         File.WriteAllText(Path.Combine(fixture.RootPath, "café.ps1"), "'helper'");
@@ -23,10 +23,38 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
             using var command = System.Management.Automation.PowerShell.Create();
             command.Runspace = runspace;
             command.AddCommand("Build-PowerShellArtifact").AddParameter("Path", paths)
-                .AddParameter("TargetFramework", "net472").AddParameter("WhatIf");
+                .AddParameter("WhatIf");
             Assert.Empty(command.Invoke());
             Assert.Empty(command.Streams.Error);
         }
+    }
+
+    [Fact]
+    public void ArtifactCmdletPreparesCompleteModuleWithDynamicRuntimeSources()
+    {
+        using var fixture = OracleFixture.Create("'unused'");
+        var source = Path.Combine(fixture.RootPath, "Dynamic.psm1");
+        var manifest = Path.Combine(fixture.RootPath, "Dynamic.psd1");
+        var output = Path.Combine(fixture.RootPath, "compiled");
+        Directory.CreateDirectory(Path.Combine(fixture.RootPath, "Public"));
+        File.WriteAllText(source,
+            "if ($false) { $Files = @(Get-ChildItem -Path $PSScriptRoot/Public/*.ps1) }; foreach ($File in $Files) { . $File.FullName }");
+        File.WriteAllText(manifest, "@{ RootModule = 'Dynamic.psm1'; ModuleVersion = '1.0.0' }");
+        File.WriteAllText(Path.Combine(fixture.RootPath, "Public", "Get-Example.ps1"), "function Get-Example { return 42 }");
+        var sessionState = InitialSessionState.CreateDefault();
+        sessionState.Commands.Add(new SessionStateCmdletEntry("Build-PowerShellArtifact",
+            typeof(PSPublishModule.BuildPowerShellArtifactCommand), helpFileName: null));
+        using var runspace = RunspaceFactory.CreateRunspace(sessionState);
+        runspace.Open();
+        using var command = System.Management.Automation.PowerShell.Create();
+        command.Runspace = runspace;
+        command.AddCommand("Build-PowerShellArtifact").AddParameter("Path", new[] { manifest })
+            .AddParameter("ResourceMode", PowerShellCompilationResourceMode.CompleteModule)
+            .AddParameter("OutputDirectory", output).AddParameter("WhatIf");
+
+        Assert.Empty(command.Invoke());
+        Assert.Empty(command.Streams.Error);
+        Assert.False(Directory.Exists(output));
     }
 
     [PinnedSemanticHostFact]

@@ -5,7 +5,7 @@ using System.Text.Json;
 internal static partial class Program
 {
     private const string PowerShellCheckUsage =
-        "Usage: powerforge powershell check <path> [--kind <exe|dll|library>] [--mode <Package|Hybrid|Strict>] [--framework <tfm>] [--target-contract <target.json>] [--resource-mode <Declared|CompleteModule|None>] [--include-resource <pattern>] [--exclude-resource <pattern>] [--out <directory>] [--write-review <review.json>] [--output json]";
+        "Usage: powerforge powershell check <path> [--path <additional.ps1> ...] [--entry-point <main.ps1>] [--kind <exe|dll|library>] [--mode <Package|Hybrid|Strict>] [--framework <tfm>] [--target-contract <target.json>] [--semantic-profile <id>] [--rid <rid>] [--self-contained] [--optimization <None|Trimmed|NativeAot>] [--no-single-file] [--resource-mode <Declared|CompleteModule|None>] [--include-resource <pattern>] [--exclude-resource <pattern>] [--out <directory>] [--name <artifact>] [--write-review <review.json>] [--output json]";
 
     private const string PowerShellDoctorUsage =
         "Usage: powerforge powershell doctor [--target-contract <target.json>] [--output json]";
@@ -13,26 +13,22 @@ internal static partial class Program
     private static int CommandPowerShellCheck(string[] args, bool outputJson, ILogger logger)
     {
         const string command = "powershell.check";
-        if (!TryValidatePowerShellArguments(args,
-                new[] { "--kind", "--mode", "--framework", "--semantic-profile", "--target-contract", "--resource-mode",
-                    "--include-resource", "--exclude-resource", "--out", "--write-review", "--output" },
-                new[] { "--json", "--output-json" }, out var path, out var error))
-            return WritePowerShellError(outputJson, 2, error, logger, command);
-        if (!TryParsePowerShellAnalysisRequest(args, path, out var analysis, out error))
+        if (!TryValidatePowerShellArguments(args, PowerShellSelectionOptions.Append("--write-review").ToArray(),
+                PowerShellSelectionFlags, out var path, out var error))
             return WritePowerShellError(outputJson, 2, error, logger, command);
 
-        var result = new PowerShellCompilationHostService().Check(new PowerShellCompilationCheckRequest(analysis!.Path)
+        PowerShellCompilationCheckResult result;
+        try
         {
-            Kind = analysis.Kind,
-            Mode = analysis.Mode == PowerShellCompilationMode.Analyze ? null : analysis.Mode,
-            Target = analysis.TargetContract,
-            TargetFramework = TryGetOptionValue(args, "--framework") ?? PowerShellCompilationTargetFrameworkPolicy.Default,
-            SemanticProfileId = analysis.SemanticProfileId,
-            ResourceMode = analysis.ResourceMode,
-            IncludeResource = GetOptionValues(args, "--include-resource").ToArray(),
-            ExcludeResource = GetOptionValues(args, "--exclude-resource").ToArray(),
-            OutputDirectory = TryGetOptionValue(args, "--out")
-        });
+            if (!TryParsePowerShellSelection(args, path, out var selection, out error, allowAnalyzeAlias: true))
+                return WritePowerShellError(outputJson, 2, error, logger, command);
+            result = new PowerShellCompiler().Check(selection!);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException or ArgumentException)
+        {
+            return WritePowerShellError(outputJson, 2, exception.Message, logger, command);
+        }
+
         var reviewPath = TryGetOptionValue(args, "--write-review");
         if (result.ProposedReview is not null && reviewPath is not null)
         {
@@ -70,14 +66,11 @@ internal static partial class Program
         try
         {
             var targetPath = TryGetOptionValue(args, "--target-contract");
-            var target = targetPath is null
-                ? null
-                : JsonSerializer.Deserialize(File.ReadAllText(targetPath), CliJson.Context.PowerShellCompilationTargetContract)
-                  ?? throw new InvalidDataException("The target contract was empty.");
-            var result = new PowerShellCompilationHostService().Doctor(target);
+            var target = targetPath is null ? null : ReadPowerShellTargetContract(targetPath);
+            var result = new PowerShellCompiler().CheckEnvironment(target);
             if (outputJson)
                 return WritePowerShellHostResult(command, result.Succeeded,
-                    CliJson.SerializeToElement(result, CliJson.Context.PowerShellCompilationDoctorResult));
+                    CliJson.SerializeToElement(result, CliJson.Context.PowerShellCompilationEnvironmentResult));
             if (result.Succeeded)
                 logger.Info($"Selected .NET SDK: {result.DotNetSdkVersion}");
             WritePowerShellHostDiagnostics(result.Diagnostics, logger);

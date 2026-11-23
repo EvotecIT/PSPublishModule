@@ -1,10 +1,10 @@
 namespace PowerForge;
 
 /// <summary>Corrective guidance for the stable compiler diagnostic codes.</summary>
-public static class PowerShellCompilationHostDiagnosticCatalog
+internal static class PowerShellCompilationHostDiagnosticCatalog
 {
     /// <summary>Gets the suggested action for a compiler finding.</summary>
-    public static string GetFix(PowerShellCompilationDiagnosticCode code)
+    internal static string GetFix(PowerShellCompilationDiagnosticCode code)
         => code switch
         {
             PowerShellCompilationDiagnosticCode.InputError => "Check input paths and the selected artifact settings.",

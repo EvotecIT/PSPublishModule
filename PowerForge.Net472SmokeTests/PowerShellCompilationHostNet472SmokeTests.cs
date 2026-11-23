@@ -49,11 +49,11 @@ function Read-Record {
     Get-Content "$PSScriptRoot/../record.txt"
 }
 '@)
-$check = [PowerForge.PowerShellCompilationCheckRequest]::new($rejectedSource)
+$check = [PowerForge.PowerShellCompilationRequest]::new($rejectedSource)
 $check.Kind = [PowerForge.PowerShellCompilationArtifactKind]::BinaryModule
 $check.Mode = [PowerForge.PowerShellCompilationMode]::Hybrid
 $check.TargetFramework = 'net472'
-$rejected = [PowerForge.PowerShellCompilationHostService]::new().Check($check)
+$rejected = [PowerForge.PowerShellCompiler]::new().Check($check)
 $issue = @($rejected.Diagnostics)
 if ($rejected.CanProceed -or $issue.Count -ne 1 -or $issue[0].FilePath -ne $rejectedSource -or
     $issue[0].Line -ne 2 -or $issue[0].Column -ne 17 -or $issue[0].Message -notlike '*escapes the source root*') {

@@ -11,11 +11,11 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         string destination,
         string generatedSource,
         string rootSourcePath,
+        string identityRoot,
         IEnumerable<string> compilationSourcePaths,
         bool includeSyntheticEntry = false)
     {
         var fullRootSourcePath = Path.GetFullPath(rootSourcePath);
-        var identityRoot = Path.GetDirectoryName(fullRootSourcePath) ?? Directory.GetCurrentDirectory();
         var checksums = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var sourcePath in new[] { fullRootSourcePath }.Concat(compilationSourcePaths))
         {

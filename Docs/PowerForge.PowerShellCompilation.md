@@ -33,7 +33,7 @@ emission. To change the selection or refresh a changed source, run `check`
 again and save a new review file. The existing `--dependency-lock` option
 continues to accept a dependency graph for scripted builds.
 
-The CLI and other hosts can use `PowerShellCompilationHostService` for the same
+The CLI and other hosts can use `PowerShellCompiler` for the same
 analysis, review, and build behavior. The service accepts cancellation and
 reports coarse progress phases. Dependency planning and shaping can finish
 their current operation before a cancellation takes effect.

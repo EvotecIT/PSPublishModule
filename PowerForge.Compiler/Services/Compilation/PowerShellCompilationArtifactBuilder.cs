@@ -54,6 +54,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         string? approvedDependencyHash = null)
     {
         if (spec is null) throw new ArgumentNullException(nameof(spec));
+        spec = spec.Copy();
         var progress = logger is null ? PowerShellCompilationBuildProgress.None : new PowerShellCompilationBuildProgress(logger);
         cancellationToken.ThrowIfCancellationRequested();
         PowerShellCompilationProgress.Report(phaseProgress, PowerShellCompilationHostPhase.Resolving);
@@ -62,7 +63,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         ValidateSpec(spec);
         var runtimeIdentifier = ResolveRuntimeIdentifier(spec);
         if (!string.IsNullOrWhiteSpace(runtimeIdentifier)) spec.RuntimeIdentifier = runtimeIdentifier;
-        var sourceRoot = Path.GetDirectoryName(Path.GetFullPath(spec.SourcePath)) ?? Directory.GetCurrentDirectory();
+        var artifactName = PowerShellCompilationArtifactName.Normalize(spec.ArtifactName, nameof(spec.ArtifactName));
+        var sourceRoot = GetSourceRoot(spec);
         var snapshot = new PowerShellSourceSnapshot(sourceRoot, spec.SemanticProfileId);
         PowerShellCompilationOutputPolicy.EnsureDoesNotOverlapRecursiveLoaderRoot(spec.SourcePath, spec.OutputDirectory, snapshot);
 
@@ -70,7 +72,6 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         PowerShellCompilationPathSafety.EnsureNoLinksFromFileSystemRoot(
             spec.OutputDirectory,
             $"PowerShell compilation output directory '{spec.OutputDirectory}' must not be a symbolic link or junction.");
-        var artifactName = PowerShellCompilationArtifactName.Normalize(spec.ArtifactName, nameof(spec.ArtifactName));
         progress.Announce($"Building {spec.Kind} '{artifactName}' ({spec.Mode}) from {spec.SourcePath}");
         // Microsoft.PowerShell.SDK carries deeply nested content files. Keeping the disposable
         // generated project below the durable output directory can exceed MAX_PATH on Windows
@@ -185,7 +186,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                     commandProviderInputs,
                     sourceDocuments);
                 WriteCompiledPowerShellSource(Path.Combine(workspace, "CompiledPowerShellScript.cs"), executable.CompiledSource,
-                    spec.SourcePath, compilationSourcePaths, includeSyntheticEntry: true);
+                    spec.SourcePath, sourceRoot, compilationSourcePaths, includeSyntheticEntry: true);
                 File.WriteAllText(Path.Combine(workspace, "Program.cs"), executable.ProgramSource, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
                 foreach (var runtimeSource in executable.RuntimeSources)
                     WriteExecutableRuntimeSource(workspace, runtimeSource);
@@ -284,7 +285,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                             method.SourceName.Equals(unit.Name, StringComparison.OrdinalIgnoreCase) && method.SourceLine == unit.StartLine)))))
                     throw new InvalidOperationException("Strict DLL compilation rejected a top-level script unit because DLL emitters currently produce typed functions only.");
                 WriteCompiledPowerShellSource(Path.Combine(workspace, "CompiledPowerShell.cs"), typed.SourceCode,
-                    spec.SourcePath, compilationSourcePaths);
+                    spec.SourcePath, sourceRoot, compilationSourcePaths);
                 if (spec.Kind == PowerShellCompilationArtifactKind.BinaryModule)
                 {
                     WriteBinaryHostRuntime(workspace, typed);
@@ -376,7 +377,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 plan,
                 compiledMethodDetails,
                 unitDispositionLedger,
-                typed?.PromotedRegions);
+                typed?.PromotedRegions,
+                identityRoot: sourceRoot);
 
             if (spec.Mode == PowerShellCompilationMode.Strict && compiledMethodDetails.Count > 0)
             {

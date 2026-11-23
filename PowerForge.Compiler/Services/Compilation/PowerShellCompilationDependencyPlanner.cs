@@ -9,11 +9,12 @@ public sealed partial class PowerShellCompilationDependencyPlanner
     public PowerShellCompilationDependencyGraph AnalyzeGraph(PowerShellCompilationBuildSpec spec)
     {
         if (spec is null) throw new ArgumentNullException(nameof(spec));
+        spec = spec.Copy();
         PowerShellCompilationArtifactBuilder.ApplyExplicitTargetContract(spec);
         var runtimeIdentifier = PowerShellCompilationArtifactBuilder.ResolveRuntimeIdentifier(spec);
         if (!string.IsNullOrWhiteSpace(runtimeIdentifier)) spec.RuntimeIdentifier = runtimeIdentifier;
         var sourcePath = Path.GetFullPath(spec.SourcePath);
-        var sourceRoot = Path.GetDirectoryName(sourcePath) ?? Directory.GetCurrentDirectory();
+        var sourceRoot = PowerShellCompilationArtifactBuilder.GetSourceRoot(spec);
         var sourceFiles = new[] { sourcePath }
             .Concat(spec.CompilationSourcePaths ?? Array.Empty<string>())
             .Where(static path => !string.IsNullOrWhiteSpace(path))
@@ -106,7 +107,7 @@ public sealed partial class PowerShellCompilationDependencyPlanner
         var manifestPath = spec.Kind == PowerShellCompilationArtifactKind.BinaryModule
             ? PowerShellCompiledModuleManifest.ResolveSourceManifest(spec.SourcePath, spec.ModuleManifestPath) : spec.ModuleManifestPath;
         if (!File.Exists(manifestPath)) manifestPath = null;
-        var moduleRoot = Path.GetDirectoryName(Path.GetFullPath(manifestPath ?? spec.SourcePath)) ?? Directory.GetCurrentDirectory();
+        var moduleRoot = PowerShellCompilationArtifactBuilder.GetSourceRoot(spec);
         snapshot ??= new PowerShellSourceSnapshot(moduleRoot, spec.SemanticProfileId);
         var compilationPaths = sourceFiles.ToArray();
         var runtimePaths = spec.RuntimeSourcePaths is { Length: > 0 } ? spec.RuntimeSourcePaths : compilationPaths;
@@ -142,7 +143,7 @@ public sealed partial class PowerShellCompilationDependencyPlanner
             ? PowerShellCompiledModuleManifest.ResolveSourceManifest(spec.SourcePath, spec.ModuleManifestPath)
             : spec.ModuleManifestPath;
         if (!File.Exists(manifestPath)) manifestPath = null;
-        var moduleRoot = Path.GetDirectoryName(Path.GetFullPath(manifestPath ?? spec.SourcePath)) ?? Directory.GetCurrentDirectory();
+        var moduleRoot = PowerShellCompilationArtifactBuilder.GetSourceRoot(spec);
         return PowerShellCompilationDependencyGraphBuilder.Build(
             spec.SourcePath,
             manifestPath,

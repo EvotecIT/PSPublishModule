@@ -4,34 +4,42 @@ Desktop tools, editor extensions and CI steps can use the same compiler service 
 
 ## Host API
 
-The service lives in the `PowerForge.Compiler` assembly and NuGet package,
-in the `PowerForge` namespace. `PowerForge.PowerShell` brings the compiler
-package in as a dependency and forwards the existing compiler types for
-applications built against the earlier assembly.
+Use `PowerForge.PowerShellCompiler` from the `PowerForge.Compiler` NuGet
+package. The desktop app, CLI and PowerShell cmdlet use the same compiler to
+resolve source paths, select a semantic profile and prepare a build.
+
+| Method | Use |
+|---|---|
+| `Check(request)` | Analyze an artifact selection and propose a dependency review. |
+| `Prepare(request)` | Resolve a selection into a build specification. Set build controls such as caching and signing on the returned specification. |
+| `BuildReviewed(spec, review)` | Build after confirming the reviewed target and dependency graph. |
+| `Build(spec)` | Build with the specification's dependency lock or explicit unattended resolution policy. |
+| `CheckEnvironment(target)` | Validate a target and check the selected .NET SDK. |
 
 ```csharp
-public PowerShellCompilationCheckResult Check(
-    PowerShellCompilationCheckRequest request,
-    CancellationToken cancellationToken = default,
-    IProgress<PowerShellCompilationProgress>? progress = null);
+var compiler = new PowerShellCompiler();
+var request = new PowerShellCompilationRequest("Example.ps1")
+{
+    Mode = PowerShellCompilationMode.Strict
+};
 
-public PowerShellCompilationBuildResult Compile(
-    PowerShellCompilationBuildSpec spec,
-    PowerShellCompilationReview review,
-    ILogger? logger = null,
-    CancellationToken cancellationToken = default,
-    IProgress<PowerShellCompilationProgress>? progress = null);
-
-public PowerShellCompilationDoctorResult Doctor(
-    PowerShellCompilationTargetContract? target = null,
-    CancellationToken cancellationToken = default);
+var check = compiler.Check(request);
+// Display check.Diagnostics and review check.Dependencies before confirming.
+if (check.ProposedReview is { } confirmedReview)
+{
+    var spec = compiler.Prepare(request);
+    var result = compiler.BuildReviewed(spec, confirmedReview);
+}
 ```
 
-| Operation | CLI | Result |
-|---|---|---|
-| `Check` | `powershell check <path> [--mode <mode>] [--target-contract <target.json>] [--write-review <review.json>]` | Analysis, recommendation, diagnostics and dependency decisions for one selection |
-| `Compile` | `powershell build <path> --reviewed-check <review.json>` | Artifact and manifest paths on success, or a build failure |
-| `Doctor` | `powershell doctor [--target-contract <target.json>]` | Selected .NET SDK version or an environment finding |
+A request can also contain an ordered set of loose scripts. Set `EntryPoint`
+when they form one executable. A loose set selected as a binary module
+defaults to Strict. An exact `Target` supplies the framework, semantic profile
+and deployment settings. Other explicit artifact and target settings must
+agree with it. The CLI accepts the same source, target and resource flags
+on `powershell check` and `powershell build` so a review can cover a loose
+source set or a custom executable deployment. Trimmed and NativeAOT builds require an explicit RID.
+`Build-PowerShellArtifact -WhatIf` validates source and target selection before it reports the proposed action.
 
 ### Check
 
@@ -45,16 +53,17 @@ Supply a source path and any mode, kind, target, resource or output settings for
 2. Confirm the proposed review for that selection. It carries schema version 1, the normalized target contract and the dependency graph. In the CLI, save it with `--write-review`, inspect it and pass it to `--reviewed-check`.
 3. Compile with the matching source, kind, mode, target and resource settings. The compiler verifies the target and resolves the dependency graph again before emission. Run a fresh check when the selection or reviewed inputs change.
 
-Save review files outside a module's source directory so they do not change the dependency inventory. The review writer requires a new file path. The desktop app uses the same service when you select **Review dependencies** and **Confirm and compile**. See the [compiler app](../PowerForge.Compiler.App/README.md).
+Save review files outside a module's source directory so they do not change the dependency inventory. The review writer requires a new file path. The desktop app uses the same compiler when you select **Review dependencies** and **Confirm and compile**. See the [compiler app](../PowerForge.Compiler.App/README.md).
 
 The existing CLI `--dependency-lock` option accepts a dependency graph for scripted builds. Custom command providers use the provider and dependency lock workflow.
 
+A reviewed library build requires the selected source to be eligible without omitted units. A direct Hybrid library build using an explicit dependency lock can emit a partial DLL. Inspect its omitted units and verify the intended public ABI before distributing it.
+
 ### Package-mode script forms
 
-Retained executable entries preserve compatible `#requires -Version` and `#requires -PSEdition` directives. Check and build validate the embedded host's supported major and minor versions and edition. Embedded script dependencies with directives remain blocked.
+Retained executable entries preserve compatible `#requires -Version` and `#requires -PSEdition` directives. Check and build validate the embedded host's supported major and minor versions and edition. Embedded script dependencies use the same requirements policy.
 
-- Module requirements remain blocked for retained executables. The planned contract records the name and version constraints as target-machine dependencies in the reviewed lock and enforces them at startup.
-- Elevation, assembly and application-specific shell requirements remain blocked.
+Retained executables reject module, elevation, assembly and application-specific shell requirements.
 
 `using module`, `using assembly`, and `exit` inside dot-sourced dependencies stay unsupported for now, but are reported by `Check` with a severity and a fix.
 
@@ -66,15 +75,15 @@ on the pinned hosts. Secure and masked input, confirmation, credentials, and
 general host access remain outside the console contract. Check rejects input
 when it cannot rule out protected options in parameter defaults.
 
-### Compile and progress
+### Build and progress
 
 On success, `PowerShellCompilationBuildResult` gives the artifact and manifest paths. The manifest contains the compiled and fallback units and their dispositions. On failure, inspect `Error` and `Failure` for the stage and any source information. `ContainsEmbeddedPowerShellSource` identifies builds that carry PowerShell source. Package and Hybrid can carry readable script content. Strict compiles the admitted code. A Strict module can still carry PowerShell source as a staged resource, which also sets `ContainsEmbeddedPowerShellSource`.
 
-`Check` and `Compile` accept a cancellation token and can report phase changes through `IProgress<PowerShellCompilationProgress>`. Each report carries a phase. Dependency planning and shaping can finish their current operation before cancellation takes effect.
+`Check`, `Build` and `BuildReviewed` accept a cancellation token and can report phase changes through `IProgress<PowerShellCompilationProgress>`. Each report carries a phase. Dependency planning and shaping can finish their current operation before cancellation takes effect.
 
-### Doctor
+### Check the environment
 
-`Doctor` reports the selected .NET SDK version. With an explicit modern target contract, it validates the target options and checks that the selected SDK describes the target framework. Prerequisite checks for platform linkers, NativeAOT tools and signing certificates remain open.
+`CheckEnvironment` reports the selected .NET SDK version. With an explicit modern target contract, it validates the target options and checks that the selected SDK describes the target framework. An invalid target has its own diagnostic and corrective action. Prerequisite checks for platform linkers, NativeAOT tools and signing certificates remain open.
 
 ## Packaging work
 

@@ -56,6 +56,7 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
                     artifact.Target.ArtifactKind,
                     artifact.Target.Mode)
                 {
+                    ResolvedSourceRoot = input.ModuleRoot,
                     ModuleManifestPath = input.ModuleManifestPath,
                     CompilationSourcePaths = input.CompilationSourceFiles,
                     RuntimeSourcePaths = input.SourceFiles,

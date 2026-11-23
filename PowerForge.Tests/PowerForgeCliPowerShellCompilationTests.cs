@@ -307,9 +307,15 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
 
         try
         {
-            var build = await RunCliAsync(
-                repositoryRoot,
-                new[] { "powershell", "build", entryPoint, "--path", helper, "--entry-point", entryPoint, "--kind", "exe", "--mode", "Strict", "--framework", "net10.0", "--allow-unreviewed-dependencies", "--out", output, "--name", "TypedMultiCliProof", "--output", "json" });
+            var reviewPath = Path.Combine(root, "review.json");
+            var selection = new[] { entryPoint, "--path", helper, "--entry-point", entryPoint, "--kind", "exe",
+                "--mode", "Strict", "--framework", "net10.0", "--rid", $" {RuntimeInformation.RuntimeIdentifier.ToUpperInvariant()} ",
+                "--out", output, "--name", "TypedMultiCliProof", "--output", "json" };
+            var check = await RunCliAsync(repositoryRoot, new[] { "powershell", "check" }
+                .Concat(selection).Concat(new[] { "--write-review", reviewPath }).ToArray());
+            Assert.True(check.ExitCode == 0, FormatFailure("multi-file typed executable check", check));
+            var build = await RunCliAsync(repositoryRoot, new[] { "powershell", "build" }
+                .Concat(selection).Concat(new[] { "--reviewed-check", reviewPath }).ToArray());
             Assert.True(build.ExitCode == 0, FormatFailure("multi-file typed executable build", build));
             string artifactPath;
             using (var document = JsonDocument.Parse(build.StdOut))
