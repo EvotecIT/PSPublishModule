@@ -11,11 +11,11 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
             function Get-Number { return 7 }
             "value=$Name|$(Get-Number)"
             """);
-        var service = new PowerShellCompilationHostService();
+        var service = new PowerShellCompiler();
         foreach (var mode in new[] { PowerShellCompilationMode.Package, PowerShellCompilationMode.Hybrid })
         {
             var output = Path.Combine(fixture.RootPath, mode.ToString());
-            var check = service.Check(new PowerShellCompilationCheckRequest(fixture.ScriptPath)
+            var check = service.Check(new PowerShellCompilationRequest(fixture.ScriptPath)
             {
                 Mode = mode,
                 OutputDirectory = output
@@ -23,7 +23,7 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
             Assert.True(check.CanProceed, string.Join(Environment.NewLine, check.Diagnostics.Select(item => item.Message)));
             var spec = new PowerShellCompilationBuildSpec(fixture.ScriptPath, output, "MandatoryParameter",
                 PowerShellCompilationArtifactKind.Executable, mode);
-            var build = service.Compile(spec, check.ProposedReview!);
+            var build = service.BuildReviewed(spec, check.ProposedReview!);
             Assert.True(build.Succeeded, build.Error + Environment.NewLine + build.BuildOutput);
 
             var successArguments = new[] { "-Label", "Ada" };

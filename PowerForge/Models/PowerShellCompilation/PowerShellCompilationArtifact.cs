@@ -35,6 +35,8 @@ public enum PowerShellCompilationExecutableOptimization
 /// </summary>
 public sealed class PowerShellCompilationBuildSpec
 {
+    internal string? ResolvedSourceRoot { get; set; }
+
     internal PowerShellCompilationBuildSpec Copy() => (PowerShellCompilationBuildSpec)MemberwiseClone();
 
     /// <summary>Creates an artifact-build specification with the default mode for the artifact kind.</summary>

@@ -4,11 +4,11 @@ using PowerForge.Compiler.App.ViewModels;
 
 namespace PowerForge.Compiler.App.Tests;
 
-public sealed class InterimCompileEngineTests : IDisposable
+public sealed class CompilerAppEngineTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "pf-compiler-app-" + Guid.NewGuid().ToString("N"));
 
-    public InterimCompileEngineTests() => Directory.CreateDirectory(_root);
+    public CompilerAppEngineTests() => Directory.CreateDirectory(_root);
 
     public void Dispose()
     {
@@ -20,7 +20,7 @@ public sealed class InterimCompileEngineTests : IDisposable
     {
         var missing = Path.Combine(_root, "missing.ps1");
 
-        var result = await new InterimCompileEngine().CheckAsync(missing, FileRules.Default, CancellationToken.None);
+        var result = await new CompilerAppEngine().CheckAsync(missing, FileRules.Default, CancellationToken.None);
 
         Assert.Empty(result.Modes);
         Assert.Null(result.Recommended);
@@ -34,7 +34,7 @@ public sealed class InterimCompileEngineTests : IDisposable
     {
         var script = Write("Report.ps1", "#requires -Version 99.0\nGet-ChildItem -Path $PSScriptRoot | Select-Object Name\n");
 
-        var result = await new InterimCompileEngine().CheckAsync(script, FileRules.Default, CancellationToken.None);
+        var result = await new CompilerAppEngine().CheckAsync(script, FileRules.Default, CancellationToken.None);
 
         Assert.Equal(PowerShellCompilationArtifactKind.Executable, result.Kind);
         var package = Assert.Single(result.Modes, static mode => mode.Mode == PowerShellCompilationMode.Package);
@@ -50,7 +50,7 @@ public sealed class InterimCompileEngineTests : IDisposable
     public async Task ReviewedSelectionBuildsAndRejectsChangedSource()
     {
         var script = Write("Reviewed.ps1", "return 21");
-        var engine = new InterimCompileEngine();
+        var engine = new CompilerAppEngine();
         var target = new CompileTarget("local", PowerShellCompilationMode.Strict, "net10.0",
             System.Runtime.InteropServices.RuntimeInformation.RuntimeIdentifier,
             PowerShellCompilationDeploymentModel.FrameworkDependent, "Supported", true);
@@ -76,7 +76,7 @@ public sealed class InterimCompileEngineTests : IDisposable
     public async Task SavedReviewEnablesConfirmationOnlyForTheMatchingDesktopSelection()
     {
         var script = Write("Handoff.ps1", "return 21");
-        var engine = new InterimCompileEngine();
+        var engine = new CompilerAppEngine();
         var model = new MainWindowViewModel(engine);
         await model.SetInputAsync(script);
         model.OutputDirectory = Path.Combine(_root, "handoff-output");
@@ -122,7 +122,7 @@ public sealed class InterimCompileEngineTests : IDisposable
     public async Task PackageReviewPreservesPortableOutputAndShowsTheLockedPowerShellSdk()
     {
         var script = Write("Portable.ps1", "Write-Output 'daily report'");
-        var engine = new InterimCompileEngine();
+        var engine = new CompilerAppEngine();
         var target = Assert.Single(engine.GetTargets(PowerShellCompilationMode.Package, PowerShellCompilationArtifactKind.Executable));
         var check = await engine.ReviewAsync(new CompileRequest(script, target.Mode, target, null), CancellationToken.None);
 
@@ -148,7 +148,7 @@ public sealed class InterimCompileEngineTests : IDisposable
         Write("Reports.psm1", "function Get-Report { return 'ready' }");
         Write("Reports.psd1", "@{ RootModule = 'Reports.psm1'; ModuleVersion = '2.3.0' }");
 
-        var engine = new InterimCompileEngine();
+        var engine = new CompilerAppEngine();
         var target = engine.GetTargets(PowerShellCompilationMode.Hybrid, PowerShellCompilationArtifactKind.BinaryModule)
             .Single(static item => item.TargetFramework == "net10.0");
         var check = await engine.ReviewAsync(new CompileRequest(parent, target.Mode, target, null), CancellationToken.None);
@@ -164,7 +164,7 @@ public sealed class InterimCompileEngineTests : IDisposable
     {
         var script = Write("Add.ps1", "function Add-Numbers {\n    param([int] $A, [int] $B)\n    return $A + $B\n}\nAdd-Numbers -A 2 -B 3\n");
 
-        var result = await new InterimCompileEngine().CheckAsync(script, FileRules.Default, CancellationToken.None);
+        var result = await new CompilerAppEngine().CheckAsync(script, FileRules.Default, CancellationToken.None);
 
         var hybrid = Assert.Single(result.Modes, static mode => mode.Mode == PowerShellCompilationMode.Hybrid);
         Assert.Equal(CompileOutcome.Mixed, hybrid.Outcome);
@@ -178,19 +178,19 @@ public sealed class InterimCompileEngineTests : IDisposable
         static ModeCheck Mode(PowerShellCompilationMode mode, CompileOutcome outcome) =>
             new(mode, outcome, 0, 0, 0, Array.Empty<CompileDiagnostic>(), Array.Empty<CompileDependency>());
 
-        Assert.Equal(PowerShellCompilationMode.Strict, InterimCompileEngine.Recommend(new[]
+        Assert.Equal(PowerShellCompilationMode.Strict, CompilerAppEngine.Recommend(new[]
         {
             Mode(PowerShellCompilationMode.Package, CompileOutcome.Packaged),
             Mode(PowerShellCompilationMode.Hybrid, CompileOutcome.Mixed),
             Mode(PowerShellCompilationMode.Strict, CompileOutcome.Native)
         }));
-        Assert.Equal(PowerShellCompilationMode.Hybrid, InterimCompileEngine.Recommend(new[]
+        Assert.Equal(PowerShellCompilationMode.Hybrid, CompilerAppEngine.Recommend(new[]
         {
             Mode(PowerShellCompilationMode.Package, CompileOutcome.Packaged),
             Mode(PowerShellCompilationMode.Hybrid, CompileOutcome.Mixed),
             Mode(PowerShellCompilationMode.Strict, CompileOutcome.Blocked)
         }));
-        Assert.Null(InterimCompileEngine.Recommend(new[]
+        Assert.Null(CompilerAppEngine.Recommend(new[]
         {
             Mode(PowerShellCompilationMode.Package, CompileOutcome.Blocked),
             Mode(PowerShellCompilationMode.Hybrid, CompileOutcome.Blocked),
@@ -203,7 +203,7 @@ public sealed class InterimCompileEngineTests : IDisposable
     {
         var failed = new PowerShellCompilationBuildResult { Succeeded = false, Error = "dotnet publish failed." };
 
-        var result = InterimCompileEngine.MapBuildResult(failed, PowerShellCompilationMode.Hybrid, TimeSpan.FromSeconds(1));
+        var result = CompilerAppEngine.MapBuildResult(failed, PowerShellCompilationMode.Hybrid, TimeSpan.FromSeconds(1));
 
         Assert.False(result.Succeeded);
         Assert.Equal(CompileOutcome.Blocked, result.Summary);

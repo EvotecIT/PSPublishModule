@@ -37,9 +37,12 @@ public sealed partial class PowerShellCompilationArtifactBuilder
     {
         if (spec.TargetContract is not null)
         {
-            var target = PowerShellCompilationTargetContractService.Normalize(spec.TargetContract);
+            var target = PowerShellCompilationTargetContractService.Normalize(spec.TargetContract.Copy());
             if (target.ArtifactKind != spec.Kind || target.Mode != spec.Mode)
                 throw new ArgumentException("The explicit PowerShell compilation target kind and mode must match the build request.", nameof(spec));
+            if (!string.Equals(target.RuntimeIdentifier, target.RuntimeIdentifier.ToLowerInvariant(), StringComparison.Ordinal))
+                throw new ArgumentException("The target contract requires a lowercase runtime identifier.", nameof(spec));
+            spec.TargetContract = target;
             spec.TargetFramework = target.TargetFramework;
             spec.SemanticProfileId = target.SemanticProfileId;
             spec.RuntimeIdentifier = string.IsNullOrWhiteSpace(target.RuntimeIdentifier) ? null : target.RuntimeIdentifier;
@@ -57,6 +60,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             };
         }
 
+        spec.TargetFramework = spec.TargetFramework?.Trim() ?? string.Empty;
+        spec.RuntimeIdentifier = string.IsNullOrWhiteSpace(spec.RuntimeIdentifier) ? null : spec.RuntimeIdentifier!.Trim().ToLowerInvariant();
         spec.SemanticProfileId = PowerShellCompilationSemanticOracleCatalog.Get(
             string.IsNullOrWhiteSpace(spec.SemanticProfileId)
                 ? GetDefaultBuildSemanticProfileId(spec.Mode, spec.TargetFramework)
@@ -78,7 +83,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 spec.Optimization,
                 explicitContract: false,
                 spec.SemanticProfileId)
-            : PowerShellCompilationTargetContractService.Normalize(spec.TargetContract);
+            : PowerShellCompilationTargetContractService.Normalize(spec.TargetContract.Copy());
         var expected = PowerShellCompilationTargetContractService.Create(
             spec.Kind,
             spec.Mode,
@@ -173,7 +178,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         string generatedSourceSha256)
     {
         var resolvedPackages = PowerShellCompilationResolvedPackageCatalog.ReadAndVerify(workspace, graph, spec.NuGetLockFilePath);
-        var sourceRoot = Path.GetDirectoryName(Path.GetFullPath(spec.SourcePath)) ?? Directory.GetCurrentDirectory();
+        var sourceRoot = GetSourceRoot(spec);
         var sources = new[] { spec.SourcePath }.Concat(spec.CompilationSourcePaths ?? Array.Empty<string>())
             .Select(Path.GetFullPath)
             .Distinct(PowerShellCompilationPathSafety.PathComparer)

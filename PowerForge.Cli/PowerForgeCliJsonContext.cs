@@ -44,7 +44,7 @@ namespace PowerForge.Cli;
 [JsonSerializable(typeof(PowerShellCompilationPlan))]
 [JsonSerializable(typeof(PowerShellCompilationCheckResult))]
 [JsonSerializable(typeof(PowerShellCompilationReview))]
-[JsonSerializable(typeof(PowerShellCompilationDoctorResult))]
+[JsonSerializable(typeof(PowerShellCompilationEnvironmentResult))]
 [JsonSerializable(typeof(PowerShellCompilationExplanation))]
 [JsonSerializable(typeof(PowerShellCompilationBuildResult))]
 [JsonSerializable(typeof(PowerShellCompilationFailure))]

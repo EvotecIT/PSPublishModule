@@ -83,13 +83,13 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
             }
         }
 
-        var host = new PowerShellCompilationHostService();
+        var host = new PowerShellCompiler();
         foreach (var mode in new[] { PowerShellCompilationMode.Package, PowerShellCompilationMode.Hybrid })
         {
             var output = Path.Combine(fixture.RootPath, mode.ToString());
-            var check = host.Check(new PowerShellCompilationCheckRequest(fixture.ScriptPath) { Mode = mode, OutputDirectory = output });
+            var check = host.Check(new PowerShellCompilationRequest(fixture.ScriptPath) { Mode = mode, OutputDirectory = output });
             Assert.True(check.CanProceed, string.Join(Environment.NewLine, check.Diagnostics.Select(item => item.Message)));
-            var built = host.Compile(new PowerShellCompilationBuildSpec(fixture.ScriptPath, output, "ExitProbe",
+            var built = host.BuildReviewed(new PowerShellCompilationBuildSpec(fixture.ScriptPath, output, "ExitProbe",
                 PowerShellCompilationArtifactKind.Executable, mode), check.ProposedReview!);
             Assert.True(built.Succeeded, built.Error + Environment.NewLine + built.BuildOutput);
             foreach (var scenario in cases)
@@ -277,7 +277,7 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
     public void CheckRejectsProtectedReadHostParameterDefaults(PowerShellCompilationMode mode, string source)
     {
         using var fixture = OracleFixture.Create(source);
-        var check = new PowerShellCompilationHostService().Check(new PowerShellCompilationCheckRequest(fixture.ScriptPath)
+        var check = new PowerShellCompiler().Check(new PowerShellCompilationRequest(fixture.ScriptPath)
         {
             Mode = mode,
             OutputDirectory = Path.Combine(fixture.RootPath, "app")
@@ -305,7 +305,7 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
             Set-Item -LiteralPath C:\\output.txt -Value 'ordinary filesystem path'
             Read-Host -Prompt 'Name'
             """);
-        var check = new PowerShellCompilationHostService().Check(new PowerShellCompilationCheckRequest(fixture.ScriptPath)
+        var check = new PowerShellCompiler().Check(new PowerShellCompilationRequest(fixture.ScriptPath)
         {
             Mode = mode,
             OutputDirectory = Path.Combine(fixture.RootPath, "app")
@@ -324,7 +324,7 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
         File.WriteAllText(Path.Combine(fixture.RootPath, "Setup.ps1"),
             "$PSDefaultParameterValues['Read-*:MaskInput'] = $true");
 
-        var check = new PowerShellCompilationHostService().Check(new PowerShellCompilationCheckRequest(fixture.ScriptPath)
+        var check = new PowerShellCompiler().Check(new PowerShellCompilationRequest(fixture.ScriptPath)
         {
             Mode = mode,
             OutputDirectory = Path.Combine(fixture.RootPath, "app")

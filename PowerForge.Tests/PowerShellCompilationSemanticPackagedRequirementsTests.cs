@@ -25,8 +25,8 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
             if (dependency)
                 File.WriteAllText(Path.Combine(fixture.RootPath, "Helper.ps1"), requirements + body);
             var output = Path.Combine(fixture.RootPath, "app");
-            var host = new PowerShellCompilationHostService();
-            var check = host.Check(new PowerShellCompilationCheckRequest(fixture.ScriptPath)
+            var host = new PowerShellCompiler();
+            var check = host.Check(new PowerShellCompilationRequest(fixture.ScriptPath)
             {
                 Mode = PowerShellCompilationMode.Package,
                 OutputDirectory = output
@@ -39,7 +39,7 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
                 CompilationSourcePaths = input.CompilationSourceFiles,
                 RuntimeSourcePaths = input.SourceFiles
             };
-            var built = host.Compile(spec, check.ProposedReview!);
+            var built = host.BuildReviewed(spec, check.ProposedReview!);
             Assert.True(built.Succeeded, built.Error + Environment.NewLine + built.BuildOutput);
 
             var packaged = await new ProcessRunner().RunAsync(new ProcessRunRequest(

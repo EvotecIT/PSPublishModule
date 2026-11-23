@@ -24,7 +24,7 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
         if (!validated.Files.Any(file => file.Path.Equals(pdbRelativePath, StringComparison.Ordinal)))
             throw new InvalidDataException("The authenticated artifact set does not contain a matching portable PDB.");
         var input = ResolveInput(context, artifact);
-        var sourceRoot = Path.GetDirectoryName(Path.GetFullPath(input.SourcePath)) ?? context.Root;
+        var sourceRoot = input.ModuleRoot;
         var sourceById = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var sourcePath in new[] { input.SourcePath }.Concat(input.CompilationSourceFiles))
         {

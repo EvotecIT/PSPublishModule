@@ -18,10 +18,10 @@ public sealed class SettingsAndCheckOrderTests : IDisposable
     [Fact]
     public void SavingAnotherScriptIntoExistingSettingsIsRefusedAndLeavesTheFileUnchanged()
     {
-        var engine = new InterimCompileEngine();
+        var engine = new CompilerAppEngine();
         var report = WriteScript("Report.ps1");
         var other = WriteScript("Other.ps1");
-        var settingsPath = Path.Combine(_root, InterimCompileEngine.DefaultSettingsFileName);
+        var settingsPath = Path.Combine(_root, CompilerAppEngine.DefaultSettingsFileName);
         engine.SaveSettings(Request(engine, settingsPath, report, PowerShellCompilationMode.Hybrid, null));
         var before = File.ReadAllText(settingsPath);
 
@@ -35,9 +35,9 @@ public sealed class SettingsAndCheckOrderTests : IDisposable
     [Fact]
     public void ClearingTheOutputFolderRestoresTheDefault()
     {
-        var engine = new InterimCompileEngine();
+        var engine = new CompilerAppEngine();
         var script = WriteScript("Report.ps1");
-        var settingsPath = Path.Combine(_root, InterimCompileEngine.DefaultSettingsFileName);
+        var settingsPath = Path.Combine(_root, CompilerAppEngine.DefaultSettingsFileName);
         var custom = Path.Combine(_root, "custom-out");
         var first = engine.SaveSettings(Request(engine, settingsPath, script, PowerShellCompilationMode.Hybrid, custom)).Settings!;
 
@@ -51,9 +51,9 @@ public sealed class SettingsAndCheckOrderTests : IDisposable
     [Fact]
     public void ReopeningRestoresTheMostRecentlySavedTarget()
     {
-        var engine = new InterimCompileEngine();
+        var engine = new CompilerAppEngine();
         var script = WriteScript("Report.ps1");
-        var settingsPath = Path.Combine(_root, InterimCompileEngine.DefaultSettingsFileName);
+        var settingsPath = Path.Combine(_root, CompilerAppEngine.DefaultSettingsFileName);
         engine.SaveSettings(Request(engine, settingsPath, script, PowerShellCompilationMode.Hybrid, null));
         engine.SaveSettings(Request(engine, settingsPath, script, PowerShellCompilationMode.Package, null));
 
@@ -98,7 +98,7 @@ public sealed class SettingsAndCheckOrderTests : IDisposable
         Assert.Equal(string.Empty, viewModel.OutputDirectory);
     }
 
-    private static SaveSettingsRequest Request(InterimCompileEngine engine, string settingsPath, string script, PowerShellCompilationMode mode, string? output) =>
+    private static SaveSettingsRequest Request(CompilerAppEngine engine, string settingsPath, string script, PowerShellCompilationMode mode, string? output) =>
         new(settingsPath, script, FileRules.Default, mode, engine.GetTargets(mode, PowerShellCompilationArtifactKind.Executable)[0], output);
 
     private string WriteScript(string name)

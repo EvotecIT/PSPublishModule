@@ -48,9 +48,9 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
         File.WriteAllText(Path.Combine(fixture.RootPath, "label.txt"), "bundled");
         var other = Path.Combine(fixture.RootPath, "other.ps1");
         File.WriteAllText(other, "'unexpected source ran'");
-        var service = new PowerShellCompilationHostService();
+        var service = new PowerShellCompiler();
         var output = Path.Combine(fixture.RootPath, "hybrid");
-        var check = service.Check(new PowerShellCompilationCheckRequest(fixture.ScriptPath)
+        var check = service.Check(new PowerShellCompilationRequest(fixture.ScriptPath)
         {
             Mode = PowerShellCompilationMode.Hybrid,
             OutputDirectory = output
@@ -64,7 +64,7 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
             CompilationSourcePaths = input.CompilationSourceFiles,
             RuntimeSourcePaths = input.SourceFiles
         };
-        var build = service.Compile(spec, check.ProposedReview!);
+        var build = service.BuildReviewed(spec, check.ProposedReview!);
         Assert.True(build.Succeeded, build.Error + Environment.NewLine + build.BuildOutput);
         Assert.Single(build.Manifest!.UnitDispositionLedger!.Entries, entry => entry.Name == "Get-Tag" && entry.EmittedClrMethod);
 
@@ -122,14 +122,14 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
         var input = new PowerShellCompilationInputResolver().Resolve(fixture.ScriptPath,
             PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Hybrid);
         var output = Path.Combine(fixture.RootPath, "hybrid");
-        var service = new PowerShellCompilationHostService();
-        var check = service.Check(new PowerShellCompilationCheckRequest(fixture.ScriptPath)
+        var service = new PowerShellCompiler();
+        var check = service.Check(new PowerShellCompilationRequest(fixture.ScriptPath)
         {
             Mode = input.Mode,
             OutputDirectory = output
         });
         Assert.True(check.CanProceed, string.Join(Environment.NewLine, check.Diagnostics.Select(issue => issue.Message)));
-        var build = service.Compile(new PowerShellCompilationBuildSpec(fixture.ScriptPath, output, "LoaderChildCall", input.Kind, input.Mode)
+        var build = service.BuildReviewed(new PowerShellCompilationBuildSpec(fixture.ScriptPath, output, "LoaderChildCall", input.Kind, input.Mode)
         {
             CompilationSourcePaths = input.CompilationSourceFiles,
             RuntimeSourcePaths = input.SourceFiles

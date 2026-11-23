@@ -104,6 +104,20 @@ public sealed partial class PowerShellCompilationInputResolverTests
     }
 
     [Fact]
+    public void Resolve_RejectsExecutableSourcesOutsideTheEntrypointDirectory()
+    {
+        using var fixture = ResolverFixture.Create();
+        var entryPoint = fixture.Write("app/Main.ps1", ". \"$PSScriptRoot/../lib/Helper.ps1\"; Get-Helper");
+        var helper = fixture.Write("lib/Helper.ps1", "function Get-Helper { return 2 }");
+
+        var exception = Assert.Throws<InvalidOperationException>(() => new PowerShellCompilationInputResolver()
+            .Resolve(new[] { entryPoint, helper }, entryPointPath: entryPoint));
+
+        Assert.Contains("escapes the executable entrypoint root", exception.Message, StringComparison.Ordinal);
+        Assert.Contains(helper, exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Resolve_ExplicitEntrypointInfersExecutableAndRejectsConflictingKind()
     {
         using var fixture = ResolverFixture.Create();

@@ -55,7 +55,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         PowerShellCompilationBuildSpec spec,
         PowerShellCompilationDependencyGraph graph)
     {
-        var moduleRoot = GetDependencyInputRoot(spec);
+        var moduleRoot = GetSourceRoot(spec);
         foreach (var node in graph.Nodes.Where(static node => node.Exists && node.Identity.Sha256.Length > 0))
         {
             var path = ResolveLockedDependencyInputPath(node.Identity, moduleRoot, spec.NuGetPackageRoot);
@@ -70,7 +70,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         PowerShellCompilationBuildSpec spec, PowerShellCompilationDependencyGraph graph)
     {
         var hashes = new Dictionary<string, string>(PowerShellCompilationPathSafety.PathComparer);
-        var root = GetDependencyInputRoot(spec);
+        var root = GetSourceRoot(spec);
         foreach (var node in graph.Nodes.Where(static node => node.Exists && node.Identity.Sha256.Length > 0))
         {
             var path = ResolveLockedDependencyInputPath(node.Identity, root, spec.NuGetPackageRoot);
@@ -101,9 +101,9 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             throw new InvalidOperationException($"Staged PowerShell compilation payload '{relativePath}' differs from the dependency lock.");
     }
 
-    private static string GetDependencyInputRoot(PowerShellCompilationBuildSpec spec)
-        => Path.GetDirectoryName(Path.GetFullPath(spec.ModuleManifestPath ?? spec.SourcePath))
-           ?? Directory.GetCurrentDirectory();
+    internal static string GetSourceRoot(PowerShellCompilationBuildSpec spec)
+        => (spec.Kind == PowerShellCompilationArtifactKind.Executable ? null : spec.ResolvedSourceRoot)
+           ?? Path.GetDirectoryName(spec.SourcePath) ?? Directory.GetCurrentDirectory();
 
     private static string ResolveRuntimePackAssetPath(PowerShellCompilationDependencyIdentity identity, string? configuredPackageRoot)
     {

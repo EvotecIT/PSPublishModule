@@ -17,7 +17,7 @@ public sealed class App : Application
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
-            var viewModel = new MainWindowViewModel(new InterimCompileEngine());
+            var viewModel = new MainWindowViewModel(new CompilerAppEngine());
             desktop.MainWindow = new MainWindow { DataContext = viewModel };
             var startPath = desktop.Args?.FirstOrDefault();
             if (!string.IsNullOrWhiteSpace(startPath)) _ = viewModel.SetInputAsync(startPath);

@@ -129,6 +129,9 @@ public sealed class PowerShellCompilationInputResolver
         PowerShellCompilationMode? mode = null,
         string? entryPointPath = null,
         bool allowDynamicModuleRuntimeSources = false)
+        => ResolveNormalizedPaths(NormalizeRequestedPaths(paths), kind, mode, entryPointPath, allowDynamicModuleRuntimeSources);
+
+    internal static string[] NormalizeRequestedPaths(IEnumerable<string> paths)
     {
         if (paths is null) throw new ArgumentNullException(nameof(paths));
         var requestedPaths = paths
@@ -138,6 +141,16 @@ public sealed class PowerShellCompilationInputResolver
             .ToArray();
         if (requestedPaths.Length == 0)
             throw new ArgumentException("At least one PowerShell script path is required.", nameof(paths));
+        return requestedPaths;
+    }
+
+    internal PowerShellCompilationResolvedInput ResolveNormalizedPaths(
+        string[] requestedPaths,
+        PowerShellCompilationArtifactKind? kind,
+        PowerShellCompilationMode? mode,
+        string? entryPointPath,
+        bool allowDynamicModuleRuntimeSources)
+    {
         if (requestedPaths.Length == 1 && string.IsNullOrWhiteSpace(entryPointPath))
             return Resolve(requestedPaths[0], kind, mode, allowDynamicModuleRuntimeSources);
         if (kind.HasValue && !Enum.IsDefined(typeof(PowerShellCompilationArtifactKind), kind.Value))
@@ -150,7 +163,7 @@ public sealed class PowerShellCompilationInputResolver
             if (!File.Exists(requestedPath))
                 throw new FileNotFoundException("PowerShell compilation input was not found.", requestedPath);
             if (!Path.GetExtension(requestedPath).Equals(".ps1", StringComparison.OrdinalIgnoreCase))
-                throw new ArgumentException("A loose compilation file set may contain only .ps1 files. Point to a .psd1, .psm1, or module directory for module discovery.", nameof(paths));
+                throw new ArgumentException("A loose compilation file set may contain only .ps1 files. Point to a .psd1, .psm1, or module directory for module discovery.", nameof(requestedPaths));
         }
 
         var resolvedKind = kind ?? (string.IsNullOrWhiteSpace(entryPointPath)
@@ -168,6 +181,9 @@ public sealed class PowerShellCompilationInputResolver
             if (!requestedPaths.Contains(entryPoint, PowerShellCompilationPathSafety.PathComparer))
                 throw new InvalidOperationException("The executable entrypoint must also be present in the requested path set.");
             var sourceRoot = Path.GetDirectoryName(entryPoint) ?? Directory.GetCurrentDirectory();
+            foreach (var path in requestedPaths)
+                PowerShellCompilationPathSafety.EnsureContained(sourceRoot, path,
+                    $"Executable source '{path}' escapes the executable entrypoint root.");
             var snapshot = new PowerShellSourceSnapshot(sourceRoot, _semanticProfileId);
             var executableMode = mode ?? PowerShellCompilationMode.Package;
             var closure = PowerShellHybridDependencyResolver.DiscoverExecutableSources(entryPoint, executableMode, snapshot);
@@ -188,9 +204,7 @@ public sealed class PowerShellCompilationInputResolver
                 profile => new PowerShellCompilationInputResolver(profile).Resolve(
                     requestedPaths, resolvedKind, executableMode, entryPoint, allowDynamicModuleRuntimeSources));
         }
-        var resolvedMode = mode ?? (resolvedKind == PowerShellCompilationArtifactKind.BinaryModule
-            ? PowerShellCompilationMode.Strict
-            : PowerShellCompilationBuildSpec.GetDefaultMode(resolvedKind));
+        var resolvedMode = mode ?? GetDefaultMode(resolvedKind, looseFileSet: true);
         if (resolvedKind == PowerShellCompilationArtifactKind.BinaryModule && resolvedMode != PowerShellCompilationMode.Strict)
             throw new InvalidOperationException(
                 "A loose BinaryModule file set requires Strict mode because it has no script-module entrypoint in which unsupported functions could be preserved. Point to a module root for Hybrid fallback.");
@@ -224,6 +238,11 @@ public sealed class PowerShellCompilationInputResolver
             profile => new PowerShellCompilationInputResolver(profile).Resolve(
                 pathsForResolution, resolvedKind, resolvedMode, allowDynamicModuleRuntimeSources: allowDynamicModuleRuntimeSources));
     }
+
+    internal static PowerShellCompilationMode GetDefaultMode(PowerShellCompilationArtifactKind kind, bool looseFileSet)
+        => looseFileSet && kind == PowerShellCompilationArtifactKind.BinaryModule
+            ? PowerShellCompilationMode.Strict
+            : PowerShellCompilationBuildSpec.GetDefaultMode(kind);
 
     private static string FindCommonSourceRoot(IReadOnlyCollection<string> sourcePaths)
     {

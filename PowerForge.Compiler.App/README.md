@@ -17,8 +17,8 @@ source, target and file rules first. The app checks the current dependency
 graph against the file before offering **Confirm and compile**. Save module
 review files outside the module's source directory.
 
-**Edit details** opens a side panel for the files that go into the output (the script and what it loads, the whole folder, or only the script, plus include and leave-out patterns) and for saved settings. Settings are the engine's own `powerforge.psproject.json`, so a file saved here builds the same way with `powerforge powershell project build`. Saving adds the selected mode and target and keeps any targets already in the file. Opening a settings file, or passing or dropping one, checks the script it names with the saved files, mode, target and output folder.
+**Edit details** opens a side panel for the files that go into the output (the script and what it loads, the whole folder, or only the script, plus include and leave-out patterns) and for saved settings. Settings use the compiler's `powerforge.psproject.json` format. Saving adds the selected mode and target and keeps any other saved targets. Opening a settings file restores the source, file rules, mode, target and output folder. Use the CLI project commands for loose source sets, explicit entrypoints, custom artifact or diagnostics settings, provider packages, ABI locks, or required module acceptance scripts.
 
 ## How it talks to the engine
 
-The window uses the same `PowerShellCompilationHostService` as the CLI. It calls `Check` for the mode previews and the selected build, `Doctor` for the selected build's prerequisites, and `Compile` with the confirmed review. The target picker uses the compiler's support matrix. See the [host API and packaging roadmap](../Docs/PowerForge.PowerShellCompilation.HostApi.md).
+The window uses the same `PowerShellCompiler` as the CLI. It calls `Check` for the mode previews and the selected build, `CheckEnvironment` for prerequisites, and `Prepare` and `BuildReviewed` with the confirmed selection. The target picker uses the compiler's support matrix. See the [host API and packaging roadmap](../Docs/PowerForge.PowerShellCompilation.HostApi.md).

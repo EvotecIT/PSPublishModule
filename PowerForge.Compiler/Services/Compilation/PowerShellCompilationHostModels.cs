@@ -1,22 +1,41 @@
 namespace PowerForge;
 
-/// <summary>Source and delivery options for checking one artifact selection.</summary>
-public sealed class PowerShellCompilationCheckRequest
+/// <summary>Source, target, and resource selection for checking or preparing an artifact.</summary>
+public sealed class PowerShellCompilationRequest
 {
-    /// <summary>Creates a request for a file or module folder.</summary>
-    public PowerShellCompilationCheckRequest(string path) => Path = path;
+    /// <summary>Creates a request for one source file or module folder.</summary>
+    public PowerShellCompilationRequest(string path) : this(new[] { path }) { }
 
-    /// <summary>Script, module manifest, script module, or module folder.</summary>
-    public string Path { get; }
+    /// <summary>Creates a request for one selection or an ordered set of loose scripts.</summary>
+    public PowerShellCompilationRequest(IEnumerable<string> paths)
+    {
+        if (paths is null) throw new ArgumentNullException(nameof(paths));
+        Paths = Array.AsReadOnly(paths.ToArray());
+    }
+
+    /// <summary>Source selections in the order supplied by the caller.</summary>
+    public IReadOnlyList<string> Paths { get; }
+    /// <summary>Entrypoint for a loose set of scripts compiled into an executable.</summary>
+    public string? EntryPoint { get; set; }
+    /// <summary>Overrides the name inferred from the input.</summary>
+    public string? ArtifactName { get; set; }
     /// <summary>Optional override for the artifact kind inferred from the source.</summary>
     public PowerShellCompilationArtifactKind? Kind { get; set; }
     /// <summary>Optional override for the compilation mode inferred from the source.</summary>
     public PowerShellCompilationMode? Mode { get; set; }
     /// <summary>Exact target selection, when supplied.</summary>
     public PowerShellCompilationTargetContract? Target { get; set; }
-    /// <summary>Compatibility framework when no exact target is supplied.</summary>
-    public string TargetFramework { get; set; } = PowerShellCompilationTargetFrameworkPolicy.Default;
-    /// <summary>Semantic oracle profile when no exact target is supplied.</summary>
+    /// <summary>Compatibility framework for the selected target.</summary>
+    public string? TargetFramework { get; set; }
+    /// <summary>Runtime identifier for the selected target.</summary>
+    public string? RuntimeIdentifier { get; set; }
+    /// <summary>Publishes a self-contained executable for the selected target.</summary>
+    public bool? SelfContained { get; set; }
+    /// <summary>Publishes the executable as a single file for the selected target.</summary>
+    public bool? SingleFile { get; set; }
+    /// <summary>Executable optimization for the selected target.</summary>
+    public PowerShellCompilationExecutableOptimization? Optimization { get; set; }
+    /// <summary>Semantic oracle profile for the selected target.</summary>
     public string? SemanticProfileId { get; set; }
     /// <summary>Optional resource selection.</summary>
     public PowerShellCompilationResourceMode ResourceMode { get; set; }
@@ -76,6 +95,12 @@ public sealed class PowerShellCompilationCheckResult
     public int SchemaVersion => 1;
     /// <summary>Whether the selected artifact can proceed to a reviewed build.</summary>
     public bool CanProceed => ProposedReview is not null;
+    /// <summary>Resolved artifact kind, when the source selection could be opened.</summary>
+    public PowerShellCompilationArtifactKind? ArtifactKind { get; internal set; }
+    /// <summary>Resolved entry script or module, when available.</summary>
+    public string? SourcePath { get; internal set; }
+    /// <summary>Source files discovered for this selection.</summary>
+    public string[] SourceFiles { get; internal set; } = Array.Empty<string>();
     /// <summary>Source directory protected from review-file writes for a module build or module input.</summary>
     public string? ModuleSourceDirectory { get; set; }
     /// <summary>Canonical artifact-aware analysis.</summary>
@@ -91,7 +116,7 @@ public sealed class PowerShellCompilationCheckResult
 }
 
 /// <summary>The available SDK and environment findings for a build host.</summary>
-public sealed class PowerShellCompilationDoctorResult
+public sealed class PowerShellCompilationEnvironmentResult
 {
     /// <summary>Serialized result schema.</summary>
     public int SchemaVersion => 1;

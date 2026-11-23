@@ -2,7 +2,7 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 
 // Keep existing callers compiled against PowerForge.PowerShell working after the assembly split.
-[assembly: AssemblyMetadata("PowerForge.TypeForwarderAnchor", "PowerForge.PowerShellCompilationHostService")]
+[assembly: AssemblyMetadata("PowerForge.TypeForwarderAnchor", "PowerForge.PowerShellCompilationArtifactBuilder")]
 [assembly: TypeForwardedTo(typeof(global::PowerForge.AstModuleManifestMutator))]
 [assembly: TypeForwardedTo(typeof(global::PowerForge.AuthenticodeSigningService))]
 [assembly: TypeForwardedTo(typeof(global::PowerForge.Generated.Runtime.PowerShellCommandVariableScope))]
@@ -24,16 +24,12 @@ using System.Runtime.CompilerServices;
 [assembly: TypeForwardedTo(typeof(global::PowerForge.PowerShellCompilationBuildLineKind))]
 [assembly: TypeForwardedTo(typeof(global::PowerForge.PowerShellCompilationBuildReport))]
 [assembly: TypeForwardedTo(typeof(global::PowerForge.PowerShellCompilationCensusRunner))]
-[assembly: TypeForwardedTo(typeof(global::PowerForge.PowerShellCompilationCheckRequest))]
 [assembly: TypeForwardedTo(typeof(global::PowerForge.PowerShellCompilationCheckResult))]
 [assembly: TypeForwardedTo(typeof(global::PowerForge.PowerShellCompilationDependencyPlanner))]
-[assembly: TypeForwardedTo(typeof(global::PowerForge.PowerShellCompilationDoctorResult))]
 [assembly: TypeForwardedTo(typeof(global::PowerForge.PowerShellCompilationExplainShaper))]
 [assembly: TypeForwardedTo(typeof(global::PowerForge.PowerShellCompilationFailureMapper))]
 [assembly: TypeForwardedTo(typeof(global::PowerForge.PowerShellCompilationHostDiagnostic))]
-[assembly: TypeForwardedTo(typeof(global::PowerForge.PowerShellCompilationHostDiagnosticCatalog))]
 [assembly: TypeForwardedTo(typeof(global::PowerForge.PowerShellCompilationHostPhase))]
-[assembly: TypeForwardedTo(typeof(global::PowerForge.PowerShellCompilationHostService))]
 [assembly: TypeForwardedTo(typeof(global::PowerForge.PowerShellCompilationHostSeverity))]
 [assembly: TypeForwardedTo(typeof(global::PowerForge.PowerShellCompilationInputResolver))]
 [assembly: TypeForwardedTo(typeof(global::PowerForge.PowerShellCompilationLibraryPackageBuilder))]

@@ -97,7 +97,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
     private static string[] ResolveCompilationSourcePaths(PowerShellCompilationBuildSpec spec)
     {
         var sourcePath = Path.GetFullPath(spec.SourcePath);
-        var sourceRoot = Path.GetDirectoryName(sourcePath) ?? Directory.GetCurrentDirectory();
+        var sourceRoot = GetSourceRoot(spec);
         var paths = new[] { sourcePath }
             .Concat(spec.CompilationSourcePaths ?? Array.Empty<string>())
             .Where(static path => !string.IsNullOrWhiteSpace(path))
@@ -154,7 +154,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         IEnumerable<string> compilationSourcePaths)
     {
         if (spec.RuntimeSourcePaths is not { Length: > 0 }) return;
-        var sourceRoot = Path.GetDirectoryName(Path.GetFullPath(spec.SourcePath)) ?? Directory.GetCurrentDirectory();
+        var sourceRoot = GetSourceRoot(spec);
         var compiled = compilationSourcePaths.Select(Path.GetFullPath).ToHashSet(PowerShellCompilationPathSafety.PathComparer);
         foreach (var runtimeSource in spec.RuntimeSourcePaths
                      .Where(static path => !string.IsNullOrWhiteSpace(path))

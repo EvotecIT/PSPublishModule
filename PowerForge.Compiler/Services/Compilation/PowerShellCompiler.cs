@@ -1,10 +1,10 @@
 namespace PowerForge;
 
-/// <summary>Uses the compiler's existing analysis and build owners for an interactive or automated reviewed build.</summary>
-public sealed class PowerShellCompilationHostService
+/// <summary>Checks, prepares, and builds PowerShell artifacts.</summary>
+public sealed partial class PowerShellCompiler
 {
     /// <summary>Checks source and dependency eligibility for one exact selection without executing the source.</summary>
-    public PowerShellCompilationCheckResult Check(PowerShellCompilationCheckRequest request,
+    public PowerShellCompilationCheckResult Check(PowerShellCompilationRequest request,
         CancellationToken cancellationToken = default, IProgress<PowerShellCompilationProgress>? progress = null)
     {
         if (request is null) throw new ArgumentNullException(nameof(request));
@@ -13,37 +13,7 @@ public sealed class PowerShellCompilationHostService
         {
             PowerShellCompilationProgress.Report(progress, PowerShellCompilationHostPhase.Resolving);
             cancellationToken.ThrowIfCancellationRequested();
-            var selected = request.Target is null ? null : PowerShellCompilationTargetContractService.Normalize(request.Target.Copy());
-            if (selected is not null && (request.Kind is { } kind && kind != selected.ArtifactKind ||
-                                        request.Mode is { } mode && mode != selected.Mode))
-                throw new ArgumentException("The explicit kind or mode conflicts with the selected target.");
-            var profileId = selected?.SemanticProfileId ?? request.SemanticProfileId ?? string.Empty;
-            if (string.IsNullOrWhiteSpace(profileId))
-            {
-                var defaultKind = request.Kind ?? PowerShellCompilationInputResolver.InferDefaultArtifactKind(request.Path);
-                var defaultMode = request.Mode ?? PowerShellCompilationBuildSpec.GetDefaultMode(defaultKind);
-                profileId = PowerShellCompilationArtifactBuilder.GetDefaultBuildSemanticProfileId(defaultMode, request.TargetFramework);
-            }
-            var input = new PowerShellCompilationInputResolver(profileId).Resolve(
-                request.Path, selected?.ArtifactKind ?? request.Kind, selected?.Mode ?? request.Mode,
-                allowDynamicModuleRuntimeSources: request.ResourceMode == PowerShellCompilationResourceMode.CompleteModule &&
-                                                  (selected?.Mode ?? request.Mode) != PowerShellCompilationMode.Strict);
-            var spec = new PowerShellCompilationBuildSpec(input.SourcePath,
-                request.OutputDirectory ?? PowerShellCompilationOutputPolicy.GetDefaultOutputDirectory(input),
-                input.ArtifactName, input.Kind, input.Mode)
-            {
-                ModuleManifestPath = input.ModuleManifestPath,
-                TargetFramework = request.TargetFramework,
-                SemanticProfileId = profileId,
-                TargetContract = selected,
-                ResourceMode = request.ResourceMode,
-                IncludeResource = request.IncludeResource,
-                ExcludeResource = request.ExcludeResource,
-                CompilationSourcePaths = input.CompilationSourceFiles,
-                RuntimeSourcePaths = input.SourceFiles
-            };
-            var target = ResolveTarget(spec);
-            PowerShellCompilationArtifactBuilder.ValidateSpec(spec);
+            var (input, spec, target) = Resolve(request);
             PowerShellCompilationArtifactBuilder.GetValidatedRuntimeManifestHooks(spec);
             PowerShellCompilationOutputPolicy.EnsureDoesNotOverlapRecursiveLoaderRoot(spec.SourcePath, spec.OutputDirectory, input.SourceSnapshot);
             cancellationToken.ThrowIfCancellationRequested();
@@ -66,6 +36,9 @@ public sealed class PowerShellCompilationHostService
                 diagnostics.Add(Error("powershell.dependency.cycle", string.Join(" -> ", cycle), input.SourcePath, "Remove the static dependency cycle before checking again."));
             return new PowerShellCompilationCheckResult
             {
+                ArtifactKind = input.Kind,
+                SourcePath = input.SourcePath,
+                SourceFiles = input.SourceFiles,
                 ModuleSourceDirectory = input.Kind == PowerShellCompilationArtifactKind.BinaryModule ||
                     PowerShellCompilationDependencyPlanner.IsModuleInput(input.SourcePath, input.ModuleManifestPath)
                     ? input.ModuleRoot : null,
@@ -84,14 +57,14 @@ public sealed class PowerShellCompilationHostService
             var location = PowerShellCompilationSourceFailure.GetDiagnostic(error);
             return new PowerShellCompilationCheckResult
             {
-                Diagnostics = new[] { Error("powershell.check.input", error.Message, location?.FilePath ?? request.Path,
+                Diagnostics = new[] { Error("powershell.check.input", error.Message, location?.FilePath ?? request.Paths.FirstOrDefault() ?? string.Empty,
                     "Check the source path, mode, and target options.", location?.Line ?? 0, location?.Column ?? 0) }
             };
         }
     }
 
     /// <summary>Builds with the selected target and explicitly confirmed dependency graph.</summary>
-    public PowerShellCompilationBuildResult Compile(PowerShellCompilationBuildSpec spec,
+    public PowerShellCompilationBuildResult BuildReviewed(PowerShellCompilationBuildSpec spec,
         PowerShellCompilationReview review, ILogger? logger = null, CancellationToken cancellationToken = default,
         IProgress<PowerShellCompilationProgress>? progress = null)
     {
@@ -125,28 +98,39 @@ public sealed class PowerShellCompilationHostService
     }
 
     /// <summary>Checks the selected SDK and the framework metadata required by a requested target.</summary>
-    public PowerShellCompilationDoctorResult Doctor(PowerShellCompilationTargetContract? target = null,
+    public PowerShellCompilationEnvironmentResult CheckEnvironment(PowerShellCompilationTargetContract? target = null,
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        try
+        if (target is not null)
         {
-            if (target is not null)
+            try
             {
                 var spec = new PowerShellCompilationBuildSpec("check.ps1", ".", "Check",
                     target.ArtifactKind, target.Mode) { TargetContract = target };
                 target = ResolveTarget(spec);
-                PowerShellCompilationArtifactBuilder.ValidateTargetOptions(spec);
             }
+            catch (Exception error) when (IsInputFailure(error))
+            {
+                return new PowerShellCompilationEnvironmentResult
+                {
+                    Diagnostics = new[] { Error("powershell.doctor.target", error.Message, string.Empty,
+                        "Select a supported compilation target.") }
+                };
+            }
+        }
+
+        try
+        {
             var sdk = PowerShellCompilationToolchainFingerprint.DiscoverSelectedSdk(cancellationToken);
             if (target is not null && PowerShellCompilationTargetFrameworkPolicy.IsModern(target.TargetFramework))
                 _ = PowerShellCompilationToolchainFingerprint.ResolveRuntimePackVersion(target.TargetFramework, sdk);
             cancellationToken.ThrowIfCancellationRequested();
-            return new PowerShellCompilationDoctorResult { DotNetSdkVersion = sdk.Version };
+            return new PowerShellCompilationEnvironmentResult { DotNetSdkVersion = sdk.Version };
         }
         catch (Exception error) when (IsInputFailure(error))
         {
-            return new PowerShellCompilationDoctorResult
+            return new PowerShellCompilationEnvironmentResult
             {
                 Diagnostics = new[] { Error("powershell.doctor.sdk", error.Message, string.Empty,
                     "Install a .NET SDK that supports the selected target and is allowed by global.json.") }
@@ -156,8 +140,8 @@ public sealed class PowerShellCompilationHostService
 
     private static PowerShellCompilationTargetContract ResolveTarget(PowerShellCompilationBuildSpec spec)
     {
-        spec.TargetContract = spec.TargetContract?.Copy();
         PowerShellCompilationArtifactBuilder.ApplyExplicitTargetContract(spec);
+        PowerShellCompilationArtifactBuilder.ValidateTargetOptions(spec);
         var rid = PowerShellCompilationArtifactBuilder.ResolveRuntimeIdentifier(spec);
         if (!string.IsNullOrWhiteSpace(rid))
             spec.RuntimeIdentifier = rid;

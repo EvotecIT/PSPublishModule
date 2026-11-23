@@ -9,7 +9,7 @@ public sealed class ReviewFixTests
     [Fact]
     public void TargetsKeepTheirFrameworkAndNameEveryPlatform()
     {
-        var engine = new InterimCompileEngine();
+        var engine = new CompilerAppEngine();
 
         var targets = new[] { PowerShellCompilationMode.Hybrid, PowerShellCompilationMode.Strict }
             .SelectMany(mode => new[] { PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationArtifactKind.Executable }
@@ -30,7 +30,7 @@ public sealed class ReviewFixTests
     [InlineData(PowerShellCompilationDeploymentModel.Trimmed, true)]
     [InlineData(PowerShellCompilationDeploymentModel.NativeAot, true)]
     public void TrimmedAndNativeAotBuildsAreSelfContained(PowerShellCompilationDeploymentModel deployment, bool expected) =>
-        Assert.Equal(expected, InterimCompileEngine.RequiresSelfContained(deployment));
+        Assert.Equal(expected, CompilerAppEngine.RequiresSelfContained(deployment));
 
     [Fact]
     public async Task CancellingTheCheckOfANewInputLeavesNothingToCompile()
