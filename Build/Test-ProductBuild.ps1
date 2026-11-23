@@ -49,6 +49,9 @@ if ($null -eq $release.Packages -or $null -eq $release.Module -or
     throw 'Unified no-publish product build did not execute package, module, and tool lanes.'
 }
 
+$compilerPackages = @($release.Packages.Result.Release.Projects | ForEach-Object { $_.Packages })
+& (Join-Path $PSScriptRoot 'Test-CompilerPackageConsumer.ps1') -Packages $compilerPackages
+
 Write-Host 'Building the checked-in PowerForge.Web sample through the real CLI...'
 $webOutputText = & dotnet run `
     --project (Join-Path $repoRoot 'PowerForge.Web.Cli\PowerForge.Web.Cli.csproj') `

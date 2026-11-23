@@ -102,7 +102,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
     }
 
     internal static string GetSourceRoot(PowerShellCompilationBuildSpec spec)
-        => spec.ResolvedSourceRoot ?? Path.GetDirectoryName(spec.SourcePath) ?? Directory.GetCurrentDirectory();
+        => (spec.Kind == PowerShellCompilationArtifactKind.Executable ? null : spec.ResolvedSourceRoot)
+           ?? Path.GetDirectoryName(spec.SourcePath) ?? Directory.GetCurrentDirectory();
 
     private static string ResolveRuntimePackAssetPath(PowerShellCompilationDependencyIdentity identity, string? configuredPackageRoot)
     {

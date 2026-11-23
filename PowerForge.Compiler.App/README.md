@@ -17,7 +17,7 @@ source, target and file rules first. The app checks the current dependency
 graph against the file before offering **Confirm and compile**. Save module
 review files outside the module's source directory.
 
-**Edit details** opens a side panel for the files that go into the output (the script and what it loads, the whole folder, or only the script, plus include and leave-out patterns) and for saved settings. Settings use the compiler's `powerforge.psproject.json` format. Saving adds the selected mode and target and keeps any other saved targets. Opening a settings file restores the source, file rules, mode, target and output folder. Use the CLI project commands for loose source sets, explicit entrypoints, custom artifact or diagnostics settings, provider packages or ABI locks.
+**Edit details** opens a side panel for the files that go into the output (the script and what it loads, the whole folder, or only the script, plus include and leave-out patterns) and for saved settings. Settings use the compiler's `powerforge.psproject.json` format. Saving adds the selected mode and target and keeps any other saved targets. Opening a settings file restores the source, file rules, mode, target and output folder. Use the CLI project commands for loose source sets, explicit entrypoints, custom artifact or diagnostics settings, provider packages, ABI locks, or required module acceptance scripts.
 
 ## How it talks to the engine
 

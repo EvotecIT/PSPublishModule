@@ -74,6 +74,7 @@ $requiredFamilies = @{
     'provider lifecycle' = 'PowerForge.Tests.PowerShellCompilationProviderPackageTests.ExecutableProviderMatrixRoutesValuesCardinalityStreamsAndErrors*'
     'provider dependency closure' = 'PowerForge.Tests.PowerShellCompilationProviderPackageTests.ExecutableProviderCarriesAndInvokesItsLockedManagedDependencyClosure*'
     'project NuGet CLI' = 'PowerForge.Tests.PowerForgeCliPowerShellCompilationTests.ProjectPackCli_*'
+    'executable source containment' = 'PowerForge.Tests.PowerShellCompilationInputResolverTests.Resolve_RejectsExecutableSourcesOutsideTheEntrypointDirectory*'
     'reviewed loose executable' = 'PowerForge.Tests.PowerForgeCliPowerShellCompilationTests.BuildStrictMultiFileExecutable_UsesExplicitEntrypointAndDirectLocalCalls*'
     'reviewed loose source root' = 'PowerForge.Tests.PowerForgeCliPowerShellCompilationTests.ReviewedBuild_PreservesTheCommonRootForLooseSources*'
     'loose source failure mapping' = 'PowerForge.Tests.PowerForgeCliPowerShellCompilationTests.Build_MapsOmittedLooseSourceToThePublishedDocument*'

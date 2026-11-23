@@ -372,6 +372,9 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 runtimeManifestHooks.Select(static hook => "Manifest runtime script hook: " + hook),
                 compiledMethodDetails,
                 snapshot);
+            if (approvedDependencyHash is not null && spec.Kind == PowerShellCompilationArtifactKind.Library &&
+                unitDispositionLedger.OmittedUnits > 0)
+                throw new InvalidOperationException("A reviewed library build cannot omit authored units. Review a source selection that can be compiled in full.");
             usesPowerShellRuntimeFallback = unitDispositionLedger.UsesPowerShellRuntimeFallback;
             failureMap = PowerShellCompilationDiagnosticsEvidenceBuilder.CreateFailureMap(
                 plan,

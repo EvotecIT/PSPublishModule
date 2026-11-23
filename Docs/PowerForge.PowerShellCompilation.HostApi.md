@@ -33,7 +33,7 @@ if (check.ProposedReview is { } confirmedReview)
 ```
 
 A request can also contain an ordered set of loose scripts. Set `EntryPoint`
-when they form one executable. A loose set selected as a binary module
+when they form one executable. Keep executable sources under the entrypoint's directory. A loose set selected as a binary module
 defaults to Strict. An exact `Target` supplies the framework, semantic profile
 and deployment settings. Other explicit artifact and target settings must
 agree with it. The CLI accepts the same source, target and resource flags
@@ -57,7 +57,7 @@ Save review files outside a module's source directory so they do not change the 
 
 The existing CLI `--dependency-lock` option accepts a dependency graph for scripted builds. Custom command providers use the provider and dependency lock workflow.
 
-A reviewed library build requires the selected source to be eligible without omitted units. A direct Hybrid library build using an explicit dependency lock can emit a partial DLL. Inspect its omitted units and verify the intended public ABI before distributing it.
+Check and reviewed library builds both require the selected source to compile without omitted units. A direct Hybrid library build using an explicit dependency lock can emit a partial DLL. Inspect its omitted units and verify the intended public ABI before distributing it.
 
 ### Package-mode script forms
 

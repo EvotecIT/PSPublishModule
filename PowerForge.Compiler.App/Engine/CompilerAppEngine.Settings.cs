@@ -80,6 +80,8 @@ internal sealed partial class CompilerAppEngine
             throw new InvalidOperationException("The app opens settings for one script or module. Use powerforge powershell project for a loose source set.");
         if (!string.IsNullOrWhiteSpace(manifest.EntryPoint))
             throw new InvalidOperationException("Use powerforge powershell project to build a project with an explicit entrypoint.");
+        if (manifest.Artifacts.Any(static artifact => artifact.ModuleTest is not null))
+            throw new InvalidOperationException("Use powerforge powershell project for a project with a required module acceptance script.");
         if (HasCustomDiagnostics(manifest.Diagnostics))
             throw new InvalidOperationException("Use powerforge powershell project to build with a project-specific diagnostics policy.");
         if (manifest.ProviderPackages.Length != 0 || manifest.Artifacts.Any(static artifact =>

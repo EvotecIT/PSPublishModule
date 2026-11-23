@@ -181,6 +181,9 @@ public sealed class PowerShellCompilationInputResolver
             if (!requestedPaths.Contains(entryPoint, PowerShellCompilationPathSafety.PathComparer))
                 throw new InvalidOperationException("The executable entrypoint must also be present in the requested path set.");
             var sourceRoot = Path.GetDirectoryName(entryPoint) ?? Directory.GetCurrentDirectory();
+            foreach (var path in requestedPaths)
+                PowerShellCompilationPathSafety.EnsureContained(sourceRoot, path,
+                    $"Executable source '{path}' escapes the executable entrypoint root.");
             var snapshot = new PowerShellSourceSnapshot(sourceRoot, _semanticProfileId);
             var executableMode = mode ?? PowerShellCompilationMode.Package;
             var closure = PowerShellHybridDependencyResolver.DiscoverExecutableSources(entryPoint, executableMode, snapshot);

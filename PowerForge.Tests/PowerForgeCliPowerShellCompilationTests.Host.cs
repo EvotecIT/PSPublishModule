@@ -124,8 +124,18 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
             };
             var spec = compiler.Prepare(request);
             spec.EmitSource = true;
-            spec.ExpectedDependencyLock = new PowerShellCompilationDependencyPlanner().AnalyzeGraph(spec);
+            var dependencyLock = new PowerShellCompilationDependencyPlanner().AnalyzeGraph(spec);
+            var target = PowerShellCompilationTargetContractService.Create(spec.Kind, spec.Mode, spec.TargetFramework,
+                spec.RuntimeIdentifier, spec.SelfContained, spec.SingleFile, spec.Optimization,
+                explicitContract: false, semanticProfileId: spec.SemanticProfileId);
 
+            Assert.False(compiler.Check(request).CanProceed);
+            var reviewed = compiler.BuildReviewed(spec, new PowerShellCompilationReview { Target = target, DependencyLock = dependencyLock });
+            Assert.False(reviewed.Succeeded);
+            Assert.Equal(PowerShellCompilationFailureStage.Analysis, reviewed.Failure!.Stage);
+            Assert.Contains("cannot omit authored units", reviewed.Error, StringComparison.Ordinal);
+
+            spec.ExpectedDependencyLock = dependencyLock;
             var built = compiler.Build(spec);
 
             Assert.True(built.Succeeded, built.Error + built.BuildOutput);

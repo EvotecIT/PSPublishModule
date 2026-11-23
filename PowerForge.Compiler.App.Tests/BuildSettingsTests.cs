@@ -158,6 +158,31 @@ public sealed class BuildSettingsTests : IDisposable
     }
 
     [Fact]
+    public void OpeningSettingsRefusesARequiredModuleAcceptanceScript()
+    {
+        var module = Path.Combine(_root, "Example.psm1");
+        var acceptance = Path.Combine(_root, "Test-Example.ps1");
+        File.WriteAllText(module, "function Get-Example { return 42 }");
+        File.WriteAllText(acceptance, "param($ArtifactPath)\nImport-Module $ArtifactPath");
+        var settingsPath = Path.Combine(_root, CompilerAppEngine.DefaultSettingsFileName);
+        var engine = new CompilerAppEngine();
+        var target = engine.GetTargets(PowerShellCompilationMode.Hybrid, PowerShellCompilationArtifactKind.BinaryModule)[0];
+        var service = new PowerShellCompilationProjectManifestService();
+        var manifest = service.Create(settingsPath, module, "Example", target.ExactContract!);
+        manifest.Artifacts[0].ModuleTest = new PowerShellCompilationProjectModuleTest
+        {
+            Script = Path.GetFileName(acceptance),
+            Sha256 = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(acceptance)))
+        };
+        service.Save(settingsPath, manifest);
+
+        var opened = engine.OpenSettings(settingsPath);
+
+        Assert.Null(opened.Settings);
+        Assert.Contains("required module acceptance script", Assert.IsType<CompileDiagnostic>(opened.Problem).Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ABrokenSettingsFileIsReportedInsteadOfThrown()
     {
         var settingsPath = Path.Combine(_root, CompilerAppEngine.DefaultSettingsFileName);
