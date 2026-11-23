@@ -10,9 +10,12 @@ namespace PowerForge.Generators.Tests;
 
 /// <summary>Compiles a library with the generators the way a consuming project's build does, including its MSBuild properties.</summary>
 internal static class TestCompiler {
-    internal static (Compilation Compilation, ImmutableArray<Diagnostic> Diagnostics) Run(string source, LanguageVersion version, IDictionary<string, string>? properties, params IIncrementalGenerator[] generators) {
+    internal static (Compilation Compilation, ImmutableArray<Diagnostic> Diagnostics) Run(string source, LanguageVersion version, IDictionary<string, string>? properties, params IIncrementalGenerator[] generators) =>
+        Run(source, version, properties, Array.Empty<MetadataReference>(), generators);
+
+    internal static (Compilation Compilation, ImmutableArray<Diagnostic> Diagnostics) Run(string source, LanguageVersion version, IDictionary<string, string>? properties, IEnumerable<MetadataReference> libraries, params IIncrementalGenerator[] generators) {
         IEnumerable<MetadataReference> references = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!)
-            .Split(Path.PathSeparator).Append(typeof(PSCmdlet).Assembly.Location).Distinct().Select(path => MetadataReference.CreateFromFile(path));
+            .Split(Path.PathSeparator).Append(typeof(PSCmdlet).Assembly.Location).Distinct().Select(path => (MetadataReference)MetadataReference.CreateFromFile(path)).Concat(libraries);
         CSharpParseOptions parse = new CSharpParseOptions(version);
         NullableContextOptions nullable = version >= LanguageVersion.CSharp8 ? NullableContextOptions.Enable : NullableContextOptions.Disable;
         CSharpCompilation compilation = CSharpCompilation.Create("Sample" + Guid.NewGuid().ToString("N"), new[] { CSharpSyntaxTree.ParseText(source, parse) },

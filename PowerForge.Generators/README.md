@@ -22,14 +22,45 @@ property access all edit one object.
 | `Legend Legend` (a settings type) | `Legend(Action<Legend> configure)`, creating it when null |
 | `ICollection<Series> Series` | `Series(item)`, `Series(Action<Series> configure)`, `Series(IEnumerable<Series> items)` |
 | `Func<...> LabelFormatter` with `[Fluent("FormatLabels")]` | `FormatLabels(Func<...> value)` |
+| `ChartBarMode Mode` with `[FluentPreset("Stacked", ChartBarMode.Stacked)]` | `Stacked()` |
 
 - `[Fluent("Name")]` renames a property's method, `[Child("Name")]` renames a collection's single-item methods and
   `[NoFluent]` leaves a property or type out.
 - `[FluentForward("Content", typeof(ContentBuilder), "Replace")]` on a base type or interface generates `Content(...)`
   for each static `Replace(owner, value)` overload, for values that must go through a helper.
-- A delegate property without a verb (PFF001), a method that collides with an existing one or that a delegate-valued
-  member would capture (PFF002), two members that map to one method (PFF003), a forward target without a usable
-  overload (PFF004) and a name that is not an identifier (PFF005) are build errors.
+- `[FluentInline]` on a settings-type property gives the owner every method of that settings type, applied to the
+  property and returning the owner: with `[FluentInline] ChartOptions Options { get; }`, `chart.Legend(l => ...)` and
+  `chart.Theme(...)` set `chart.Options.Legend` and `chart.Options.Theme`. `[FluentForward]` methods of the settings type
+  come along too, applied to the property. `Options(o => ...)` is still generated. The property must be readable and not
+  nullable; one level is inlined (an inlined type's own `[FluentInline]` properties keep only their configure method on
+  it).
+- `[FluentPreset("Stacked", ChartBarMode.Stacked)]` on a property generates `Stacked()`, which assigns that constant (an
+  enum member, bool, number, string or null; an integer that fits also works for `byte`, `short`, `uint` and the other
+  integral types, as `byte size = 1` does, and `0` works for an enum, as `Mode mode = 0` does). `[FluentPreset("PlainLine", typeof(LineVisualStyle), nameof(LineVisualStyle.Plain))]`
+  assigns the static member instead: a parameterless static method is called, a static property or field is read. A
+  `const` field converts like a constant, so `const int Small = 1` also works for a `byte` property.
+  Repeat the attribute for several presets; `Summary` replaces the generated documentation. Presets also come through
+  `[FluentInline]`.
+- `[Fluent(Copy = "Clone")]` on a settings type names a parameterless instance method (public or internal, declared or
+  inherited) that returns a copy of the type or of a base it can be cast to. A settable property of that type, or of a
+  type deriving from it, then gets a copy-then-commit `X(o => ...)`: the callback edits a copy of the current value (or
+  of a new one), and a further copy is assigned only once the callback returns. A throwing callback leaves the owner's
+  settings object unchanged, and the instance the callback saw is never the one stored. This covers the top-level settings
+  object only: nested reference state (a list, a child object) is shared between the copies unless the copy method clones
+  it. Read-only properties are still configured in place.
+- A settings type from a referenced library works too: a property of that type gets `X(o => ...)`, and a derived type
+  can inline it, so blocks in one package inherit the options of a base class in another. Such a type is configured in
+  place, even when it names a copy method, because that method is usually not visible outside its own library. A
+  forward overload whose helper is internal to that library goes through the fluent method the library generated for
+  that overload, while public overloads call the helper directly; when the library generated none for a name, the
+  inlining owner keeps the property's own method instead.
+- A delegate property without a verb (PFF001), a method that collides with an existing one, with one a base type that
+  can be derived from generates (including through `[FluentInline]`), or that a delegate-valued member would capture
+  (PFF002), two members that map to one method (PFF003), a forward target without a usable
+  overload (PFF004), a name that is not an identifier (PFF005), a preset whose value cannot be assigned or whose property
+  has no public setter (PFF010), a copy method that is missing or has the wrong shape (PFF011) and `[FluentInline]` on a
+  property that is not a readable, non-nullable settings type (PFF012) are build errors. A preset named like a bool
+  method (`Visible()` beside `Visible(bool value = true)`) is PFF003.
 - Methods for a type that can be derived from are generic over `TSelf`, so a chain keeps the derived type. They live in
   a `<Type>Fluent` partial class, where handwritten helpers can sit beside them; a class of that name you declare
   yourself must be `static partial`.
@@ -42,7 +73,7 @@ MSBuild settings:
 
 | Property | Meaning |
 | --- | --- |
-| `PowerForgeFluentNaming=Prefixed` | ConsoleMonster's earlier names (`AddX`, `AddXs`, one `Configure`, `X()` for a bool) in one `<Namespace>Fluent` class; an existing method silently wins. For ConsoleMonster until it adopts the convention. |
+| `PowerForgeFluentNaming=Prefixed` | ConsoleMonster's earlier names (`AddX`, `AddXs`, one `Configure`, `X()` for a bool) in one `<Namespace>Fluent` class; an existing method silently wins. `[FluentInline]` and `[FluentPreset]` apply only to the convention. For ConsoleMonster until it adopts the convention. |
 | `PowerForgeFluentFactory=Namespace.Type` | Static factory classes (separate several with `;` or `,`) whose parameterless methods are used in the generated documentation examples. |
 
 ## Cmdlet parameters

@@ -14,3 +14,6 @@ PFF006 | PowerForge.Fluent | Error | Cmdlet parameter name is reserved
 PFF007 | PowerForge.Fluent | Error | [FluentCmdlet] needs a partial PowerShell cmdlet
 PFF008 | PowerForge.Fluent | Error | Unknown vocabulary setting
 PFF009 | PowerForge.Fluent | Error | [FluentCmdlet] names an unknown property
+PFF010 | PowerForge.Fluent | Error | Fluent preset cannot be assigned
+PFF011 | PowerForge.Fluent | Error | Fluent copy method is missing or has the wrong shape
+PFF012 | PowerForge.Fluent | Error | [FluentInline] needs a settings-type property

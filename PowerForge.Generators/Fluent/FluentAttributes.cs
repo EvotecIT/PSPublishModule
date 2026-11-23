@@ -14,6 +14,8 @@ namespace PowerForge.Generators.Fluent {
         internal const string Child = Namespace + ".ChildAttribute";
         internal const string Forward = Namespace + ".FluentForwardAttribute";
         internal const string Cmdlet = Namespace + ".FluentCmdletAttribute";
+        internal const string Inline = Namespace + ".FluentInlineAttribute";
+        internal const string Preset = Namespace + ".FluentPresetAttribute";
 
         private const string ResourceName = "PowerForge.Generators.Fluent.FluentAttributes.g.cs";
 
