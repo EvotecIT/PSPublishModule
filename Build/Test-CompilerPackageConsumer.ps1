@@ -22,10 +22,11 @@ foreach ($id in $packageIds) {
     $matched[$id] = (Resolve-Path -LiteralPath $match[0]).Path
 }
 
-$parent = (Resolve-Path -LiteralPath $ScratchRoot).Path
+$parent = [IO.Path]::GetFullPath((Join-Path (Resolve-Path -LiteralPath $ScratchRoot).Path '.'))
 $root = Join-Path $parent ('pfc-package-' + [Guid]::NewGuid().ToString('N'))
 $feed = Join-Path $root 'feed'
 New-Item -ItemType Directory -Path $feed | Out-Null
+$smokeFailed = $false
 try {
     Copy-Item -LiteralPath @($matched.Values) -Destination $feed
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot '../global.json') -Destination $root
@@ -119,10 +120,18 @@ Console.WriteLine(result.ArtifactPath);
     } finally {
         Pop-Location
     }
+} catch {
+    $smokeFailed = $true
+    throw
 } finally {
-    $item = Get-Item -LiteralPath $root
-    if ($item.Parent.FullName -ne $parent -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
-        throw "Unexpected compiler smoke workspace '$root'."
+    try {
+        $item = Get-Item -LiteralPath $root
+        if ($item.Parent.FullName -ne $parent -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+            throw "Unexpected compiler smoke workspace '$root'."
+        }
+        Remove-Item -LiteralPath $root -Recurse -Force
+    } catch {
+        if (-not $smokeFailed) { throw }
+        Write-Warning "Compiler smoke cleanup failed. $($_.Exception.Message)"
     }
-    Remove-Item -LiteralPath $root -Recurse -Force
 }
