@@ -19,7 +19,7 @@ foreach ($id in $packageIds) {
     if ($match.Count -ne 1 -or -not (Test-Path -LiteralPath $match[0] -PathType Leaf)) {
         throw "The package build must produce one $id package at version $version."
     }
-    $matched[$id] = $match[0]
+    $matched[$id] = (Resolve-Path -LiteralPath $match[0]).Path
 }
 
 $parent = (Resolve-Path -LiteralPath $ScratchRoot).Path
