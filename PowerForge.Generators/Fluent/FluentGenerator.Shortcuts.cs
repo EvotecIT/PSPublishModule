@@ -46,9 +46,10 @@ namespace PowerForge.Generators.Fluent {
                 return result;
             }
 
-            // The forwards an owner inlining a settings type emits. A target this assembly cannot call (an internal helper of a
-            // referenced library) is reached through the public extension that library generated for the settings type; a
-            // forward with neither is left out, and the settings type's own property methods stay on the owner.
+            // The forwards an owner inlining a settings type emits. A helper overload this assembly cannot call (an internal
+            // overload of a referenced library, which metadata does not even show here) is reached through the public extension
+            // that library generated for it: each such extension whose value type no callable overload covers is added. A name
+            // with no overload left is left out, and the settings type's own property method stays on the owner.
             internal List<(string Name, IMethodSymbol Target, string Summary, string ValueSummary)> InlineForwards(INamedTypeSymbol option) {
                 List<(string Name, IMethodSymbol Target, string Summary, string ValueSummary)> result = Forwards(option, report: false).ToList();
                 if (SymbolEqualityComparer.Default.Equals(option.ContainingAssembly, _compilation.Assembly)) {
@@ -59,15 +60,19 @@ namespace PowerForge.Generators.Fluent {
                         .Select(stem => t.ContainingNamespace.IsGlobalNamespace ? stem + "Fluent" : t.ContainingNamespace.ToDisplayString() + "." + stem + "Fluent"))
                     .Distinct(StringComparer.Ordinal).Select(name => _compilation.GetTypeByMetadataName(name)).Where(type => type != null).Select(type => type!).ToList();
                 foreach (AttributeData attribute in declarers.SelectMany(t => t.GetAttributes()).Where(a => a.AttributeClass?.ToDisplayString() == FluentAttributes.Forward)) {
-                    if (attribute.ConstructorArguments.Length != 3 || attribute.ConstructorArguments[0].Value is not string name || result.Any(forward => forward.Name == name)) {
+                    if (attribute.ConstructorArguments.Length != 3 || attribute.ConstructorArguments[0].Value is not string name) {
                         continue;
                     }
                     string summary = attribute.NamedArguments.FirstOrDefault(a => a.Key == "Summary").Value.Value as string ?? "Sets " + name + ".";
                     string value = attribute.NamedArguments.FirstOrDefault(a => a.Key == "ValueSummary").Value.Value as string ?? "The value.";
-                    result.AddRange(fluentClasses.SelectMany(type => type.GetMembers(name)).OfType<IMethodSymbol>()
+                    IEnumerable<IMethodSymbol> extensions = fluentClasses.SelectMany(type => type.GetMembers(name)).OfType<IMethodSymbol>()
                         .Where(m => m.IsStatic && m.IsExtensionMethod && m.Parameters.Length == 2 && m.Parameters.All(p => p.RefKind == RefKind.None)
-                            && Receives(m.Parameters[0].Type, option) && _compilation.IsSymbolAccessibleWithin(m, _compilation.Assembly))
-                        .Select(m => (name, m, summary, value)));
+                            && Receives(m.Parameters[0].Type, option) && _compilation.IsSymbolAccessibleWithin(m, _compilation.Assembly));
+                    foreach (IMethodSymbol extension in extensions) {
+                        if (!result.Any(forward => forward.Name == name && SymbolEqualityComparer.Default.Equals(forward.Target.Parameters[1].Type, extension.Parameters[1].Type))) {
+                            result.Add((name, extension, summary, value));
+                        }
+                    }
                 }
                 return result;
             }
@@ -256,15 +261,35 @@ namespace PowerForge.Generators.Fluent {
                             default:
                                 continue;
                         }
-                        if (!((CSharpCompilation)Compilation).ClassifyConversion(valueType, target).IsImplicit) { continue; }
-                        string suffix = call ? "()" : string.Empty;
                         // Qualified by the type that declares the accepted member, so a hiding member of the requested type is not read.
                         INamedTypeSymbol declaring = candidate.ContainingType;
-                        return (declaring.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) + "." + Escape(name) + suffix, declaring.Name + "." + name + suffix);
+                        string suffix = call ? "()" : string.Empty;
+                        string expression = declaring.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) + "." + Escape(name) + suffix;
+                        string display = declaring.Name + "." + name + suffix;
+                        if (((CSharpCompilation)Compilation).ClassifyConversion(valueType, target).IsImplicit) {
+                            return (expression, display);
+                        }
+                        // A const field is a constant expression, so it converts like a literal: an integral constant that fits
+                        // (byte size = Sizes.Small) and a zero to an enum. Other static members keep the type's own conversions.
+                        if (candidate is IFieldSymbol { HasConstantValue: true } constant) {
+                            if (FitConstant(valueType, constant.ConstantValue, target) != null) {
+                                return (expression, display);
+                            }
+                            if (IsZero(valueType, constant.ConstantValue) && EnumOf(target) is INamedTypeSymbol zeroEnum) {
+                                return ("((" + zeroEnum.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) + ")" + expression + ")", display);
+                            }
+                        }
                     }
                     failure = "names '" + type.Name + "." + name + "', which is not an accessible static method without parameters, property or field whose value can be assigned to " + target.ToDisplayString();
                     return null;
                 }
+
+                // An integral (not enum) constant with the value zero, which C# converts to any enum.
+                private static bool IsZero(ITypeSymbol type, object? value) => type.TypeKind != TypeKind.Enum && type.SpecialType switch {
+                    SpecialType.System_SByte or SpecialType.System_Byte or SpecialType.System_Int16 or SpecialType.System_UInt16 or SpecialType.System_Int32
+                        or SpecialType.System_UInt32 or SpecialType.System_Int64 or SpecialType.System_UInt64 => Convert.ToDecimal(value, CultureInfo.InvariantCulture) == 0,
+                    _ => false
+                };
 
                 private static INamedTypeSymbol? EnumOf(ITypeSymbol target) {
                     if (target.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T && target is INamedTypeSymbol nullable) {

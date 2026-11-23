@@ -574,11 +574,15 @@ namespace PowerForge.Generators.Fluent {
 
                 // Compares complete value-parameter signatures. A handwritten extension for another receiver leaves the name free.
                 // An instance method callable without arguments (only optional or params parameters) takes name() too: C#
-                // binds the call to it before looking at extensions.
+                // binds the call to it before looking at extensions. A generic one does not, since name() cannot infer its type
+                // arguments.
                 private bool Taken(string name, params ITypeSymbol[] parameters) => _existing.Where(m => m.Name == name).Concat(_emitter.Extensions[name]).Any(m => {
+                    // Internal members of a referenced library can't capture a call made from this one.
+                    if (!m.IsExtensionMethod && m.DeclaredAccessibility != Accessibility.Public
+                        && !SymbolEqualityComparer.Default.Equals(m.ContainingAssembly, Compilation.Assembly)) { return false; }
                     int offset = m.IsExtensionMethod ? 1 : 0;
                     if (m.IsExtensionMethod && m.Parameters.Length > 0 && !Receives(m.Parameters[0].Type, _type)) { return false; }
-                    if (parameters.Length == 0 && !m.IsExtensionMethod && !m.IsStatic && m.Name == name
+                    if (parameters.Length == 0 && !m.IsExtensionMethod && !m.IsStatic && !m.IsGenericMethod && m.Name == name
                         && m.Parameters.All(parameter => parameter.IsOptional || parameter.IsParams)) { return true; }
                     return m.Name == name && m.Parameters.Length == parameters.Length + offset
                         && parameters.Select((parameter, index) => SymbolEqualityComparer.Default.Equals(parameter, m.Parameters[index + offset].Type)).All(equal => equal);
