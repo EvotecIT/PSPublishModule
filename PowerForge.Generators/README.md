@@ -43,6 +43,9 @@ property access all edit one object.
   type deriving from it, then gets a copy-then-commit `X(o => ...)`: the callback edits a copy of the current value (or
   of a new one), and a further copy is assigned only once the callback returns. A throwing callback leaves the owner
   unchanged, and the instance the callback saw is never the one stored. Read-only properties are still configured in place.
+- A settings type from a referenced library works too: a property of that type gets `X(o => ...)`, and a derived type
+  can inline it, so blocks in one package inherit the options of a base class in another. Such a type is configured in
+  place, because its copy method is not visible outside its own library.
 - A delegate property without a verb (PFF001), a method that collides with an existing one or that a delegate-valued
   member would capture (PFF002), two members that map to one method (PFF003), a forward target without a usable
   overload (PFF004), a name that is not an identifier (PFF005), a preset whose value cannot be assigned or whose property
