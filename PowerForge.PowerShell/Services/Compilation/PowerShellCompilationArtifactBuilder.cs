@@ -111,7 +111,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             ValidateProviderTargetCompatibility(spec, commandProviderInputs);
             var dependencyPlan = PowerShellCompilationDependencyPlanner.Analyze(spec, compilationSourcePaths, snapshot);
             var dependencyGraph = PowerShellCompilationDependencyPlanner.AnalyzeGraph(spec, compilationSourcePaths, dependencyPlan, snapshot);
-            var generatedAssemblyName = ResolveGeneratedAssemblyName(spec, artifactName, dependencyGraph);
+            var generatedAssemblyName = ResolveGeneratedAssemblyName(spec, artifactName, dependencyGraph, dependencyPlan,
+                out var moduleAssemblyFileName);
             ValidateExpectedDependencyLock(spec, dependencyGraph, approvedDependencyHash);
             var inputHashes = CreateLockedDependencyFileHashes(spec, dependencyGraph);
             if (dependencyGraph.Conflicts.Length > 0)
@@ -239,7 +240,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 var transpiler = new PowerShellTypedCompilationTranspiler(commandProviderInputs, spec.SemanticProfileId, nativeDependencyTypes);
                 typed = transpiler.TranspileAnalyzed(
                     sourceDocuments, plan, "PowerForge.Compiled",
-                    PowerShellCSharpSymbolRenderer.Identifier(artifactName) + "Methods", spec.TargetFramework, capabilities);
+                    PowerShellCSharpSymbolRenderer.Identifier(artifactName) + "Methods", spec.TargetFramework, capabilities,
+                    moduleManifestPath: spec.ModuleManifestPath);
                 string[]? exportedFunctions = null;
                 if (spec.Kind == PowerShellCompilationArtifactKind.BinaryModule)
                 {
@@ -466,7 +468,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             var artifactStagingDirectory = PowerShellArtifactSetPublisher.CreateStagingDirectory(spec.OutputDirectory, artifactName);
             try
             {
-                var stagedArtifact = CopyArtifact(spec, artifactName, generatedAssemblyName, publishDirectory,
+                var stagedArtifact = CopyArtifact(spec, artifactName, generatedAssemblyName, moduleAssemblyFileName, publishDirectory,
                     typed, usesPowerShellRuntimeFallback, artifactStagingDirectory, inputHashes, snapshot);
                 stagedArtifact = stagedArtifact.WithReplacementFiles(CopyProviderRuntimeAssemblies(
                     spec,
@@ -478,6 +480,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 stagedArtifact = stagedArtifact.WithAdditionalFiles(CopyPlannedPayload(
                     stagedArtifact.PrimaryPath,
                     artifactName,
+                    moduleAssemblyFileName,
                     dependencyPlan,
                     stagedArtifact.Files,
                     inputHashes));
@@ -499,7 +502,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                         typed.Methods);
                     if (externalHelpPath is not null)
                     {
-                        stagedArtifact = stagedArtifact.WithAdditionalFiles(new[]
+                        stagedArtifact = stagedArtifact.WithReplacementFiles(new[]
                         {
                             CreateArtifactFile(externalHelpPath, "ExternalHelp")
                         });

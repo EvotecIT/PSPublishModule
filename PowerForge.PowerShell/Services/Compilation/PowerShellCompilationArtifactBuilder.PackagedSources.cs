@@ -26,7 +26,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 : null,
             guardDotSources: true,
             sourceMapping: sourceMapping,
-            document: document);
+            document: document,
+            retainedScriptPaths: packagedSources.RetainedScriptPaths);
         return hybrid is null ? rewritten : PowerShellHybridModuleComposer.ComposeExecutableRoot(rewritten, sourcePath, hybrid, sourceMapping);
     }
 
@@ -44,7 +45,13 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         WritePackagedConsoleHostSources(workspace);
         var fullSourcePath = Path.GetFullPath(sourcePath);
         var sourceRoot = Path.GetDirectoryName(fullSourcePath) ?? Directory.GetCurrentDirectory();
-        var scriptDependencies = compilationSourcePaths
+        var compiled = compilationSourcePaths.ToHashSet(PowerShellCompilationPathSafety.PathComparer);
+        var retainedScripts = dependencyPlan.Where(PowerShellCompilationDependencyPlanner.IsPackagedSourceDependency)
+            .Select(static dependency => Path.GetFullPath(dependency.SourcePath!))
+            .Where(path => !compiled.Contains(path))
+            .ToArray();
+        var mirrorSourceResources = nativeScriptEntry || retainedScripts.Length > 0;
+        var scriptDependencies = compiled.Concat(retainedScripts)
             .Select(Path.GetFullPath)
             .Where(path => !PowerShellCompilationPathSafety.PathEquals(path, fullSourcePath))
             .Distinct(PowerShellCompilationPathSafety.PathComparer)
@@ -54,7 +61,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             .Where(dependency => dependency.Exists &&
                 dependency.SourcePath is not null &&
                 (dependency.Disposition == PowerShellCompilationDependencyDisposition.EmbeddedAndExtracted ||
-                 nativeScriptEntry && dependency.Disposition == PowerShellCompilationDependencyDisposition.CopiedAdjacent) &&
+                 mirrorSourceResources && dependency.Disposition == PowerShellCompilationDependencyDisposition.CopiedAdjacent) &&
                 (dependency.Selection is PowerShellCompilationDependencySelection.Required or
                     PowerShellCompilationDependencySelection.ExplicitInclude or
                     PowerShellCompilationDependencySelection.Inferred or
@@ -104,12 +111,13 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             var document = snapshot.Get(dependency);
             if (document.Errors.Length != 0)
                 throw new InvalidOperationException($"Packaged dependency '{dependency}' could not be parsed while validating package semantics.");
-            PowerShellPackagedScriptRewriter.ValidateDependency(document.SyntaxRoot, dependency, embeddedPaths, allowDerivedPaths: true);
-            var composed = hybrid is null ? null : PowerShellHybridModuleComposer.ComposeDependency(
+            PowerShellPackagedScriptRewriter.ValidateDependency(document, dependency, embeddedPaths,
+                allowDerivedPaths: true, retainedScriptPaths: retainedScripts);
+            var composed = hybrid is null || !compiled.Contains(dependency) ? null : PowerShellHybridModuleComposer.ComposeDependency(
                 dependency, hybrid, hybridCompiledMethods!, executable: true, document: document);
             var retained = composed ?? document.Text;
-            var guarded = PowerShellPackagedScriptRewriter.RewriteDependencyDotSources(
-                retained, dependency, sourceRoot, embeddedPaths);
+            var guarded = PowerShellPackagedScriptRewriter.RewriteDependencySourceLoads(
+                retained, dependency, sourceRoot, embeddedPaths, retainedScripts);
             if (composed is not null || !guarded.Equals(retained, StringComparison.Ordinal) ||
                 !File.ReadAllText(target).Equals(document.Text, StringComparison.Ordinal))
             {
@@ -124,7 +132,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         {
             var dependency = resourceDependencies[index];
             PowerShellCompilationPathSafety.EnsureContained(sourceRoot, dependency.Path, $"Packaged resource '{dependency.RelativePath}' escapes the executable entrypoint root.");
-            if (nativeScriptEntry)
+            if (mirrorSourceResources)
                 PowerShellCompilationPathSafety.EnsureNoLinks(sourceRoot, dependency.Path,
                     $"Native source-layout resource '{dependency.RelativePath}' cannot traverse a link.");
             var fileName = $"Resource{index:D4}.bin";
@@ -153,10 +161,11 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             scriptDependencies,
             resourcePaths,
             usesExtractedRoot,
-            nativeMirroredResources: nativeScriptEntry
+            nativeMirroredResources: mirrorSourceResources
                 ? resourceDependencies.Where(static dependency => dependency.Metadata.Disposition == PowerShellCompilationDependencyDisposition.CopiedAdjacent)
                     .Select(static dependency => dependency.Metadata).ToArray()
-                : Array.Empty<PowerShellCompilationDependency>());
+                : Array.Empty<PowerShellCompilationDependency>(),
+            retainedScriptPaths: retainedScripts);
     }
 
     private static int GetExecutableUnixMode(string path)

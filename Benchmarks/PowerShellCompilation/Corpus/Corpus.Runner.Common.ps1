@@ -372,7 +372,13 @@ function Invoke-OwnedProcess {
     $start.StandardOutputEncoding = [Text.UTF8Encoding]::new($false)
     $start.StandardErrorEncoding = [Text.UTF8Encoding]::new($false)
     foreach ($argument in $Arguments) { [void] $start.ArgumentList.Add($argument) }
-    foreach ($key in @($Environment.Keys)) { $start.Environment[$key] = [string] $Environment[$key] }
+    foreach ($key in @($Environment.Keys)) {
+        if ($null -eq $Environment[$key]) {
+            [void] $start.Environment.Remove($key)
+        } else {
+            $start.Environment[$key] = [string] $Environment[$key]
+        }
+    }
 
     $clock = [Diagnostics.Stopwatch]::StartNew()
     $process = [Diagnostics.Process]::Start($start)

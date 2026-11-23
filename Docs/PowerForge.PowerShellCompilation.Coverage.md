@@ -55,6 +55,64 @@ zero skipped on each surface. It exercises pipeline assertions, object-property
 assertions, and an expected throwing script block. It does not execute every
 emitted Pester method or replace the fixed packet's invocation probes.
 
+## Unfamiliar scripts, modules, and applications
+
+The [Windows workflow packet](../Benchmarks/PowerShellCompilation/Corpus/unfamiliar-workflows.net10.json)
+pins 15 standalone scripts, ten Gallery modules, and five multi-file
+applications. Each declared workflow runs two cases on the source, built
+artifact, and installed artifact when those stages succeed. The matrix has
+30 PowerShell 7.6.6 lanes and ten additional Windows PowerShell 5.1.26100.9818
+module lanes.
+
+| Same pinned inputs | Complete workflows | Matching lanes | Observable differences | Stopped at a project stage |
+| --- | ---: | ---: | ---: | ---: |
+| Starting compiler `f482dcd8` | 15/30 | 21/40 | 5 | 14 |
+| Successor compiler `e213c728f` | 24/30 | 34/40 | 2 | 4 |
+
+All 24 matching workflows exercised an emitted function or script body on
+each declared entry path. Both cases ran on the source, built, and installed
+surfaces across all 34 passing lanes, with zero skips. Seven workflow gains
+followed compiler or delivery changes. The unchanged starting compiler also
+matches DSCParser and PScribo when the comparison preserves unordered property
+values and independent stylesheet rules. The frozen starting report retains
+its original 15/30 result.
+[Starting baseline](../Benchmarks/PowerShellCompilation/Corpus/unfamiliar-workflows-baseline.windows.json)
+[Qualified baseline](../Benchmarks/PowerShellCompilation/Corpus/unfamiliar-workflows-baseline.qualified.windows.json)
+
+The added workflows cover source loading in the caller scope, calls to
+contained child scripts, file reads in callbacks, literal module-loader
+exclusions, authored export selection, external help delivery, and an
+authored DLL sharing a name with the generated module. The Markdown verifier
+matches both the valid-link and broken-link cases through its installed
+executable and executes the emitted `Test-LocalLink` function.
+
+| Remaining workflow | Observed source boundary | Delivery or prerequisite |
+| --- | --- | --- |
+| GenerateParsingHelpers | `GenerateParsingHelpers.ps1:339` writes to a parent-relative C++ source path outside the executable source root | Run in the original project tree with that source directory present |
+| BuildScriptVersions | `BuildScriptVersions.ps1:11` reads its parent repository directory | Run from the authored repository layout |
+| DirectoryDistributionChecker | `Common.ps1:282` uses `ShouldProcess` and its confirmation-capable host contract | Run in a PowerShell host that provides confirmation |
+| Build-MainSummaryFromZip | `AllSubHtmlSummary.Functions.ps1:631` invokes a computed script inside a function | Run the source with its required report extension present |
+| Format-SourceHygiene | `Format-SourceHygiene.ps1:44` and `:85` scan the script directory and observe a different extracted tree | Run the source for its authored directory layout |
+| convert-zip2dir | The malformed archive case at `Expand-Archive` produces the same exit code and displays a different loaded `WindowsBase.dll` path | Use the original PowerShell host when its runtime diagnostic is part of the contract |
+
+Project explain reports the source location of the first four boundaries.
+The last two are observed runtime differences after a successful build and
+installation. They are outside the matched workflow count.
+
+The `Format-SourceHygiene` unknown-switch case now returns the same message
+and exit code through the source, built, and installed entry points on
+PowerShell 7.6.6. The file-scan difference still keeps the workflow outside
+the matched count. Basic Hybrid entries also preserve bare unknown switches
+in `$args`, as verified against PowerShell 7.6.6 and Windows PowerShell 5.1.
+
+Separate delivery checks used private side-by-side installations. PSWriteColor
+1.0.6 and 1.0.7 each passed the same two cases on both pinned hosts. Adding
+1.0.7 selected the newer version, and `Import-Module -RequiredVersion 1.0.6`
+selected the unchanged earlier payload. A Windows x64 Hybrid executable
+returned capacity 70 in version 1.0.0 and 84 in version 2.0.0 for seven units.
+Both versions returned exit code 2 for negative input. Selecting the original
+installation again returned 70 and verified its unchanged payload hashes.
+
 ## Strict streaming executable proof
 
 Three `net10.0` programs that Strict previously rejected now build as complete

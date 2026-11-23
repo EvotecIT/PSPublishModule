@@ -203,7 +203,7 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
                 Assert.Equal(original.Output, compiled.Output);
                 if (scenario.ReportsError && pin.ProfileId == PowerShellCompilationSemanticOracleCatalog.WindowsPowerShell51ProfileId)
                 {
-                    AssertReadHostDesktopDiagnostic(expectedError);
+                    AssertReadHostDesktopDiagnostic(original.Error, fixture.ScriptPath);
                     AssertReadHostDesktopDiagnostic(compiled.Error);
                 }
                 else
@@ -213,10 +213,13 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
             }
         }
 
-        static void AssertReadHostDesktopDiagnostic(string error)
+        static void AssertReadHostDesktopDiagnostic(string error, string? sourcePath = null)
         {
-            // The Desktop formatter can wrap error lists at the console's width.
+            // The Desktop formatter can split even the source path at the console's width.
             var fields = System.Text.RegularExpressions.Regex.Replace(error, @"\s+", "");
+            if (sourcePath is not null)
+                fields = fields.Replace(System.Text.RegularExpressions.Regex.Replace(sourcePath, @"\s+", ""),
+                    Path.GetFileName(sourcePath), StringComparison.Ordinal);
             Assert.StartsWith(@"Microsoft.PowerShell.Utility\Read-Host:StartIndexcannotbelessthanzero.", fields);
             Assert.Contains("Parametername:startIndex", fields, StringComparison.Ordinal);
             Assert.Contains("Atcase.ps1:10char:15", fields, StringComparison.Ordinal);

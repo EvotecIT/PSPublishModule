@@ -81,10 +81,11 @@ public sealed class PowerShellCompilationHostService
         }
         catch (Exception error) when (IsInputFailure(error))
         {
+            var location = PowerShellCompilationSourceFailure.GetDiagnostic(error);
             return new PowerShellCompilationCheckResult
             {
-                Diagnostics = new[] { Error("powershell.check.input", error.Message, request.Path,
-                    "Check the source path, mode, and target options.") }
+                Diagnostics = new[] { Error("powershell.check.input", error.Message, location?.FilePath ?? request.Path,
+                    "Check the source path, mode, and target options.", location?.Line ?? 0, location?.Column ?? 0) }
             };
         }
     }
@@ -193,11 +194,12 @@ public sealed class PowerShellCompilationHostService
             Fix = PowerShellCompilationHostDiagnosticCatalog.GetFix(cause.Code)
         };
 
-    private static PowerShellCompilationHostDiagnostic Error(string featureId, string message, string path, string fix)
+    private static PowerShellCompilationHostDiagnostic Error(string featureId, string message, string path, string fix,
+        int line = 0, int column = 0)
         => new()
         {
             Severity = PowerShellCompilationHostSeverity.Error, Code = PowerShellCompilationDiagnosticCode.InputError,
-            FeatureId = featureId, Message = message, FilePath = path, Fix = fix
+            FeatureId = featureId, Message = message, FilePath = path, Fix = fix, Line = line, Column = column
         };
 
     private static bool IsInputFailure(Exception error)

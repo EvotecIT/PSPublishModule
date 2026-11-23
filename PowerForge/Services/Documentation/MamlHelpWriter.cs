@@ -22,7 +22,8 @@ internal sealed class MamlHelpWriter
         string moduleName,
         string outputDirectory,
         string? outputFileName = null,
-        Action<int, int, string>? progress = null)
+        Action<int, int, string>? progress = null,
+        bool preserveExistingTopics = false)
     {
         if (payload is null) throw new ArgumentNullException(nameof(payload));
         if (string.IsNullOrWhiteSpace(moduleName)) throw new ArgumentException("ModuleName is required.", nameof(moduleName));
@@ -44,6 +45,15 @@ internal sealed class MamlHelpWriter
             NewLineChars = "\r\n",
             NewLineHandling = NewLineHandling.Entitize
         };
+        var commands = (payload.Commands ?? Enumerable.Empty<DocumentationCommandHelp>())
+            .Where(c => c is not null && !string.IsNullOrWhiteSpace(c.Name))
+            .OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (preserveExistingTopics && File.Exists(path))
+        {
+            MergeExternalHelp(path, commands, settings, progress);
+            return path;
+        }
 
         using (var stream = File.Create(path))
         using (var writer = XmlWriter.Create(stream, settings))
@@ -52,15 +62,7 @@ internal sealed class MamlHelpWriter
             writer.WriteStartElement("helpItems", MshNs);
             writer.WriteAttributeString("schema", "maml");
 
-            var commands = (payload.Commands ?? Enumerable.Empty<DocumentationCommandHelp>())
-                .Where(c => c is not null && !string.IsNullOrWhiteSpace(c.Name))
-                .OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
-                .ToArray();
-            for (var i = 0; i < commands.Length; i++)
-            {
-                progress?.Invoke(i + 1, commands.Length, commands[i].Name.Trim());
-                WriteCommand(writer, commands[i]);
-            }
+            WriteCommands(writer, commands, progress);
 
             writer.WriteEndElement(); // helpItems
             writer.WriteEndDocument();
@@ -68,6 +70,37 @@ internal sealed class MamlHelpWriter
 
         NormalizeGeneratedTextFile(path);
         return path;
+    }
+
+    private static void MergeExternalHelp(string path, DocumentationCommandHelp[] commands, XmlWriterSettings settings,
+        Action<int, int, string>? progress)
+    {
+        var document = new XmlDocument { PreserveWhitespace = true, XmlResolver = null };
+        using (var reader = XmlReader.Create(path, new XmlReaderSettings { DtdProcessing = DtdProcessing.Prohibit, XmlResolver = null }))
+            document.Load(reader);
+        if (document.DocumentElement is not { LocalName: "helpItems" } root)
+            throw new InvalidOperationException($"Existing external help '{path}' must have a helpItems root.");
+
+        var existing = root.ChildNodes.OfType<XmlElement>()
+            .Where(static element => element.LocalName == "command" && element.NamespaceURI == CommandNs)
+            .Select(static element => element["details", CommandNs]?["name", CommandNs]?.InnerText.Trim())
+            .OfType<string>().ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var additions = commands.Where(command => existing.Add(command.Name.Trim())).ToArray();
+        if (additions.Length == 0) return;
+
+        using (var writer = root.CreateNavigator()!.AppendChild())
+            WriteCommands(writer, additions, progress);
+        using (var writer = XmlWriter.Create(path, settings))
+            document.Save(writer);
+    }
+
+    private static void WriteCommands(XmlWriter writer, DocumentationCommandHelp[] commands, Action<int, int, string>? progress)
+    {
+        for (var index = 0; index < commands.Length; index++)
+        {
+            progress?.Invoke(index + 1, commands.Length, commands[index].Name.Trim());
+            WriteCommand(writer, commands[index]);
+        }
     }
 
     private static void WriteCommand(XmlWriter writer, DocumentationCommandHelp cmd)

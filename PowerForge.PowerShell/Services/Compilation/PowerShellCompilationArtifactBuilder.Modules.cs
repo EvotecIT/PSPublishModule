@@ -7,6 +7,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
     private static CopiedArtifact CopyHybridModule(
         PowerShellCompilationBuildSpec spec,
         string artifactName,
+        string moduleAssemblyFileName,
         string compiledAssembly,
         PowerShellTypedCompilationResult typed,
         string outputDirectory,
@@ -15,7 +16,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
     {
         var moduleDirectory = Path.Combine(outputDirectory, artifactName);
         Directory.CreateDirectory(moduleDirectory);
-        var assemblyPath = Path.Combine(moduleDirectory, artifactName + ".dll");
+        var assemblyPath = Path.Combine(moduleDirectory, moduleAssemblyFileName);
         var modulePath = Path.Combine(moduleDirectory, artifactName + ".psm1");
         File.Copy(compiledAssembly, assemblyPath, overwrite: true);
         var files = new List<PowerShellCompilationArtifactFile>();
@@ -52,6 +53,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             moduleDirectory,
             artifactName,
             Path.GetFileName(modulePath),
+            moduleAssemblyFileName,
             typed,
             spec.TargetFramework,
             verifyCopiedInput,
@@ -94,6 +96,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
     private static CopiedArtifact CopyStrictModuleWithManifest(
         PowerShellCompilationBuildSpec spec,
         string artifactName,
+        string moduleAssemblyFileName,
         string compiledAssembly,
         PowerShellTypedCompilationResult typed,
         string outputDirectory,
@@ -102,7 +105,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
     {
         var moduleDirectory = Path.Combine(outputDirectory, artifactName);
         Directory.CreateDirectory(moduleDirectory);
-        var assemblyPath = Path.Combine(moduleDirectory, artifactName + ".dll");
+        var assemblyPath = Path.Combine(moduleDirectory, moduleAssemblyFileName);
         File.Copy(compiledAssembly, assemblyPath, overwrite: true);
         var files = new List<PowerShellCompilationArtifactFile> { CreateArtifactFile(assemblyPath, "TypedAssembly") };
         CopyDebugSymbolsIfPresent(compiledAssembly, assemblyPath, files);
@@ -112,6 +115,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             moduleDirectory,
             artifactName,
             Path.GetFileName(assemblyPath),
+            moduleAssemblyFileName,
             typed,
             spec.TargetFramework,
             verifyCopiedInput,

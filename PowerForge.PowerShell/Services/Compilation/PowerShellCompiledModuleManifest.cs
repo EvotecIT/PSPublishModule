@@ -110,6 +110,7 @@ internal static class PowerShellCompiledModuleManifest
         string moduleDirectory,
         string artifactName,
         string rootModuleFileName,
+        string compiledAssemblyFileName,
         PowerShellTypedCompilationResult typed,
         string targetFramework,
         Action<string, string> verifyCopiedInput,
@@ -182,7 +183,13 @@ internal static class PowerShellCompiledModuleManifest
         var hybrid = rootModuleFileName.EndsWith(".psm1", StringComparison.OrdinalIgnoreCase);
         var hasRetainedAlternatives = hybrid &&
             PowerShellHybridDependencyResolver.DiscoverRetainedModuleAlternatives(sourcePath, typed.SourcePaths, snapshot).Length > 0;
-        var functionExports = hasScriptNestedModules && manifestFunctions is null ? null : selectedFallback;
+        // The root module can publish runtime-created functions that are absent from the compilation inventory.
+        var preserveAuthoredFunctionFilter = hybrid && explicitExports?.HasWildcardFunctions == true;
+        var preserveAuthoredExports = preserveAuthoredFunctionFilter &&
+            !(explicitExports!.HasTerminalAllCommandExport && SelectsAllRootFunctions(manifestFunctions, hasNestedModules));
+        var functionExports = preserveAuthoredFunctionFilter || (hasScriptNestedModules && manifestFunctions is null)
+            ? null
+            : selectedFallback;
 
         var mutator = new AstModuleManifestMutator();
         var rootKey = ModuleManifestValueReader.ReadTopLevelString(sourceManifest, "ModuleToProcess") is not null
@@ -194,7 +201,7 @@ internal static class PowerShellCompiledModuleManifest
                 PowerShellCompilationPathSafety.GetPathComparison(targetManifest)))
             throw new InvalidOperationException($"Module manifest '{sourceManifest}' does not contain a literal RootModule entry that can be updated.");
         ApplyTargetCompatibility(sourceManifest, targetManifest, targetFramework, mutator);
-        if (!hasRuntimeControlledExports && !hasRetainedAlternatives)
+        if (!hasRuntimeControlledExports && !hasRetainedAlternatives && !preserveAuthoredExports)
         {
             mutator.TrySetManifestExports(
                 targetManifest,
@@ -211,6 +218,7 @@ internal static class PowerShellCompiledModuleManifest
                 sourcePath,
                 artifactName,
                 rootModuleFileName,
+                compiledAssemblyFileName,
                 typedSourcePaths,
                 manifestFileList);
             mutator.TrySetTopLevelStringArray(targetManifest, "FileList", rewrittenFileList);
@@ -256,6 +264,7 @@ internal static class PowerShellCompiledModuleManifest
         string sourcePath,
         string artifactName,
         string rootModuleFileName,
+        string compiledAssemblyFileName,
         ISet<string> typedSourcePaths,
         IEnumerable<string> sourceEntries)
     {
@@ -274,7 +283,7 @@ internal static class PowerShellCompiledModuleManifest
             rewritten.Add(entry);
         }
         rewritten.Add(rootModuleFileName);
-        rewritten.Add(artifactName + ".dll");
+        rewritten.Add(compiledAssemblyFileName);
         return rewritten.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
@@ -600,6 +609,18 @@ internal static class PowerShellCompiledModuleManifest
         => string.IsNullOrWhiteSpace(moduleManifestPath)
             ? Path.ChangeExtension(sourcePath, ".psd1")
             : Path.GetFullPath(moduleManifestPath!.Trim().Trim('"'));
+
+    internal static bool SelectsAllRootFunctions(string sourcePath, string? moduleManifestPath)
+    {
+        var manifest = ResolveSourceManifest(sourcePath, moduleManifestPath);
+        return !File.Exists(manifest) ||
+            SelectsAllRootFunctions(
+                ModuleManifestValueReader.ReadTopLevelLiteralStringOrArrayOrThrow(manifest, "FunctionsToExport"),
+                ModuleManifestValueReader.ReadTopLevelModuleReferencePaths(manifest, "NestedModules").Any());
+    }
+
+    private static bool SelectsAllRootFunctions(string[]? functions, bool hasNestedModules)
+        => functions is { Length: 1 } && functions[0] == "*" && !hasNestedModules;
 
     private sealed class ManifestFileReference
     {

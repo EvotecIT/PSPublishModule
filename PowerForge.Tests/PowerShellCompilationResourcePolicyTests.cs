@@ -266,6 +266,30 @@ public sealed class PowerShellCompilationResourcePolicyTests
     }
 
     [Fact]
+    public void Analyze_LocksImportsAndResourcesFromRetainedChildScript()
+    {
+        using var fixture = new ResourceFixture(module: false, moduleSource: "& \"$PSScriptRoot/Private/Read.ps1\"");
+        fixture.Write("Private/Read.ps1",
+            "Import-Module Microsoft.PowerShell.Utility; Get-Content -LiteralPath \"$PSScriptRoot/settings.json\"");
+        fixture.Write("Private/settings.json", "{ \"value\": 7 }");
+        var input = new PowerShellCompilationInputResolver().Resolve(fixture.SourcePath,
+            PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Hybrid);
+        Assert.Single(input.CompilationSourceFiles);
+        Assert.Equal(2, input.SourceFiles.Length);
+        var plan = new PowerShellCompilationAnalyzer().Analyze(input, input.Mode);
+
+        Assert.Contains(plan.Dependencies, dependency =>
+            dependency.RelativePath == "Private/settings.json" &&
+            dependency.Selection == PowerShellCompilationDependencySelection.Inferred &&
+            dependency.Disposition == PowerShellCompilationDependencyDisposition.CopiedAdjacent);
+        var graph = plan.DependencyGraph!;
+        var module = Assert.Single(graph.Nodes, node => node.Identity.Name == "Microsoft.PowerShell.Utility");
+        var edge = Assert.Single(graph.Edges, edge =>
+            edge.ToId == module.Id && edge.Kind == PowerShellCompilationDependencyEdgeKind.ImportModule);
+        Assert.Equal("Private/Read.ps1", graph.Nodes.Single(node => node.Id == edge.FromId).Identity.Source);
+    }
+
+    [Fact]
     public void Analyze_MissingInferredLiteralFailsClosed()
     {
         using var fixture = new ResourceFixture(

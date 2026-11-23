@@ -54,6 +54,14 @@ function Initialize-WorkflowEvidenceRoot {
     return $evidence
 }
 
+function Invoke-CliJson {
+    param([string[]] $Arguments, [string] $WorkingDirectory, [string] $ProcessEvidencePath, [hashtable] $Environment = @{})
+
+    $run = Invoke-OwnedProcess -FileName 'dotnet' -Arguments (@($CliAssemblyPath) + $Arguments) -WorkingDirectory $WorkingDirectory -Environment $Environment
+    $json = ConvertFrom-CorpusCliProcess $run -ProcessEvidencePath $ProcessEvidencePath
+    return $json.result
+}
+
 function Invoke-WorkflowCliOperation {
     param([string[]] $Arguments, [string] $WorkingDirectory, [string] $EvidencePath, [hashtable] $Environment = @{})
     try {
@@ -321,7 +329,7 @@ function Copy-WorkflowSourceInputs {
     $paths = @($Entry.sourceInputs | ForEach-Object { $_.path })
     Assert-WorkflowNameSet $paths $paths 'Pinned source paths'
     if ($Entry.entryPoint -notin $paths) { throw 'The entrypoint must be included in pinned sourceInputs.' }
-    foreach ($required in @(Get-WorkflowProperty $Entry.qualification 'requiredSourceFiles' @())) {
+    foreach ($required in @(Get-WorkflowProperty (Get-WorkflowProperty $Entry 'qualification') 'requiredSourceFiles' @())) {
         if ($required -notin $paths) { throw "Required source file '$required' is not pinned." }
     }
     New-Item -ItemType Directory -Path $Destination -Force | Out-Null
@@ -546,7 +554,7 @@ function Invoke-WholeWorkflowQualification {
         $steps[$operation] = Invoke-WorkflowCliOperation -Arguments @('powershell', 'project', $operation, $projectPath, '--output', 'json') -WorkingDirectory $root -EvidencePath (Join-Path $evidenceRoot ($operation + '.json')) -Environment $environment
     }
     $installRoot = [string] @($steps.install.targets)[0].path
-    $relativePrimary = [IO.Path]::GetRelativePath($outputRoot, $builtPath)
+    $relativePrimary = $builtPath.Substring($outputRoot.TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar).Length + 1)
     $installedPath = Assert-ContainedPath -Root $installRoot -Path (Join-Path $installRoot ('artifact/' + $relativePrimary)) -Label 'Installed workflow primary'
     if ((Get-FileHash -LiteralPath $builtPath).Hash -ne $buildReceipt.manifest.artifactSha256 -or
         (Get-FileHash -LiteralPath $installedPath).Hash -ne $buildReceipt.manifest.artifactSha256) {

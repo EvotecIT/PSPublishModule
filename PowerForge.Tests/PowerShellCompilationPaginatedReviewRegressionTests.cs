@@ -315,29 +315,47 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
     [Fact]
     public void Build_HybridModuleCompilesCommentBasedHelpAndGeneratesExternalHelp()
     {
+        const string artifactName = "PowerForge.CommentHelpIdentity";
         using var fixture = ArtifactFixture.Create(
             "function Get-HelpedValue {\n<#\n.SYNOPSIS\nAuthored compiler help synopsis.\n.DESCRIPTION\nRetained description.\n#>\nreturn 7\n}; " +
-            "Export-ModuleMember -Function Get-HelpedValue",
+            $"function Get-AuthoredValue {{\n<#\n.EXTERNALHELP {artifactName}-help.xml\n#>\ntrap {{ break }}; return 9\n}}; " +
+            "Export-ModuleMember -Function Get-HelpedValue, Get-AuthoredValue",
             ".psm1");
+        var cultureDirectory = Directory.CreateDirectory(Path.Combine(Path.GetDirectoryName(fixture.ScriptPath)!, "en-US"));
+        var authoredHelpName = artifactName + "-help.xml";
+        var authored = new DocumentationExtractionPayload { ModuleName = artifactName };
+        authored.Commands.Add(new DocumentationCommandHelp
+        {
+            Name = "Get-AuthoredValue",
+            CommandType = "Function",
+            Synopsis = "Existing external help must remain available."
+        });
+        _ = new MamlHelpWriter().WriteExternalHelpFile(authored, artifactName, cultureDirectory.FullName);
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             fixture.ScriptPath,
             fixture.OutputPath,
-            "PowerForge.CommentHelpIdentity",
+            artifactName,
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true)
+        {
+            ResourceMode = PowerShellCompilationResourceMode.CompleteModule
+        });
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.Equal(1, result.Manifest!.CompiledMethods);
-        Assert.Equal(0, result.Manifest.RuntimeFallbackUnits);
-        Assert.Contains(result.Manifest.Files, file => file.Role == "ExternalHelp" && File.Exists(file.Path));
+        Assert.Equal(1, result.Manifest.RuntimeFallbackUnits);
+        var help = Assert.Single(result.Manifest.Files, file => Path.GetFileName(file.Path) == authoredHelpName);
+        Assert.Equal("ExternalHelp", help.Role);
+        var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(help.Path)));
+        Assert.Equal(hash, help.Sha256, ignoreCase: true);
         var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
         var run = Run(
             "pwsh",
             "-NoProfile",
             "-NonInteractive",
             "-Command",
-            $"Import-Module -Name '{escapedPath}' -Force; (Get-Help Get-HelpedValue).Synopsis");
-        Assert.Equal((0, "Authored compiler help synopsis.", string.Empty),
+            $"Import-Module -Name '{escapedPath}' -Force; (Get-Help Get-HelpedValue).Synopsis; (Get-Help Get-AuthoredValue).Synopsis");
+        Assert.Equal((0, "Authored compiler help synopsis." + Environment.NewLine + "Existing external help must remain available.", string.Empty),
             (run.ExitCode, run.StandardOutput.Trim(), run.StandardError.Trim()));
     }
 
@@ -383,7 +401,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
     {
         using var fixture = ArtifactFixture.Create(
             "function Get-TypedHelp {\n<#\n.SYNOPSIS\nTyped command help.\n#>\nreturn 3\n}; " +
-            "function Get-RetainedHelp {\n<#\n.SYNOPSIS\nRetained command help.\n#>\nreturn [int](Get-Date -Format yyyy)\n}; " +
+            "function Get-RetainedHelp {\n<#\n.SYNOPSIS\nRetained command help.\n#>\ntrap { break }; return 4\n}; " +
             "Export-ModuleMember -Function @('Get-TypedHelp', 'Get-RetainedHelp')",
             ".psm1");
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(

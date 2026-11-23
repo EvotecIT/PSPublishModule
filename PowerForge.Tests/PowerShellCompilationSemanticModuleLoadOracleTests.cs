@@ -6,6 +6,102 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
 {
     [PinnedSemanticHostFact]
     [Trait("Category", "PowerShellCompilerGate")]
+    public void MultiSourceHybridWildcardKeepsAuthoredExportAndManifestFiltersOnBothHosts()
+    {
+        const string source = """
+            . "$PSScriptRoot/Runtime.ps1"
+            function Get-PublishedCount { return 21 }
+            Export-ModuleMember -Function Get-Published*
+            """;
+        const string runtime = """
+            Set-Item Function:Get-PublishedRuntime -Value { 42 }
+            function Read-Private { trap { break }; 'private' }
+            """;
+        const string probe = """
+            [ordered]@{
+                count = Get-PublishedCount
+                exports = @((Get-Module ScopedValues).ExportedCommands.Keys | Sort-Object)
+            } | ConvertTo-Json -Compress
+            """;
+        var files = new Dictionary<string, string> { ["Runtime.ps1"] = runtime };
+        CompareScopedArtifacts(source, probe, new[] { "Get-PublishedCount" },
+            value => Assert.Equal("{\"count\":21,\"exports\":[\"Get-PublishedCount\",\"Get-PublishedRuntime\"]}", value),
+            requiredModule: "Microsoft.PowerShell.Utility", additionalSources: files, manifestFunctionPattern: null);
+        CompareScopedArtifacts(source, probe, new[] { "Get-PublishedCount" },
+            value => Assert.Equal("{\"count\":21,\"exports\":[\"Get-PublishedCount\"]}", value),
+            requiredModule: "Microsoft.PowerShell.Utility", additionalSources: files, manifestFunctionPattern: "Get-PublishedCount");
+    }
+
+    [PinnedSemanticHostFact]
+    [Trait("Category", "PowerShellCompilerGate")]
+    public void MultiSourceHybridWildcardRunsAtItsAuthoredLocationWithNestedModulesOnBothHosts()
+    {
+        const string source = """
+            . "$PSScriptRoot/Runtime.ps1"
+            function Get-PublishedCount { return 21 }
+            Export-ModuleMember -Function Get-Published*
+            Set-Item Function:Get-PublishedLate -Value { 100 }
+            """;
+        const string probe = """
+            [ordered]@{
+                count = Get-PublishedCount
+                exports = @((Get-Module ScopedValues).ExportedCommands.Keys | Sort-Object)
+            } | ConvertTo-Json -Compress
+            """;
+        var files = new Dictionary<string, string>
+        {
+            ["Runtime.ps1"] = "function Read-Private { trap { break }; 'private' }",
+            ["Nested.psm1"] = "function Get-PublishedNested { 42 }; Export-ModuleMember -Function Get-PublishedNested"
+        };
+        CompareScopedArtifacts(source, probe, new[] { "Get-PublishedCount" },
+            value => Assert.Equal("{\"count\":21,\"exports\":[\"Get-PublishedCount\",\"Get-PublishedNested\"]}", value),
+            additionalSources: files, resolveModuleSources: true, nestedModule: "Nested.psm1");
+    }
+
+    [PinnedSemanticHostFact]
+    [Trait("Category", "PowerShellCompilerGate")]
+    public void TerminalWildcardPreservesBothHostEditionAndManifestSelection()
+    {
+        const string source = """
+            . "$PSScriptRoot/Identity.ps1"
+            function Get-OtherExport { return 21 }
+            Export-ModuleMember -Function '*' -Cmdlet '*'
+            """;
+        const string probe = """
+            if ((Test-HostEdition) -ne ($PSEdition -eq 'Core')) { throw 'Unexpected edition' }
+            @((Get-Module ScopedValues).ExportedCommands.Keys | Sort-Object) -join ','
+            """;
+        var files = new Dictionary<string, string>
+        {
+            ["Identity.ps1"] = """
+                function Test-HostEdition {
+                    [CmdletBinding()]
+                    [OutputType([bool])]
+                    param()
+                    [bool]($PSEdition -eq 'Core')
+                }
+                """
+        };
+        foreach (var (functionFilter, expectedExports, runtimeRouted) in new[]
+        {
+            ("*", "Get-OtherExport,Test-HostEdition", false),
+            ("Test-HostEdition", "Test-HostEdition", true)
+        })
+        {
+            CompareScopedArtifacts(source, probe, new[] { "Test-HostEdition" },
+                value => Assert.Equal(expectedExports, value),
+                assertArtifact: built =>
+                {
+                    var unit = Assert.Single(built.Manifest!.UnitDispositionLedger!.Entries, entry => entry.Name == "Test-HostEdition");
+                    Assert.Equal(runtimeRouted, unit.RuntimeRouted);
+                },
+                additionalSources: files, manifestFunctionPattern: functionFilter, resolveModuleSources: true,
+                excludeManifestCmdlets: true);
+        }
+    }
+
+    [PinnedSemanticHostFact]
+    [Trait("Category", "PowerShellCompilerGate")]
     public void LiteralExportAssignmentsPreserveThePublicSurfaceOnBothHosts()
     {
         const string source = """
@@ -181,6 +277,99 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
             value => Assert.Equal("{\"count\":21,\"runtime\":42,\"exports\":[\"Get-ModuleCount\",\"Get-Runtime\"]}", value),
             additionalSources: new Dictionary<string, string> { ["Modern.ps1"] = alternative, ["Desktop.ps1"] = alternative },
             discoverAdditionalSources: true, manifestFunctionPattern: null);
+    }
+
+    [PinnedSemanticHostFact]
+    [Trait("Category", "PowerShellCompilerGate")]
+    public void RootModuleWildcardExportsRuntimeFunctionsWithAnOmittedManifestFilterOnBothHosts()
+    {
+        const string source = """
+            . "$PSScriptRoot/Runtime.ps1"
+            function Get-PublishedCount { return 21 }
+            function Read-Private { 'private' }
+            Export-ModuleMember -Function Get-Published*
+            """;
+        const string runtime = "Set-Item Function:Get-PublishedRuntime -Value { 42 }";
+        const string probe = """
+            [ordered]@{
+                count = Get-PublishedCount
+                runtime = Get-PublishedRuntime
+                exports = @((Get-Module ScopedValues).ExportedCommands.Keys | Sort-Object)
+            } | ConvertTo-Json -Compress
+            """;
+        CompareScopedArtifacts(source, probe, new[] { "Get-PublishedCount" },
+            value => Assert.Equal("{\"count\":21,\"runtime\":42,\"exports\":[\"Get-PublishedCount\",\"Get-PublishedRuntime\"]}", value),
+            additionalSources: new Dictionary<string, string> { ["Runtime.ps1"] = runtime },
+            retainAdditionalSources: true, manifestFunctionPattern: null);
+    }
+
+    [PinnedSemanticHostFact]
+    [Trait("Category", "PowerShellCompilerGate")]
+    public void FunctionWildcardExportsTheAdvancedLifecycleFunctionOnBothHosts()
+    {
+        const string source = """
+            function Get-PublishedLifecycle {
+                [CmdletBinding()]
+                param([Parameter(ValueFromPipeline=$true)][int] $Number)
+                begin { Write-Output 'begin' }
+                process {
+                    trap { 'caught'; continue }
+                    Write-Output ('item:' + $Number)
+                }
+                end { Write-Output 'end' }
+            }
+            function Get-PublishedMarker { return 9 }
+            function Read-Private { return 19 }
+            Export-ModuleMember -Function Get-Published*
+            """;
+        const string probe = """
+            [ordered]@{
+                exports = @((Get-Module ScopedValues).ExportedCommands.Keys | Sort-Object)
+                kind = (Get-Command Get-PublishedLifecycle -ErrorAction Stop).CommandType.ToString()
+                values = @(3, 7 | Get-PublishedLifecycle)
+                marker = Get-PublishedMarker
+            } | ConvertTo-Json -Compress
+            """;
+        CompareScopedArtifacts(source, probe, new[] { "Get-PublishedMarker" },
+            value => Assert.Equal(
+                "{\"exports\":[\"Get-PublishedLifecycle\",\"Get-PublishedMarker\"],\"kind\":\"Function\",\"values\":[\"begin\",\"item:3\",\"item:7\",\"end\"],\"marker\":9}", value));
+    }
+
+    [PinnedSemanticHostFact]
+    [Trait("Category", "PowerShellCompilerGate")]
+    public void HybridModuleRetainsExportsSelectedByAnInitializationFunctionOnBothHosts()
+    {
+        const string source = """
+            . "$PSScriptRoot/Context.ps1"
+            function Get-DefaultValue { return 19 }
+            function Get-OptionalValue { return 23 }
+            function Enable-OptionalCommands {
+                Export-ModuleMember -Function Get-OptionalValue
+            }
+            if ($env:POWERFORGE_EXPORT_ORACLE -eq 'enabled') { Enable-OptionalCommands }
+            Export-ModuleMember -Function Get-DefaultValue
+            """;
+        const string probe = """
+            $module = Get-Module ScopedValues
+            $manifest = Join-Path $module.ModuleBase 'ScopedValues.psd1'
+            $initial = @($module.ExportedCommands.Keys | Sort-Object)
+            $default = Get-DefaultValue
+            Remove-Module ScopedValues -Force
+            $env:POWERFORGE_EXPORT_ORACLE = 'enabled'
+            $module = Import-Module -Name $manifest -PassThru -Force -ErrorAction Stop
+            [ordered]@{
+                initial = $initial
+                default = $default
+                enabled = @($module.ExportedCommands.Keys | Sort-Object)
+                optional = Get-OptionalValue
+            } | ConvertTo-Json -Compress
+            """;
+        CompareScopedArtifacts(source, probe, new[] { "Get-DefaultValue", "Get-OptionalValue" },
+            value => Assert.Equal(
+                "{\"initial\":[\"Get-DefaultValue\"],\"default\":19,\"enabled\":[\"Get-DefaultValue\",\"Get-OptionalValue\"],\"optional\":23}", value),
+            importSetup: "$env:POWERFORGE_EXPORT_ORACLE = 'disabled'",
+            additionalSources: new Dictionary<string, string> { ["Context.ps1"] = "Set-Variable -Name ModuleReady -Value $true" },
+            retainAdditionalSources: true, manifestFunctionPattern: "Get-*");
     }
 
     private static void AssertRuntimeModulePathRejectsAnUnstagedFile(PowerShellCompilationBuildResult built)

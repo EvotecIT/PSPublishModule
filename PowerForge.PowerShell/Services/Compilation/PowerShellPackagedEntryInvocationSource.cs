@@ -10,13 +10,6 @@ internal static class PowerShellPackagedEntryInvocationSource
         => nativeEntry ? PowerShellHybridNativeEntryEmitter.LauncherInvocation() : """
                         using var entryLookup = PowerForgePackagedSource.AddCommand(powerShell, PowerForgePackagedEntryPoint.Path, source);
                         foreach (var argument in ParseArguments(args))
-                        {
-                            if (argument.Name is null)
-                                powerShell.AddArgument(argument.Value);
-                            else if (argument.Value is null)
-                                powerShell.AddParameter(argument.Name);
-                            else
-                                powerShell.AddParameter(argument.Name, argument.Value);
-                        }
+                            powerShell.Commands.Commands[0].Parameters.Add(argument);
             """;
 }

@@ -43,13 +43,7 @@ internal static class PowerShellHybridNativeEntryEmitter
     }
 
     internal static string LauncherInvocation()
-        => "            var arguments = new List<System.Management.Automation.Runspaces.CommandParameter>();\n" +
-           "            foreach (var argument in ParseArguments(args))\n" +
-           "            {\n" +
-           "                var value = argument.Name is not null && SwitchParameters.Contains(argument.Name) && argument.Value is null\n" +
-           "                    ? (object)global::System.Management.Automation.SwitchParameter.Present : argument.Value;\n" +
-           "                arguments.Add(new System.Management.Automation.Runspaces.CommandParameter(argument.Name, value));\n" +
-           "            }\n" +
+        => "            var arguments = ParseArguments(args).ToArray();\n" +
            "            var entry = global::PowerForge.Compiled.CompiledNativeScriptEntry.Create(runspace, PowerForgePackagedEntryPoint.Path);\n" +
            "            using var entryLookup = global::PowerForge.Generated.Runtime.PowerShellNativeFunctionHost.AddScriptEntryCommand(powerShell, entry, arguments);";
 }

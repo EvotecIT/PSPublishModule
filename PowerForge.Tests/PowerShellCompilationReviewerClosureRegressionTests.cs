@@ -227,7 +227,26 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
     }
 
     [Theory]
-    [InlineData("param([Parameter(Mandatory)] [string] $Name); $Name")]
+    [InlineData("#requires -Version 99.0")]
+    [InlineData("#requires -RunAsAdministrator")]
+    [InlineData("#requires -Modules PowerForge.Missing")]
+    public void Analyze_PackagedExecutableRejectsUnsupportedRequirementsInSourceDependencies(string requirement)
+    {
+        using var fixture = ArtifactFixture.Create(". \"$PSScriptRoot/Helper.ps1\"");
+        File.WriteAllText(Path.Combine(fixture.RootPath, "Helper.ps1"), requirement + "\n'blocked'");
+        var input = new PowerShellCompilationInputResolver().Resolve(fixture.ScriptPath,
+            PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Package);
+
+        var plan = new PowerShellCompilationAnalyzer().Analyze(input, input.Mode, "net10.0");
+
+        Assert.False(plan.CanProceed);
+        Assert.Contains(plan.Files.SelectMany(static file => file.Diagnostics),
+            static diagnostic => diagnostic.FeatureId == "powershell.package.validation" &&
+                diagnostic.Message.Contains("#requires", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Theory]
+    [InlineData("param([string] $Host); $Host")]
     [InlineData("Read-Host -AsSecureString 'Value'")]
     [InlineData("process { 1 }")]
     [InlineData("$PSDefaultParameterValues = @{'Read-Host:MaskInput'=$true}; Read-Host")]

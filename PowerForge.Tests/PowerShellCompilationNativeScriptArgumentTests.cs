@@ -6,6 +6,41 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
 {
     [PinnedSemanticHostFact]
     [Trait("Category", "PowerShellCompilerGate")]
+    public void Build_PackagedAdvancedScriptReportsUnknownSwitchThroughPowerShell()
+    {
+        using var fixture = ArtifactFixture.Create("""
+            [CmdletBinding()]
+            param([string] $Name)
+            Write-Output ('body=' + $Name)
+            """);
+        var spec = new PowerShellCompilationBuildSpec(fixture.ScriptPath, fixture.OutputPath,
+            "PowerForge.PackagedAdvancedArguments", PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Package)
+        {
+            SingleFile = false, SelfContained = false,
+            TargetContract = PowerShellCompilationTargetContractService.Create(
+                PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Package,
+                "net10.0", "win-x64", false, false, PowerShellCompilationExecutableOptimization.None, true)
+        };
+        spec.ExpectedDependencyLock = new PowerShellCompilationDependencyPlanner().AnalyzeGraph(spec);
+        var result = new PowerShellCompilationArtifactBuilder().Build(spec);
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var generated = RunProcess(result.ArtifactPath!, "-Unknown");
+        var modernHost = Environment.GetEnvironmentVariable("POWERFORGE_PWSH76_PATH")!;
+        const string expected = "A parameter cannot be found that matches parameter name 'Unknown'.";
+        foreach (var (host, diagnostic) in new[] { (modernHost, expected), ("powershell.exe", "NamedParameterNotFound,") })
+        {
+            var original = RunProcess(host, "-NoProfile", "-NonInteractive", "-File", fixture.ScriptPath, "-Unknown");
+            Assert.Equal(1, original.ExitCode);
+            Assert.Empty(original.StandardOutput.Trim());
+            Assert.Contains(diagnostic, original.StandardError, StringComparison.Ordinal);
+        }
+        Assert.Equal(1, generated.ExitCode);
+        Assert.Empty(generated.StandardOutput.Trim());
+        Assert.Contains(expected, generated.StandardError, StringComparison.Ordinal);
+    }
+
+    [PinnedSemanticHostFact]
+    [Trait("Category", "PowerShellCompilerGate")]
     public void Build_HybridNativeScriptRootRetainsModuleOwnedBlockValues()
     {
         var host = Environment.GetEnvironmentVariable("POWERFORGE_PWSH76_PATH");
@@ -110,6 +145,20 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Equal(new[] { "value=owned", "flag=False", "[-Unknown]", "[tail]" },
             positionalOnly.StandardOutput.Trim().Split(new[] { "\r\n", "\n" }, StringSplitOptions.None));
         Assert.Empty(positionalOnly.StandardError);
+
+        var modernHost = Environment.GetEnvironmentVariable("POWERFORGE_PWSH76_PATH") ?? "pwsh";
+        foreach (var arguments in new[] { new[] { "-Unknown" }, new[] { "-Value", "owned", "-Unknown", "-Flag" } })
+        {
+            var generated = RunProcess(result.ArtifactPath!, arguments);
+            foreach (var host in new[] { modernHost, "powershell.exe" })
+            {
+                var original = RunProcess(host, new[] { "-NoProfile", "-NonInteractive", "-File", fixture.ScriptPath }
+                    .Concat(arguments).ToArray());
+                Assert.True(original.ExitCode == 0, original.StandardError);
+                Assert.Equal((original.ExitCode, original.StandardOutput.Trim(), original.StandardError.Trim()),
+                    (generated.ExitCode, generated.StandardOutput.Trim(), generated.StandardError.Trim()));
+            }
+        }
 
         var repeatedKnown = new[] { "-Value", "first", "-Value", "second" };
         var originalFailure = RunProcess("pwsh", new[] { "-NoProfile", "-File", fixture.ScriptPath }.Concat(repeatedKnown).ToArray());

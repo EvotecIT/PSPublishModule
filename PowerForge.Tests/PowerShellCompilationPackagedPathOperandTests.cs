@@ -73,8 +73,9 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     [InlineData("Get-Content -Path $Path -LiteralPath $Other")]
     [InlineData("Get-Content -Path $Path other.txt")]
     [InlineData("Get-Content -Unknown $Value data.txt")]
-    [InlineData("1..2 | ForEach-Object { Get-Content -Path $Path }")]
-    [InlineData("Write-Output (Get-Content -Path $Path)")]
+    [InlineData("1..2 | ForEach-Object { process { Get-Content -Path $Path } }")]
+    [InlineData("Write-Output \"value $(Get-Content -Path $Path)\"")]
+    [InlineData("Get-Content -Path (Get-Content -Path $Lookup)")]
     [InlineData("Get-ChildItem -Name")]
     [InlineData("Get-ChildItem | Out-Null")]
     [InlineData("1 | Get-ChildItem")]
@@ -184,7 +185,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Equal(0, implicitUnsafe.ExitCode); Assert.Contains("guarded-refusal", implicitUnsafe.StandardOutput);
         Assert.DoesNotContain("implicit:", implicitUnsafe.StandardOutput);
         Assert.All(result.Manifest!.Dependencies, static dependency =>
-            Assert.DoesNotContain("Native script-root reads", dependency.Note));
+            Assert.DoesNotContain("Source-layout reads", dependency.Note));
     }
 
     [WindowsX64Fact]

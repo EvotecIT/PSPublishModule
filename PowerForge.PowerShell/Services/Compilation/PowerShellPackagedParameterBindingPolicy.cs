@@ -8,7 +8,7 @@ namespace PowerForge;
 internal static class PowerShellPackagedParameterBindingPolicy
 {
     internal static PowerShellPackagedParameterInitializers Generate(string sourcePath, string targetFramework,
-        bool nativeScriptEntry = false, ParsedSourceDocument? document = null)
+        ParsedSourceDocument? document = null)
     {
         document ??= PowerShellSourceParser.ParseHostFile(sourcePath);
         var ast = document.SyntaxRoot;
@@ -26,15 +26,6 @@ internal static class PowerShellPackagedParameterBindingPolicy
         {
             throw new InvalidOperationException(
                 $"Packaged parameter '${readOnlyParameter.Name.VariablePath.UserPath}' collides with a read-only automatic variable on target '{targetFramework}'.");
-        }
-        var mandatoryParameter = authoredParameters.FirstOrDefault(IsMandatory);
-        // The native script dispatcher binds the original declaration. Its SDK host refuses
-        // missing mandatory arguments before the compiled callback, without interactive input.
-        // Retained AddScript execution keeps its separately bounded parameter contract.
-        if (mandatoryParameter is not null && !nativeScriptEntry)
-        {
-            throw new InvalidOperationException(
-                $"Packaged parameter '${mandatoryParameter.Name.VariablePath.UserPath}' is mandatory and may require interactive prompting when omitted; the embedded runspace has no console-backed PSHost. Use an optional parameter or a Strict executable contract.");
         }
         var commonParameters = PowerShellCommonParameterPolicy.GetAvailable(ast.ParamBlock, targetFramework);
         foreach (var parameter in authoredParameters)
@@ -112,17 +103,6 @@ internal static class PowerShellPackagedParameterBindingPolicy
                fullName.Equals(name + "Attribute", StringComparison.OrdinalIgnoreCase) ||
                fullName.EndsWith("." + name + "Attribute", StringComparison.OrdinalIgnoreCase);
     }
-
-    private static bool IsMandatory(ParameterAst parameter)
-        => parameter.Attributes.OfType<AttributeAst>()
-            .Where(static attribute => IsAttributeNamed(attribute, "Parameter"))
-            .SelectMany(static attribute => attribute.NamedArguments)
-            .Where(static argument => argument.ArgumentName.Equals("Mandatory", StringComparison.OrdinalIgnoreCase))
-            .Any(static argument =>
-            {
-                try { return argument.Argument.SafeGetValue() is true; }
-                catch (InvalidOperationException) { return false; }
-            });
 
     private static bool SupportsPaging(ParamBlockAst? parameterBlock)
         => parameterBlock?.Attributes

@@ -21,7 +21,8 @@ namespace PowerForge.Generated.Runtime
         public override void NotifyEndApplication() { }
         public override void EnterNestedPrompt() => throw NonInteractive();
         public override void ExitNestedPrompt() => throw NonInteractive();
+        internal const string NonInteractiveMessage = "Packaged executables do not support this console operation.";
         internal static NotSupportedException NonInteractive()
-            => new NotSupportedException("Packaged executables do not support this console operation.");
+            => new NotSupportedException(NonInteractiveMessage);
     }
 }

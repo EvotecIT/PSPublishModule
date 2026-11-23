@@ -51,7 +51,7 @@ public sealed class PowerShellCompilationProjectDiagnosticsTests
         var text = string.Join("\n", PowerShellCompilationDiagnosticReportFormatter.Format(report));
         Assert.Contains("[Shaping] binary-module.cmdlet-shape", text);
         Assert.Contains("Calls Get-Leaf at 7:5 -> Functions.psm1:1", text);
-        Assert.DoesNotContain(fixture.Root, JsonSerializer.Serialize(report), StringComparison.OrdinalIgnoreCase);
+        AssertRedactedFixturePath(report, fixture.Root);
         var explanation = JsonSerializer.Deserialize<PowerShellCompilationExplanation>(
             File.ReadAllText(target.Path!), PowerShellCompilationProjectManifestService.JsonOptions)!;
         Assert.Equal(explanation.CanProceed, result.Succeeded); // Do not use the pre-shaping plan's success.
@@ -148,8 +148,73 @@ public sealed class PowerShellCompilationProjectDiagnosticsTests
             var report = Assert.Single(result.Targets).DiagnosticReport!;
             Assert.False(report.FinalShapeAvailable);
             Assert.Equal(stage, Assert.Single(report.Issues).Stage);
-            Assert.DoesNotContain(fixture.Root, JsonSerializer.Serialize(report), StringComparison.OrdinalIgnoreCase);
+            AssertRedactedFixturePath(report, fixture.Root);
         }
+    }
+
+    [Fact]
+    public void ProjectExplain_PreservesRejectedResourceLocationWithoutAbsolutePath()
+    {
+        using var fixture = Fixture.Create("""
+            function Read-Record {
+                Get-Content "$PSScriptRoot/../record.txt"
+            }
+            """, PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Hybrid);
+
+        var result = new PowerShellCompilationProjectWorkflowService().Explain(fixture.Project);
+
+        Assert.False(result.Succeeded);
+        var report = Assert.Single(result.Targets).DiagnosticReport!;
+        var issue = Assert.Single(report.Issues);
+        Assert.Equal("Functions.psm1", issue.RelativePath);
+        Assert.Equal(2, issue.Line);
+        Assert.Equal(17, issue.Column);
+        Assert.Contains("escapes the source root", issue.Message, StringComparison.Ordinal);
+        AssertRedactedFixturePath(report, fixture.Root);
+    }
+
+    [Theory]
+    [InlineData(".", "$PSCmdlet.ShouldProcess('record', 'inspect')", "confirmation-capable script interaction")]
+    [InlineData(".", "& $Command", "dynamic command invocation")]
+    [InlineData("&", "& $Command", "dynamic command invocation")]
+    public void ProjectExplain_ReportsPackagedHostRefusalsAtTheDependencyStatement(string invocation, string statement, string reason)
+    {
+        using var fixture = Fixture.Create(invocation + " \"$PSScriptRoot/Helper.ps1\"",
+            PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Hybrid);
+        File.WriteAllText(Path.Combine(fixture.Root, "Helper.ps1"),
+            "# Contained helper\nfunction Invoke-Helper {\n    " + statement + "\n}\n");
+
+        var result = new PowerShellCompilationProjectWorkflowService().Explain(fixture.Project);
+        Assert.False(result.Succeeded);
+        var report = Assert.Single(result.Targets).DiagnosticReport!;
+        var issue = Assert.Single(report.Issues, candidate => candidate.Message.Contains(reason, StringComparison.Ordinal));
+        Assert.Equal("Helper.ps1", issue.RelativePath);
+        Assert.Equal(3, issue.Line);
+        Assert.Equal(5, issue.Column);
+        AssertRedactedFixturePath(report, fixture.Root);
+    }
+
+    [Fact]
+    public void Check_LocatesMixedScopeRejectionInCalledScript()
+    {
+        using var fixture = Fixture.Create("""
+            . "$PSScriptRoot/Shared.ps1"
+            & "$PSScriptRoot/Child.ps1"
+            """, PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Hybrid);
+        File.WriteAllText(Path.Combine(fixture.Root, "Shared.ps1"), "function Get-Number { return 7 }");
+        var child = Path.Combine(fixture.Root, "Child.ps1");
+        File.WriteAllText(child, "# Dedicated child scope\n. \"$PSScriptRoot/Shared.ps1\"\n");
+
+        var result = new PowerShellCompilationHostService().Check(new PowerShellCompilationCheckRequest(fixture.Source)
+        {
+            Mode = PowerShellCompilationMode.Hybrid
+        });
+        Assert.False(result.CanProceed);
+        var issue = Assert.Single(result.Diagnostics);
+        Assert.Equal(child, issue.FilePath);
+        Assert.Equal(2, issue.Line);
+        Assert.Equal(3, issue.Column);
+        Assert.Contains("also in the caller's compilation set", issue.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -200,6 +265,13 @@ public sealed class PowerShellCompilationProjectDiagnosticsTests
         Assert.Equal(2, Assert.Single(outer.LocalCalls).Line);
     }
 
+    private static void AssertRedactedFixturePath(PowerShellCompilationDiagnosticReport report, string root)
+    {
+        var json = JsonSerializer.Serialize(report);
+        Assert.DoesNotContain(JsonSerializer.Serialize(root)[1..^1], json, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(JsonSerializer.Serialize(root.Replace('\\', '/'))[1..^1], json, StringComparison.OrdinalIgnoreCase);
+    }
+
     internal sealed class Fixture : IDisposable
     {
         private Fixture(string root, string project, string source, PowerShellCompilationProjectManifest manifest)
@@ -211,7 +283,7 @@ public sealed class PowerShellCompilationProjectDiagnosticsTests
         internal static Fixture Create(string source, PowerShellCompilationArtifactKind kind, PowerShellCompilationMode mode)
         {
             var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PFC", Guid.NewGuid().ToString("N")[..12])).FullName;
-            var path = Path.Combine(root, "Functions.psm1");
+            var path = Path.Combine(root, kind == PowerShellCompilationArtifactKind.Executable ? "Main.ps1" : "Functions.psm1");
             File.WriteAllText(path, source);
             var project = Path.Combine(root, "powerforge.psproject.json");
             var service = new PowerShellCompilationProjectManifestService();

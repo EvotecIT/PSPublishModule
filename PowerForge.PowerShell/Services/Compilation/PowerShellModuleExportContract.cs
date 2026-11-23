@@ -30,9 +30,23 @@ internal sealed class PowerShellModuleExportContract
     internal string[] Aliases { get; }
     internal string[] Variables { get; }
     internal bool HasRuntimeControlledExports { get; }
+    internal bool HasWildcardFunctions => Functions.Any(WildcardPattern.ContainsWildcardCharacters);
+    internal bool HasTerminalAllCommandExport =>
+        Commands.Length == 1 && Functions.Length == 1 && Functions[0] == "*" &&
+        Cmdlets.Length == 1 && Cmdlets[0] == "*" &&
+        Commands[0].Parent is PipelineAst { Parent: NamedBlockAst body } pipeline &&
+        ReferenceEquals(body.Statements.LastOrDefault(), pipeline);
 
     internal static PowerShellModuleExportContract? TryRead(ScriptBlockAst ast)
     {
+        // A module-scope function can add exports when called by the initializer.
+        if (ast.FindAll(static node => node is FunctionDefinitionAst, searchNestedScriptBlocks: false)
+            .OfType<FunctionDefinitionAst>()
+            .Any(static function => function.Body.Find(
+                static node => node is CommandAst command && IsExportModuleMember(command),
+                searchNestedScriptBlocks: false) is not null))
+            return RuntimeControlledExports();
+
         var allCommands = ast.FindAll(
                 static node => node is CommandAst command && IsExportModuleMember(command),
                 searchNestedScriptBlocks: false)

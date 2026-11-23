@@ -28,7 +28,7 @@ internal static class PowerShellConventionalModuleSourceDiscovery
         var recursiveDirectories = new HashSet<string>(PowerShellCompilationPathSafety.PathComparer);
         var loaders = new Dictionary<int, PowerShellConventionalLoaderIdentity>();
         var hasLocalProducer = HasLocalEnumerationFunction(ast);
-        var enumerations = FindFileEnumerationAssignments(ast, hasLocalProducer).ToArray();
+        var fileLists = FindFileListAssignments(ast, hasLocalProducer).ToArray();
         foreach (var command in ast.FindAll(
                      node => node is CommandAst candidate && IsTopLevel(candidate, ast),
                      searchNestedScriptBlocks: true)
@@ -39,7 +39,7 @@ internal static class PowerShellConventionalModuleSourceDiscovery
                 !Path.GetExtension(relativePattern).Equals(".ps1", StringComparison.OrdinalIgnoreCase))
                 continue;
             var trustedProducer = IsFileEnumerationCommand(command, hasLocalProducer);
-            var associations = FindConventionalLoaders(command, ast, rootPath, enumerations)
+            var associations = FindConventionalLoaders(command, ast, rootPath, fileLists)
                 .Select(association => (association.Loader, Stable: association.Stable && trustedProducer)).ToArray();
             if (associations.Length == 0)
                 continue;
@@ -160,7 +160,7 @@ internal static class PowerShellConventionalModuleSourceDiscovery
             return false;
 
         var exportOffset = argument.Extent.StartOffset;
-        var enumerations = FindFileEnumerationAssignments(root, HasLocalEnumerationFunction(root)).ToArray();
+        var fileLists = FindFileListAssignments(root, HasLocalEnumerationFunction(root)).ToArray();
         var loaders = new List<(ForEachStatementAst Loop, List<VariableExpressionAst> Inputs)>();
         foreach (var loader in root.FindAll(
                      node => node is ForEachStatementAst candidate && IsTopLevel(candidate, root),
@@ -182,13 +182,14 @@ internal static class PowerShellConventionalModuleSourceDiscovery
             foreach (var input in inputs)
             {
                 var name = input.VariablePath.UserPath;
-                var producer = FindEffectiveEnumeration(enumerations, name, loader.Extent.StartOffset);
+                var producer = FindEffectiveFileList(fileLists, name, loader.Extent.StartOffset);
                 if (producer is null ||
                     HasInterveningAssignment(root, name, producer.Extent.EndOffset, loader.Extent.EndOffset) ||
                     HasUnmodeledFileListUse(root, name, producer.Extent.EndOffset, loader.Extent.EndOffset, allowedUses))
                     return false;
 
                 if (loader.Extent.EndOffset < exportOffset &&
+                    !IsEmptyFileListAssignment(producer) &&
                     name.Equals(receiver.VariablePath.UserPath, StringComparison.OrdinalIgnoreCase) &&
                     !HasUnmodeledFileListUse(root, name, producer.Extent.EndOffset, exportOffset, allowedUses))
                     loadsExportedFiles = true;
@@ -197,12 +198,19 @@ internal static class PowerShellConventionalModuleSourceDiscovery
         return loadsExportedFiles;
     }
 
-    private static IEnumerable<(AssignmentStatementAst Assignment, string Name)> FindFileEnumerationAssignments(
+    private static IEnumerable<(AssignmentStatementAst Assignment, string Name)> FindFileListAssignments(
         ScriptBlockAst root, bool hasLocalProducer)
     {
-        foreach (var producer in root.FindAll(static node => node is CommandAst, searchNestedScriptBlocks: false).Cast<CommandAst>())
+        foreach (var node in root.FindAll(static node => node is CommandAst or AssignmentStatementAst, searchNestedScriptBlocks: false))
         {
-            if (!IsTopLevel(producer, root) ||
+            if (!IsTopLevel(node, root)) continue;
+            if (node is AssignmentStatementAst empty && IsEmptyFileListAssignment(empty) &&
+                empty.Left is VariableExpressionAst { VariablePath.IsUnqualified: true } variable)
+            {
+                yield return (empty, variable.VariablePath.UserPath);
+                continue;
+            }
+            if (node is not CommandAst producer ||
                 producer.Parent is not PipelineAst { PipelineElements.Count: 1 } pipeline ||
                 producer.Redirections.Count != 0 ||
                 !IsFileEnumerationCommand(producer, hasLocalProducer) ||
@@ -219,6 +227,15 @@ internal static class PowerShellConventionalModuleSourceDiscovery
             yield return (assignment, declared.VariablePath.UserPath);
         }
     }
+
+    private static bool IsEmptyFileListAssignment(AssignmentStatementAst assignment)
+        => assignment.Operator == TokenKind.Equals &&
+           assignment.Right is CommandExpressionAst { Redirections.Count: 0, Expression: ArrayExpressionAst array } &&
+           IsEmptyFileList(array);
+
+    private static bool IsEmptyFileList(ArrayExpressionAst array)
+        => array.SubExpression.Statements.Count == 0 &&
+           (array.SubExpression.Traps is null || array.SubExpression.Traps.Count == 0);
 
     private static bool HasLocalEnumerationFunction(ScriptBlockAst root)
         => root.FindAll(static node => node is FunctionDefinitionAst, searchNestedScriptBlocks: false)
@@ -243,6 +260,8 @@ internal static class PowerShellConventionalModuleSourceDiscovery
                 return TryReadFileEnumerationInputs(command.Expression, inputs);
             case ParenExpressionAst parenthesized:
                 return TryReadFileEnumerationInputs(parenthesized.Pipeline, inputs);
+            case ArrayExpressionAst empty when IsEmptyFileList(empty):
+                return true;
             case ArrayExpressionAst { SubExpression.Statements.Count: 1 } array:
                 return TryReadFileEnumerationInputs(array.SubExpression.Statements[0], inputs);
             case BinaryExpressionAst { Operator: TokenKind.Plus } binary:
@@ -351,6 +370,11 @@ internal static class PowerShellConventionalModuleSourceDiscovery
                 var argument = parameter.Argument;
                 if (argument is null && index + 1 < command.CommandElements.Count)
                     argument = command.CommandElements[++index] as ExpressionAst;
+                if (argument is ArrayExpressionAst collection &&
+                    (collection.SubExpression.Traps is null || collection.SubExpression.Traps.Count == 0) &&
+                    collection.SubExpression.Statements.Count == 1 &&
+                    collection.SubExpression.Statements[0] is PipelineAst pipeline)
+                    argument = pipeline.GetPureExpression();
                 IReadOnlyList<ExpressionAst>? values = argument is ArrayLiteralAst array
                     ? array.Elements
                     : argument is null ? null : new[] { argument };
@@ -371,8 +395,9 @@ internal static class PowerShellConventionalModuleSourceDiscovery
         CommandAst command,
         string sourcePath,
         CommandParameterAst parameter)
-        => new(
-            $"Conventional module source discovery does not support loader option '{parameter.Extent.Text}' at {sourcePath}:{command.Extent.StartLineNumber}; use -Path/-LiteralPath, bare -Recurse, literal -Exclude names, optional -File, and optional -ErrorAction SilentlyContinue only.");
+        => PowerShellCompilationSourceFailure.Create(
+            $"Conventional module source discovery does not support loader option '{parameter.Extent.Text}' at {sourcePath}:{command.Extent.StartLineNumber}; use -Path/-LiteralPath, bare -Recurse, literal -Exclude names, optional -File, and optional -ErrorAction SilentlyContinue only.",
+            sourcePath, parameter.Extent);
 
     private static bool IsTopLevel(Ast node, ScriptBlockAst root)
     {
@@ -391,7 +416,7 @@ internal static class PowerShellConventionalModuleSourceDiscovery
         CommandAst command,
         ScriptBlockAst root,
         string sourcePath,
-        (AssignmentStatementAst Assignment, string Name)[] enumerations)
+        (AssignmentStatementAst Assignment, string Name)[] fileLists)
     {
         foreach (var dotSource in GetPipelineDotSourceLoaders(command, root))
             yield return (new PowerShellConventionalLoaderIdentity(sourcePath, dotSource.Extent.StartOffset), Stable: true);
@@ -421,31 +446,31 @@ internal static class PowerShellConventionalModuleSourceDiscovery
                     searchNestedScriptBlocks: false).Any())
                 continue;
 
-            var effective = FindEffectiveEnumeration(enumerations, assignedVariable, loader.Extent.StartOffset);
+            var effective = FindEffectiveFileList(fileLists, assignedVariable, loader.Extent.StartOffset);
             if (effective is not null && !ReferenceEquals(effective, assignment) &&
                 effective.Extent.StartOffset >= assignment.Extent.StartOffset)
                 continue;
 
             var inputs = new List<VariableExpressionAst>();
             var stable = TryReadFileEnumerationInputs(loader.Condition, inputs) &&
-                inputs.All(input => HasStableEnumeration(root, loader, input, enumerations));
+                inputs.All(input => HasStableFileList(root, loader, input, fileLists));
             foreach (var dotSource in dotSources)
                 yield return (new PowerShellConventionalLoaderIdentity(sourcePath, dotSource.Extent.StartOffset), stable);
         }
     }
 
-    private static AssignmentStatementAst? FindEffectiveEnumeration(
-        IEnumerable<(AssignmentStatementAst Assignment, string Name)> enumerations, string name, int before)
-        => enumerations.LastOrDefault(enumeration =>
-            enumeration.Assignment.Extent.EndOffset <= before &&
-            enumeration.Name.Equals(name, StringComparison.OrdinalIgnoreCase)).Assignment;
+    private static AssignmentStatementAst? FindEffectiveFileList(
+        IEnumerable<(AssignmentStatementAst Assignment, string Name)> fileLists, string name, int before)
+        => fileLists.LastOrDefault(fileList =>
+            fileList.Assignment.Extent.EndOffset <= before &&
+            fileList.Name.Equals(name, StringComparison.OrdinalIgnoreCase)).Assignment;
 
-    private static bool HasStableEnumeration(
+    private static bool HasStableFileList(
         ScriptBlockAst root, ForEachStatementAst loader, VariableExpressionAst input,
-        IEnumerable<(AssignmentStatementAst Assignment, string Name)> enumerations)
+        IEnumerable<(AssignmentStatementAst Assignment, string Name)> fileLists)
     {
         var name = input.VariablePath.UserPath;
-        var producer = FindEffectiveEnumeration(enumerations, name, loader.Extent.StartOffset);
+        var producer = FindEffectiveFileList(fileLists, name, loader.Extent.StartOffset);
         return producer is not null &&
             !HasInterveningAssignment(root, name, producer.Extent.EndOffset, loader.Extent.EndOffset) &&
             !HasUnmodeledFileListUse(root, name, loader.Body.Extent.StartOffset, loader.Body.Extent.EndOffset);

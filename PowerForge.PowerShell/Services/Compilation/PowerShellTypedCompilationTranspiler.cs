@@ -98,10 +98,12 @@ public sealed partial class PowerShellTypedCompilationTranspiler
         string? targetFramework,
         PowerShellCompilationCapability capabilities,
         string? guardedExecutableEntryPath = null,
-        bool nativeScriptEntry = false)
+        bool nativeScriptEntry = false,
+        string? moduleManifestPath = null)
         => TranspileCore(documents.Select(static document => document.Path), namespaceName, typeName, targetFramework,
             excludedMethods: null, capabilities, _commandRegistry, _semanticProfileId, _nativeDependencyTypes,
-            guardedExecutableEntryPath, nativeScriptEntry: nativeScriptEntry, analyzedDocuments: documents, analysisPlan: plan);
+            guardedExecutableEntryPath, nativeScriptEntry: nativeScriptEntry, analyzedDocuments: documents,
+            analysisPlan: plan, moduleManifestPath: moduleManifestPath);
 
     private static PowerShellTypedCompilationResult TranspileCore(
         IEnumerable<string> sourcePaths,
@@ -117,7 +119,8 @@ public sealed partial class PowerShellTypedCompilationTranspiler
         IReadOnlyCollection<string>? nativeDeclarationTimingSourcePaths = null,
         bool nativeScriptEntry = false,
         IReadOnlyList<ParsedSourceDocument>? analyzedDocuments = null,
-        PowerShellCompilationPlan? analysisPlan = null)
+        PowerShellCompilationPlan? analysisPlan = null,
+        string? moduleManifestPath = null)
     {
         if (sourcePaths is null)
             throw new ArgumentNullException(nameof(sourcePaths));
@@ -158,7 +161,7 @@ public sealed partial class PowerShellTypedCompilationTranspiler
         if (parsedFiles.Count != fullPaths.Length)
             return CreateResult(fullPaths, namespaceName, typeName, Array.Empty<PowerShellCompiledMethod>(), Array.Empty<string>(), diagnostics, parsedFiles, targetFramework, semanticProfileId);
         ApplyDeclarationSourceContext(parsedFiles, capabilities, guardedExecutableEntryPath,
-            nativeDeclarationTimingSourcePaths, nativeScriptEntry);
+            nativeDeclarationTimingSourcePaths, nativeScriptEntry, moduleManifestPath);
         var (boundResult, nativeModuleInitializer, nativeModuleEmission) = BindModuleStartup(parsedFiles, targetFramework,
             capabilities, diagnostics, commandRegistry, semanticProfileId, nativeDependencyTypes);
         var boundEmissions = boundResult.Emissions;

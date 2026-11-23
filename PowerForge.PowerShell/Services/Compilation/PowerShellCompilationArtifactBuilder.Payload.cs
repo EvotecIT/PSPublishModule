@@ -5,6 +5,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
     private static PowerShellCompilationArtifactFile[] CopyPlannedPayload(
         string primaryArtifactPath,
         string artifactName,
+        string generatedAssemblyFileName,
         IEnumerable<PowerShellCompilationDependency> dependencies,
         IEnumerable<PowerShellCompilationArtifactFile> existingFiles,
         IReadOnlyDictionary<string, string> inputHashes)
@@ -16,14 +17,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             .ToDictionary(static group => group.Key, static group => group.First(), PowerShellCompilationPathSafety.PathComparer);
         var existing = existingArtifacts.Keys.ToHashSet(PowerShellCompilationPathSafety.PathComparer);
         var copied = new List<PowerShellCompilationArtifactFile>();
-        foreach (var dependency in dependencies.Where(static dependency =>
-                     dependency.Exists &&
-                     dependency.SourcePath is not null &&
-                     dependency.Disposition == PowerShellCompilationDependencyDisposition.CopiedAdjacent &&
-                     dependency.Selection is PowerShellCompilationDependencySelection.Required or
-                         PowerShellCompilationDependencySelection.ExplicitInclude or
-                         PowerShellCompilationDependencySelection.Inferred or
-                         PowerShellCompilationDependencySelection.PolicyInclude))
+        foreach (var dependency in dependencies.Where(IsSelectedAdjacentPayload))
         {
             var relativePath = PowerShellCompiledModuleManifest.NormalizeManifestRelativePath(dependency.RelativePath);
             var targetPath = Path.GetFullPath(Path.Combine(payloadRoot, relativePath));
@@ -31,7 +25,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 payloadRoot,
                 targetPath,
                 $"Planned payload '{dependency.RelativePath}' escapes the generated artifact root.");
-            EnsurePayloadDoesNotOccupyGeneratedNamespace(relativePath, artifactName);
+            EnsurePayloadDoesNotOccupyGeneratedNamespace(relativePath, artifactName, generatedAssemblyFileName);
             if (existing.Contains(targetPath))
             {
                 // The hybrid composer may already have produced a deliberately transformed
@@ -61,14 +55,21 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         return copied.ToArray();
     }
 
-    private static void EnsurePayloadDoesNotOccupyGeneratedNamespace(string relativePath, string artifactName)
+    private static bool IsSelectedAdjacentPayload(PowerShellCompilationDependency dependency)
+        => dependency.Exists && dependency.SourcePath is not null &&
+           dependency.Disposition == PowerShellCompilationDependencyDisposition.CopiedAdjacent &&
+           dependency.Selection is PowerShellCompilationDependencySelection.Required or
+               PowerShellCompilationDependencySelection.ExplicitInclude or PowerShellCompilationDependencySelection.Inferred or
+               PowerShellCompilationDependencySelection.PolicyInclude;
+
+    private static void EnsurePayloadDoesNotOccupyGeneratedNamespace(string relativePath, string artifactName, string generatedAssemblyFileName)
     {
         var normalized = relativePath.Replace('\\', '/');
         var generatedDirectory = artifactName + ".generated/";
         if (normalized.Equals(artifactName, StringComparison.OrdinalIgnoreCase) ||
             normalized.Equals(artifactName + ".exe", StringComparison.OrdinalIgnoreCase) ||
-            normalized.Equals(artifactName + ".dll", StringComparison.OrdinalIgnoreCase) ||
-            normalized.Equals(artifactName + ".pdb", StringComparison.OrdinalIgnoreCase) ||
+            normalized.Equals(generatedAssemblyFileName, StringComparison.OrdinalIgnoreCase) ||
+            normalized.Equals(Path.ChangeExtension(generatedAssemblyFileName, ".pdb"), StringComparison.OrdinalIgnoreCase) ||
             normalized.Equals(artifactName + ".generated", StringComparison.OrdinalIgnoreCase) ||
             normalized.Equals(artifactName + ".powerforge-compilation.json", StringComparison.OrdinalIgnoreCase) ||
             normalized.StartsWith(generatedDirectory, StringComparison.OrdinalIgnoreCase) ||

@@ -131,10 +131,17 @@ internal static class PowerShellPackagedPathOperandPolicy
         {
             var operand = Select(command);
             if (operand is null ? !IsImplicitCurrentLocationRead(command) : !RequiresRuntimeGuard(operand)) continue;
+            var nested = false;
+            PipelineAst? enclosingPipeline = null;
             for (var parent = command.Parent; parent is not null && parent is not FunctionDefinitionAst &&
                      !ReferenceEquals(parent, root); parent = parent.Parent)
-                if (parent is CommandAst or ScriptBlockExpressionAst or ExpandableStringExpressionAst)
-                    throw Refusal(command, "nested command-expression or callback path reads are unsupported");
+            {
+                if (parent is PipelineAst pipeline) enclosingPipeline = pipeline;
+                if (parent is CommandAst or ScriptBlockExpressionAst or ExpandableStringExpressionAst) nested = true;
+            }
+            if (nested && (operand is null || enclosingPipeline is null ||
+                !Generated.Runtime.PowerShellNativeFunctionContext.CanGuardFileSystemPathOperand(command, enclosingPipeline)))
+                throw Refusal(command, "the nested command-expression or callback shape cannot preserve its provider path guard");
         }
     }
 
@@ -147,12 +154,17 @@ internal static class PowerShellPackagedPathOperandPolicy
             var implicitLocation = operand is null && IsImplicitCurrentLocationRead(command);
             if (!implicitLocation && (operand is null || !RequiresRuntimeGuard(operand))) continue;
             if (command.Parent is not PipelineAst pipeline ||
-                !ReferenceEquals(pipeline, region) && !ReferenceEquals(command, region))
-                throw Refusal(command, "dynamic provider reads inside a nested command expression or callback are not guardable by this native pipeline");
-            // A zero-width command-start marker is a current-location admission, not
-            // an operand replacement. Other pairs remain exact authored operand extents.
-            result.Add(implicitLocation ? command.Extent.StartOffset : operand!.Extent.StartOffset);
-            result.Add(implicitLocation ? command.Extent.StartOffset : operand!.Extent.EndOffset);
+                (!ReferenceEquals(pipeline, region) && !ReferenceEquals(command, region) &&
+                 (implicitLocation || !Generated.Runtime.PowerShellNativeFunctionContext.CanGuardFileSystemPathOperand(command, region))))
+                throw Refusal(command, "the native pipeline cannot preserve the selected provider path guard");
+            // A zero-width extent admits the current location without adding a command operand.
+            var start = implicitLocation ? command.Extent.StartOffset : operand!.Extent.StartOffset;
+            var end = implicitLocation ? start : operand!.Extent.EndOffset;
+            for (var index = 0; index < result.Count; index += 2)
+                if (result[index] < end && result[index + 1] > start)
+                    throw Refusal(command, "overlapping provider path operands require a different evaluation contract");
+            result.Add(start);
+            result.Add(end);
         }
         return result.ToArray();
     }

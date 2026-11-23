@@ -45,10 +45,6 @@ internal static class Program
 
             using var output = new PSDataCollection<PSObject>();
             output.DataAdded += (_, eventArgs) => Console.Out.WriteLine(output[eventArgs.Index]?.ToString());
-            // The host owns information display, including visibility preferences and Write-Host's newline policy.
-            powerShell.Streams.Verbose.DataAdded += (_, eventArgs) => Console.Out.WriteLine($"VERBOSE: {powerShell.Streams.Verbose[eventArgs.Index].Message}");
-            powerShell.Streams.Debug.DataAdded += (_, eventArgs) => Console.Out.WriteLine($"DEBUG: {powerShell.Streams.Debug[eventArgs.Index].Message}");
-            powerShell.Streams.Warning.DataAdded += (_, eventArgs) => Console.Out.WriteLine($"WARNING: {powerShell.Streams.Warning[eventArgs.Index].Message}");
             powerShell.Streams.Error.DataAdded += (_, eventArgs) =>
             {
                 var error = powerShell.Streams.Error[eventArgs.Index];
@@ -233,41 +229,47 @@ internal static class Program
     }
 
     internal static string ValidateDotSource(object? operand, string selectedRelativePath)
+        => ValidateSourceOperand(operand, selectedRelativePath, "Packaged dot-source");
+
+    internal static string ValidateCalledSource(object? operand, string selectedRelativePath)
+        => ValidateSourceOperand(operand, selectedRelativePath, "Packaged script invocation");
+
+    private static string ValidateSourceOperand(object? operand, string selectedRelativePath, string operation)
     {
         if (operand is PSObject wrapped) operand = wrapped.BaseObject;
         if (operand is not string actualPath || string.IsNullOrWhiteSpace(actualPath) ||
             !System.IO.Path.IsPathFullyQualified(actualPath) || WildcardPattern.ContainsWildcardCharacters(actualPath))
-            throw new InvalidOperationException("Packaged dot-source operand must identify its selected staged source file.");
+            throw new InvalidOperationException(operation + " operand must identify its selected staged source file.");
         var root = System.IO.Path.GetDirectoryName(PowerForgePackagedEntryPoint.Path)
             ?? throw new InvalidOperationException("Packaged source extraction has not established its source root.");
         var selectedPath = ResolveContainedExtractionPath(root, selectedRelativePath);
         var actual = System.IO.Path.GetFullPath(actualPath);
         var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
         if (!actual.Equals(selectedPath, comparison))
-            throw new InvalidOperationException("Packaged dot-source operand does not match its selected staged source file.");
+            throw new InvalidOperationException(operation + " operand does not match its selected staged source file.");
         var expectedHash = selectedRelativePath.Equals(EntryRelativePath, StringComparison.Ordinal)
             ? EntrySha256
             : Dependencies.SingleOrDefault(dependency => dependency.RelativePath.Equals(selectedRelativePath, StringComparison.Ordinal))?.Sha256;
         if (expectedHash is null)
-            throw new InvalidOperationException("Packaged dot-source target is absent from the embedded payload catalog.");
+            throw new InvalidOperationException(operation + " target is absent from the embedded payload catalog.");
         var current = System.IO.Path.GetFullPath(root);
-        RejectSourceLink(current);
+        RejectSourceLink(current, operation);
         foreach (var segment in selectedRelativePath.Replace('\\', '/').Split('/', StringSplitOptions.RemoveEmptyEntries))
         {
             current = System.IO.Path.Combine(current, segment);
-            RejectSourceLink(current);
+            RejectSourceLink(current, operation);
         }
         // This verifies the actual selected path immediately before file-backed loading.
         // PowerShell reopens the file; this is not an atomic lease against concurrent filesystem writers.
         if (!File.Exists(actual) || !ComputeFileSha256(actual).Equals(expectedHash, StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("Packaged dot-source target changed after payload extraction.");
+            throw new InvalidOperationException(operation + " target changed after payload extraction.");
         return actual;
     }
 
-    private static void RejectSourceLink(string path)
+    private static void RejectSourceLink(string path, string operation)
     {
         if ((File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0)
-            throw new InvalidOperationException("Packaged dot-source target traverses a symbolic link or junction.");
+            throw new InvalidOperationException(operation + " target traverses a symbolic link or junction.");
     }
 
     private static string ResolveContainedExtractionPath(string root, string relativePath)
@@ -284,7 +286,7 @@ internal static class Program
         return fullPath;
     }
 
-    private static IEnumerable<ScriptArgument> ParseArguments(IReadOnlyList<string> arguments)
+    private static IEnumerable<CommandParameter> ParseArguments(IReadOnlyList<string> arguments)
     {
         var positionalOnly = false;
         for (var index = 0; index < arguments.Count; index++)
@@ -298,7 +300,15 @@ internal static class Program
 
             if (!positionalOnly && TryParseParameter(value, out var name, out var inlineValue))
             {
-                name = ResolveParameterName(name);
+                var resolvedName = ResolveParameterName(name);
+                if (resolvedName is null && inlineValue is null)
+                {
+                    // PowerShell binds unknown names itself, including preserving a bare token in $args.
+                    yield return new CommandParameter("-" + name);
+                    continue;
+                }
+
+                name = resolvedName ?? name;
                 if (inlineValue is null && !SwitchParameters.Contains(name))
                 {
                     if (index + 1 >= arguments.Count || LooksLikeParameter(arguments[index + 1]))
@@ -306,19 +316,19 @@ internal static class Program
                     inlineValue = arguments[++index];
                 }
                 object? boundValue = inlineValue;
-                if (SwitchParameters.Contains(name) && inlineValue is not null)
-                    boundValue = ParseBooleanValue("Switch", name, inlineValue);
+                if (SwitchParameters.Contains(name))
+                    boundValue = inlineValue is null ? (object)SwitchParameter.Present : ParseBooleanValue("Switch", name, inlineValue);
                 else if (BooleanParameters.Contains(name))
                     boundValue = ParseBooleanValue("Boolean", name, inlineValue!);
-                yield return new ScriptArgument(name, boundValue);
+                yield return new CommandParameter(name, boundValue);
                 continue;
             }
 
-            yield return new ScriptArgument(null, value);
+            yield return new CommandParameter(null, value);
         }
     }
 
-    private static string ResolveParameterName(string name)
+    private static string? ResolveParameterName(string name)
     {
         var exact = Parameters.FirstOrDefault(candidate => candidate.Equals(name, StringComparison.OrdinalIgnoreCase));
         if (exact is not null) return exact;
@@ -333,7 +343,7 @@ internal static class Program
             .ToArray();
         return matches.Length switch
         {
-            0 => name,
+            0 => null,
             1 => matches[0],
             _ => throw new ArgumentException($"Parameter name '-{name}' is ambiguous.")
         };
@@ -374,18 +384,6 @@ internal static class Program
             _ => throw new ArgumentException($"{kind} parameter '-{name}' requires an explicit Boolean value such as '$true' or '$false'.")
         };
 
-    private sealed class ScriptArgument
-    {
-        internal ScriptArgument(string? name, object? value)
-        {
-            Name = name;
-            Value = value;
-        }
-
-        internal string? Name { get; }
-        internal object? Value { get; }
-    }
-
     private sealed class EmbeddedDependency
     {
         internal EmbeddedDependency(string resourceName, string relativePath, string sha256, int unixFileMode)
@@ -412,4 +410,6 @@ public static class PowerForgePackagedEntryPoint
     /// <remarks>This is a point-in-time source-load check, not an atomic filesystem lease.</remarks>
     public static string ValidateDotSource(object? operand, string selectedRelativePath)
         => Program.ValidateDotSource(operand, selectedRelativePath);
+    public static string ValidateCalledSource(object? operand, string selectedRelativePath)
+        => Program.ValidateCalledSource(operand, selectedRelativePath);
 }

@@ -7,7 +7,7 @@ namespace PowerForge.Generated.Runtime
     using System.Management.Automation.Host;
     using System.Security;
 
-    /// <summary>Writes formatter output directly; existing stream subscriptions own informational diagnostics.</summary>
+    /// <summary>Displays formatter output and host-directed diagnostics.</summary>
     internal sealed class PowerShellPackagedConsoleUI : PSHostUserInterface
     {
         private readonly PowerShellPackagedConsoleRawUI _raw = new PowerShellPackagedConsoleRawUI();
@@ -29,19 +29,20 @@ namespace PowerForge.Generated.Runtime
             return GetOutputString(value, supportsVirtualTerminal: false);
 #endif
         }
-        // These records already have immediate, ordered DataAdded subscribers in the launcher.
-        public override void WriteDebugLine(string message) { }
-        public override void WriteVerboseLine(string message) { }
-        public override void WriteWarningLine(string message) { }
+        // PowerShell's diagnostic buffers can also contain redirected records, so display only host callbacks.
+        public override void WriteDebugLine(string message) => WriteLine("DEBUG: " + message);
+        public override void WriteVerboseLine(string message) => WriteLine("VERBOSE: " + message);
+        public override void WriteWarningLine(string message) => WriteLine("WARNING: " + message);
         public override void WriteProgress(long sourceId, ProgressRecord record) { }
         public override string ReadLine() => PowerShellPackagedConsoleInput.ReadLine()!;
         public override SecureString ReadLineAsSecureString() => throw PowerShellPackagedConsoleHost.NonInteractive();
 
         public override Dictionary<string, PSObject> Prompt(string caption, string message, Collection<FieldDescription> descriptions)
         {
-            if (caption.Length != 0 || message.Length != 0 || descriptions.Count != 1 ||
+            if (!string.IsNullOrEmpty(caption) || !string.IsNullOrEmpty(message) || descriptions.Count != 1 ||
                 descriptions[0].ParameterTypeFullName != typeof(string).FullName)
-                throw PowerShellPackagedConsoleHost.NonInteractive();
+                // PowerShell's binder translates a host prompt refusal into its missing-parameter error.
+                throw new HostException(PowerShellPackagedConsoleHost.NonInteractiveMessage);
 
             var field = descriptions[0].Name;
             if (!Console.IsInputRedirected && field.Length != 0)

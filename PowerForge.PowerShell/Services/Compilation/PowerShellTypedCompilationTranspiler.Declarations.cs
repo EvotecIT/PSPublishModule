@@ -44,23 +44,43 @@ public sealed partial class PowerShellTypedCompilationTranspiler
 
     private static void ApplyDeclarationSourceContext(List<ParsedSource> parsedFiles,
         PowerShellCompilationCapability capabilities, string? guardedExecutableEntryPath,
-        IReadOnlyCollection<string>? nativeDeclarationTimingSourcePaths, bool nativeScriptEntry)
+        IReadOnlyCollection<string>? nativeDeclarationTimingSourcePaths, bool nativeScriptEntry, string? moduleManifestPath)
     {
         var declarationPaths = nativeDeclarationTimingSourcePaths is null
             ? PowerShellHybridFunctionCollisionResolver.FindGuardedExecutableDeclarationPaths(
                 parsedFiles.Select(static file => file.Document), guardedExecutableEntryPath, capabilities)
             : new HashSet<string>(nativeDeclarationTimingSourcePaths, PowerShellCompilationPathSafety.PathComparer);
-        if (capabilities != PowerShellCompilationCapabilities.HybridExecutable) declarationPaths.Clear();
-        else if (nativeScriptEntry && !string.IsNullOrWhiteSpace(guardedExecutableEntryPath))
+        if (capabilities == PowerShellCompilationCapabilities.HybridExecutable &&
+            !string.IsNullOrWhiteSpace(guardedExecutableEntryPath))
         {
-            var entry = Path.GetFullPath(guardedExecutableEntryPath!);
-            if (parsedFiles.Any(file => PowerShellCompilationPathSafety.PathEquals(file.Path, entry))) declarationPaths.Add(entry);
+            // Any caller-scope source can invoke a child before another file has declared its functions.
+            if (parsedFiles.Any(file => file.Ast.Find(static node =>
+                    node is CommandAst command && PowerShellCompilationSourcePathPlanner.PlanScriptCall(command) is not null,
+                    searchNestedScriptBlocks: false) is not null))
+                declarationPaths.UnionWith(parsedFiles.Select(static file => file.Path));
+            else if (nativeScriptEntry)
+            {
+                var entry = Path.GetFullPath(guardedExecutableEntryPath!);
+                if (parsedFiles.Any(file => PowerShellCompilationPathSafety.PathEquals(file.Path, entry))) declarationPaths.Add(entry);
+            }
         }
         // Runtime-selected files share the authored export scope. Method-backed
         // commands must be declared as functions so PowerShell resolves those exports.
-        if (capabilities == PowerShellCompilationCapabilities.HybridModule &&
-            PowerShellCompilationSourcePathPlanner.HasModuleAlternatives(parsedFiles[0].Ast))
-            declarationPaths.UnionWith(parsedFiles.Select(static file => file.Path));
+        if (capabilities == PowerShellCompilationCapabilities.HybridModule && nativeDeclarationTimingSourcePaths is null)
+        {
+            var root = parsedFiles[0];
+            var exports = PowerShellModuleExportContract.TryRead(root.Ast);
+            // A final export of both command categories already includes the generated cmdlets.
+            // A narrowed manifest or an earlier export still needs native declarations.
+            if (PowerShellCompilationSourcePathPlanner.HasModuleAlternatives(root.Ast) ||
+                exports?.HasWildcardFunctions == true &&
+                !(exports.HasTerminalAllCommandExport &&
+                  PowerShellCompiledModuleManifest.SelectsAllRootFunctions(root.Path, moduleManifestPath)))
+                declarationPaths.UnionWith(parsedFiles.Select(static file => file.Path));
+        }
+        else if (capabilities != PowerShellCompilationCapabilities.HybridExecutable &&
+                 capabilities != PowerShellCompilationCapabilities.HybridModule)
+            declarationPaths.Clear();
         for (var index = 0; index < parsedFiles.Count; index++)
         {
             var file = parsedFiles[index];

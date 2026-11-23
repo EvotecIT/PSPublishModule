@@ -144,28 +144,40 @@ public sealed partial class PowerShellCompilationAnalyzer
     {
         try
         {
-            var embeddedScripts = input.CompilationSourceFiles
+            var embeddedScripts = input.SourceFiles
                 .Select(Path.GetFullPath)
                 .Distinct(PowerShellCompilationPathSafety.PathComparer)
                 .ToArray();
+            var retainedScripts = embeddedScripts.Except(input.CompilationSourceFiles, PowerShellCompilationPathSafety.PathComparer).ToArray();
             var entry = snapshot.Get(input.SourcePath);
-            if (mode == PowerShellCompilationMode.Hybrid)
+            if (mode == PowerShellCompilationMode.Hybrid && retainedScripts.Length == 0)
                 PowerShellPackagedScriptRewriter.ValidateRetainedEntryRequirements(input.SourcePath, embeddedScripts, entry);
             else
             {
                 PowerShellPackagedParameterBindingPolicy.Generate(input.SourcePath, targetFramework, document: entry);
-                _ = PowerShellPackagedScriptRewriter.Rewrite(input.SourcePath, embeddedScriptPaths: embeddedScripts, document: entry);
+                _ = PowerShellPackagedScriptRewriter.Rewrite(input.SourcePath, embeddedScriptPaths: embeddedScripts, document: entry,
+                    guardDotSources: retainedScripts.Length > 0, retainedScriptPaths: retainedScripts);
             }
             foreach (var dependency in embeddedScripts.Where(path =>
                          !PowerShellCompilationPathSafety.PathEquals(path, input.SourcePath)))
                 PowerShellPackagedScriptRewriter.ValidateDependency(
-                    dependency, embeddedScripts, allowDerivedPaths: mode == PowerShellCompilationMode.Hybrid, document: snapshot.Get(dependency));
+                    dependency, embeddedScripts, allowDerivedPaths: mode == PowerShellCompilationMode.Hybrid || retainedScripts.Length > 0,
+                    document: snapshot.Get(dependency), retainedScriptPaths: retainedScripts);
             return plan;
         }
         catch (InvalidOperationException exception)
         {
-            var sourcePath = Path.GetFullPath(input.SourcePath);
-            var files = plan.Files.Select(file =>
+            var location = PowerShellCompilationSourceFailure.GetDiagnostic(exception);
+            if (location is { FilePath: var reportedPath } &&
+                !input.SourceFiles.Contains(reportedPath, PowerShellCompilationPathSafety.PathComparer))
+                location = null;
+            var sourcePath = location?.FilePath ?? Path.GetFullPath(input.SourcePath);
+            IEnumerable<PowerShellCompilationFilePlan> sourceFiles = plan.Files;
+            if (!plan.Files.Any(file => PowerShellCompilationPathSafety.PathEquals(file.FullPath, sourcePath)))
+                sourceFiles = sourceFiles.Append(new PowerShellCompilationFilePlan(sourcePath,
+                    FrameworkCompatibility.GetRelativePath(input.ModuleRoot, sourcePath).Replace('\\', '/'),
+                    Array.Empty<PowerShellCompilationUnitPlan>(), Array.Empty<PowerShellCompilationDiagnostic>()));
+            var files = sourceFiles.Select(file =>
             {
                 if (!PowerShellCompilationPathSafety.PathEquals(file.FullPath, sourcePath))
                     return file;
@@ -173,8 +185,8 @@ public sealed partial class PowerShellCompilationAnalyzer
                     PowerShellCompilationDiagnosticCode.InputError,
                     exception.Message,
                     sourcePath,
-                    1,
-                    1,
+                    location?.Line ?? 1,
+                    location?.Column ?? 1,
                     "powershell.package.validation");
                 return new PowerShellCompilationFilePlan(
                     file.FullPath,

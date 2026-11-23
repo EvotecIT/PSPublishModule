@@ -465,7 +465,8 @@ try {
     if(Test-Path -LiteralPath ($script:withdrawnInput+'.withdrawn')) {throw 'Source holding directory leaked.'}
 } finally { Set-Item -LiteralPath Function:\Invoke-WorkflowObserver -Value $savedObserver }
 
-Assert-WorkflowTestInvocation ([pscustomobject]@{testArguments=@('', 'two words', '--literal', 'żółć');testWorkingDirectory='scenarios'}) -RequireArguments
+$unicodeArgument = -join @([char] 0x017c, [char] 0x00f3, [char] 0x0142, [char] 0x0107)
+Assert-WorkflowTestInvocation ([pscustomobject]@{testArguments=@('', 'two words', '--literal', $unicodeArgument);testWorkingDirectory='scenarios'}) -RequireArguments
 $checked.Add('fixture argv preserves literal strings and project-relative scenario cwd')
 Assert-RejectedContract 'non-string fixture argv' {Assert-WorkflowTestInvocation ([pscustomobject]@{testArguments=@(2)}) -RequireArguments} 'only strings'
 Assert-RejectedContract 'NUL in fixture argv' {Assert-WorkflowTestInvocation ([pscustomobject]@{testArguments=@("a$([char]0)b")}) -RequireArguments} 'without NUL'
@@ -512,6 +513,147 @@ try {
     Set-Item -LiteralPath Function:\Invoke-WorkflowObserver -Value $savedObserver
     Set-Item -LiteralPath Function:\Invoke-WorkflowFixture -Value $savedFixture
 }
+
+. (Join-Path $PSScriptRoot 'Workflows/Unfamiliar/Unfamiliar.Fixtures.ps1')
+. (Join-Path $PSScriptRoot 'Corpus.WorkflowBaseline.ps1')
+$profile = [pscustomobject]@{ referenceHost = '7.6.6'; operatingSystem = 'Windows'; architecture = 'x64' }
+$hostIdentity = @{ version = '7.6.6'; operatingSystem = 'Windows'; architecture = 'x64' }
+Assert-WorkflowReferenceHost $hostIdentity $profile 'net10.0'
+foreach ($mismatch in @(
+    @{ key = 'version'; value = '7.6.5' },
+    @{ key = 'architecture'; value = 'arm64' },
+    @{ key = 'operatingSystem'; value = 'Other' }
+)) {
+    $other = $hostIdentity.Clone()
+    $other[$mismatch.key] = $mismatch.value
+    Assert-RejectedContract ('reject reference host ' + $mismatch.key) {
+        Assert-WorkflowReferenceHost $other $profile 'net10.0'
+    } 'oracle must be Windows x64 PowerShell 7.6.6'
+}
+
+$htmlRoot = Join-Path $WorkspacePath ('report-effect-' + [guid]::NewGuid().ToString('N'))
+$null = New-Item -ItemType Directory -Path $htmlRoot
+$hiddenPath = Join-Path $htmlRoot '.effect.txt'
+[IO.File]::WriteAllText($hiddenPath, 'before')
+if ($env:OS -eq 'Windows_NT') { [IO.File]::SetAttributes($hiddenPath, [IO.FileAttributes]::Hidden) }
+$before = Get-WorkflowEffectSnapshot $htmlRoot
+if ($env:OS -eq 'Windows_NT') { [IO.File]::SetAttributes($hiddenPath, [IO.FileAttributes]::Normal) }
+[IO.File]::WriteAllText($hiddenPath, 'after')
+if ($env:OS -eq 'Windows_NT') { [IO.File]::SetAttributes($hiddenPath, [IO.FileAttributes]::Hidden) }
+$after = Get-WorkflowEffectSnapshot $htmlRoot
+[IO.File]::Delete($hiddenPath)
+$deleted = Get-WorkflowEffectSnapshot $htmlRoot
+if (-not $before.Contains('.effect.txt') -or -not $after.Contains('.effect.txt') -or
+    $before['.effect.txt'] -ceq $after['.effect.txt'] -or $deleted.Contains('.effect.txt')) {
+    throw 'Effect snapshots must preserve hidden file changes and removals.'
+}
+$checked.Add('observe hidden file changes and removals')
+$reportPath = Join-Path $htmlRoot 'report.html'
+$started = [datetime]::new(2026, 1, 1, 9, 0, 0)
+$completed = $started.AddSeconds(3)
+$firstHtml = '<meta name="viewport" content="same"><meta name="revised" content="2026-01-01 09:00:00"><p>Fixture</p>'
+$secondHtml = '<meta content="same" name="viewport"><meta content="2026-01-01 09:00:02" name="revised"><p>Fixture</p>'
+[IO.File]::WriteAllText($reportPath, $firstHtml)
+$baseline = ConvertTo-UnfamiliarReportEffectHash $reportPath $started $completed
+[IO.File]::WriteAllText($reportPath, $secondHtml)
+if ((ConvertTo-UnfamiliarReportEffectHash $reportPath $started $completed) -cne $baseline) {
+    throw 'The observed HTML effect changed when the viewport attributes or invocation timestamp changed order or value.'
+}
+$checked.Add('HTML report comparison preserves its content across attribute order and valid invocation time')
+
+foreach ($item in @(
+    @{ name = 'body'; changed = $secondHtml.Replace('Fixture', 'Different body') }
+    @{ name = 'viewport'; changed = $secondHtml.Replace('same', 'different viewport') }
+)) {
+    [IO.File]::WriteAllText($reportPath, $item.changed)
+    if ((ConvertTo-UnfamiliarReportEffectHash $reportPath $started $completed) -ceq $baseline) {
+        throw "The report comparison ignored a changed $($item.name)."
+    }
+    $checked.Add("observe differences in HTML report $($item.name)")
+}
+
+[IO.File]::WriteAllText($reportPath, $secondHtml.Replace('09:00:02', '08:55:00'))
+Assert-RejectedContract 'reject stale HTML revision timestamp' {
+    ConvertTo-UnfamiliarReportEffectHash $reportPath $started $completed
+} 'outside the invocation'
+[IO.File]::WriteAllText($reportPath, $secondHtml + '<meta name="revised" content="2026-01-01 09:00:01">')
+Assert-RejectedContract 'reject duplicate HTML revision metadata' {
+    ConvertTo-UnfamiliarReportEffectHash $reportPath $started $completed
+} 'one viewport and one revision'
+
+$revisionTag = '<meta name="revised" content="2026-01-01 09:00:00">'
+$viewportTag = '<meta name="viewport" content="same">'
+[IO.File]::WriteAllText($reportPath, $viewportTag + '<!-- ' + $revisionTag + ' -->')
+Assert-RejectedContract 'reject HTML revision metadata inside a comment' {
+    ConvertTo-UnfamiliarReportEffectHash $reportPath $started $completed
+} 'one viewport and one revision'
+[IO.File]::WriteAllText($reportPath, $firstHtml + '<!-- ' + $revisionTag + ' -->')
+$withComment = ConvertTo-UnfamiliarReportEffectHash $reportPath $started $completed
+[IO.File]::WriteAllText($reportPath, $secondHtml + '<!-- ' + $revisionTag.Replace('09:00:00', '09:00:01') + ' -->')
+if ((ConvertTo-UnfamiliarReportEffectHash $reportPath $started $completed) -ceq $withComment) {
+    throw 'The report comparison ignored a changed comment.'
+}
+$checked.Add('observe literal changes in HTML comments')
+[IO.File]::WriteAllText($reportPath, $firstHtml + '<!-->' + $revisionTag)
+Assert-RejectedContract 'reject duplicate revision after an abruptly closed HTML comment' {
+    ConvertTo-UnfamiliarReportEffectHash $reportPath $started $completed
+} 'one viewport and one revision'
+
+$cssStart = '<style>' + [Environment]::NewLine
+$cssEnd = '</style><div class="a">Fixture</div>'
+$ruleA = '.a { color: red; }' + [Environment]::NewLine
+$ruleB = '.b { color: blue; }' + [Environment]::NewLine
+[IO.File]::WriteAllText($reportPath, $cssStart + $ruleA + $ruleB + $cssEnd)
+$cssBaseline = ConvertTo-SingleClassReportEffectHash $reportPath
+[IO.File]::WriteAllText($reportPath, $cssStart + $ruleB + $ruleA + $cssEnd)
+if ((ConvertTo-SingleClassReportEffectHash $reportPath) -cne $cssBaseline) {
+    throw 'Reordering two disjoint single-class CSS rules changed the report comparison.'
+}
+$checked.Add('CSS report comparison preserves independently applied class rules across ordering')
+[IO.File]::WriteAllText($reportPath, $cssStart + $ruleB + $ruleA.Replace('red', 'black') + $cssEnd)
+if ((ConvertTo-SingleClassReportEffectHash $reportPath) -ceq $cssBaseline) {
+    throw 'The CSS report comparison ignored a changed style.'
+}
+$checked.Add('CSS report comparison detects changed rules')
+[IO.File]::WriteAllText($reportPath, $cssStart + $ruleA + $ruleB + $cssEnd.Replace('"a"', '"a b"'))
+Assert-RejectedContract 'reject CSS report with potentially overlapping class selectors' {
+    ConvertTo-SingleClassReportEffectHash $reportPath
+} 'single-class elements'
+[IO.File]::WriteAllText($reportPath, $cssStart + $ruleA + $ruleA.Replace('red', 'black') + $cssEnd)
+Assert-RejectedContract 'reject duplicate CSS selectors' {
+    ConvertTo-SingleClassReportEffectHash $reportPath
+} 'distinct single-class CSS rules'
+[IO.File]::WriteAllText($reportPath, $cssStart + $ruleA + ('p { color: green; }' + [Environment]::NewLine) + $ruleB + $cssEnd)
+Assert-RejectedContract 'reject noncontiguous CSS rule block' {
+    ConvertTo-SingleClassReportEffectHash $reportPath
+} 'contiguous block'
+$prefix = '@media print { p { color: black; } }' + [Environment]::NewLine
+[IO.File]::WriteAllText($reportPath, $cssStart + $prefix + $ruleA + $ruleB + $cssEnd)
+$mediaHash = ConvertTo-SingleClassReportEffectHash $reportPath
+[IO.File]::WriteAllText($reportPath, $cssStart + $prefix + $ruleB + $ruleA + $cssEnd)
+if ((ConvertTo-SingleClassReportEffectHash $reportPath) -cne $mediaHash) {
+    throw 'A complete preceding media rule changed the independent class-rule comparison.'
+}
+$checked.Add('accept complete CSS media rule before the sortable classes')
+$selectorPrefix = 'p' + [Environment]::NewLine
+[IO.File]::WriteAllText($reportPath, $cssStart + $selectorPrefix + $ruleB + $ruleA + $cssEnd)
+Assert-RejectedContract 'reject continued CSS selector before sortable rules' {
+    ConvertTo-SingleClassReportEffectHash $reportPath
+} 'complete standalone'
+[IO.File]::WriteAllText($reportPath, $cssStart + $selectorPrefix + $ruleA + $ruleB + $cssEnd)
+Assert-RejectedContract 'reject reordered continued CSS selector before sortable rules' {
+    ConvertTo-SingleClassReportEffectHash $reportPath
+} 'complete standalone'
+[IO.File]::WriteAllText($reportPath, $cssStart + [string][char]0x00a0 + [Environment]::NewLine + $ruleA + $ruleB + $cssEnd)
+Assert-RejectedContract 'reject non-CSS whitespace in a continued CSS selector' {
+    ConvertTo-SingleClassReportEffectHash $reportPath
+} 'complete standalone'
+$commentOpen = '.a { /* start of comment }' + [Environment]::NewLine
+$commentClose = '.c { end of comment */ }' + [Environment]::NewLine
+[IO.File]::WriteAllText($reportPath, $cssStart + $commentOpen + $ruleB + $commentClose + $cssEnd)
+Assert-RejectedContract 'reject CSS comments spanning sortable rules' {
+    ConvertTo-SingleClassReportEffectHash $reportPath
+} 'comment-free stylesheet'
 
 $result=[ordered]@{schemaVersion=1;passed=$true;checks=@($checked);checkCount=$checked.Count
     scope='Standalone qualification assertions only; no compiler, SDK, third-party source, lifecycle process, or benchmark executed'

@@ -39,14 +39,32 @@ public sealed partial class PowerShellCompilationInputResolverTests
     }
 
     [Theory]
+    [InlineData(". (Join-Path $PSScriptRoot 'helper.ps1')")]
+    [InlineData("$name = 'helper.ps1'; $helperPath = Join-Path $PSScriptRoot $name; . $helperPath")]
+    [InlineData("$name = 'helper.ps1'; $helperPath = Join-Path $PSScriptRoot $name; if (Test-Path -LiteralPath $helperPath) { . $helperPath }")]
+    public void Resolve_DiscoversGuardedSourceLoadsWithADirectJoinOrLiteralChildVariable(string text)
+    {
+        using var fixture = ResolverFixture.Create();
+        var source = fixture.Write("main.ps1", text);
+        var helper = fixture.Write("helper.ps1", "function Get-Value { 7 }");
+
+        var resolved = new PowerShellCompilationInputResolver().Resolve(source);
+
+        Assert.Equal(new[] { source, helper }, resolved.SourceFiles);
+        Assert.Equal(new[] { source, helper }, resolved.CompilationSourceFiles);
+    }
+
+    [Theory]
     [InlineData("$helperPath = 'helper.ps1'; . $helperPath")]
     [InlineData("$script:helperPath = Join-Path $PSScriptRoot 'helper.ps1'; . $script:helperPath")]
     [InlineData("if ($true) { $helperPath = Join-Path $PSScriptRoot 'helper.ps1' }; . $helperPath")]
     [InlineData("foreach ($item in 1) { $helperPath = Join-Path $PSScriptRoot 'helper.ps1' }; . $helperPath")]
     [InlineData("& { $helperPath = Join-Path $PSScriptRoot 'helper.ps1' }; . $helperPath")]
-    [InlineData("$helperPath = Join-Path $PSScriptRoot 'helper.ps1'; if ($true) { . $helperPath }")]
+    [InlineData("$helperPath = Join-Path $PSScriptRoot 'helper.ps1'; & { . $helperPath }")]
     [InlineData("Set-Alias jp Join-Path; $helperPath = jp $PSScriptRoot 'helper.ps1'; . $helperPath")]
-    [InlineData("$name = 'helper.ps1'; $helperPath = Join-Path $PSScriptRoot $name; . $helperPath")]
+    [InlineData("$name = $args[0]; $helperPath = Join-Path $PSScriptRoot $name; . $helperPath")]
+    [InlineData("$name = 'helper.ps1'; if ($true) { $name = 'other.ps1' }; $helperPath = Join-Path $PSScriptRoot $name; . $helperPath")]
+    [InlineData("$name = 'helper.ps1'; $script:name = 'other.ps1'; $helperPath = Join-Path $PSScriptRoot $name; . $helperPath")]
     [InlineData("$helperPath = Join-Path $PSScriptRoot 'helper.ps1'; $helperPath = 'other.ps1'; . $helperPath")]
     [InlineData("$helperPath = Join-Path $PSScriptRoot 'helper.ps1'; $script:helperPath = 'other.ps1'; . $helperPath")]
     [InlineData("$helperPath = Join-Path $PSScriptRoot 'helper.ps1'; if ($true) { $helperPath = 'other.ps1' }; . $helperPath")]

@@ -83,6 +83,19 @@ internal static class PowerShellHybridDependencyResolver
     internal static string[] DiscoverModuleScopeDependencies(string sourcePath)
         => DiscoverModuleScopeDependencies(sourcePath, null, null);
 
+    internal static (string[] Compilation, string[] Runtime) DiscoverExecutableSources(
+        string sourcePath, PowerShellCompilationMode mode, PowerShellSourceSnapshot snapshot)
+    {
+        var hosted = mode != PowerShellCompilationMode.Strict;
+        var compiled = DiscoverDependencies(sourcePath, allowDerivedPaths: hosted, snapshot: snapshot);
+        if (!hosted) return (compiled, compiled);
+        // Called scripts own a child scope. Stage them, but do not add their functions to the caller's symbol table.
+        var runtime = DiscoverDependenciesCore(sourcePath, null, moduleScopeOnly: false, conventionalLoaders: null,
+            allowDerivedPaths: true, snapshot: snapshot,
+            callerScopeSources: compiled.ToHashSet(PowerShellCompilationPathSafety.PathComparer));
+        return (compiled, runtime);
+    }
+
     internal static string[] DiscoverModuleScopeDependencies(string sourcePath,
         IEnumerable<string>? additionalEntryPaths,
         IReadOnlyCollection<PowerShellConventionalLoaderIdentity>? conventionalLoaders,
@@ -125,6 +138,7 @@ internal static class PowerShellHybridDependencyResolver
         IReadOnlyDictionary<string, ParsedSourceDocument>? sourceDocuments = null,
         string? semanticProfileId = null,
         PowerShellSourceSnapshot? snapshot = null,
+        ISet<string>? callerScopeSources = null,
         bool knownPathsOnly = false)
     {
         var primarySource = Path.GetFullPath(sourcePath);
@@ -175,11 +189,35 @@ internal static class PowerShellHybridDependencyResolver
             var dotSourceCommands = moduleScopeOnly
                 ? PowerShellCompilationSourcePathPlanner.GetModuleScopeDotSources(ast)
                 : ast.FindAll(
-                        static node => node is CommandAst { InvocationOperator: TokenKind.Dot },
+                        node => node is CommandAst command &&
+                                (command.InvocationOperator == TokenKind.Dot ||
+                                 callerScopeSources is not null && command.InvocationOperator == TokenKind.Ampersand),
                         searchNestedScriptBlocks: true)
                     .Cast<CommandAst>();
             foreach (var command in dotSourceCommands)
             {
+                if (command.InvocationOperator == TokenKind.Ampersand)
+                {
+                    if (PowerShellCompilationSourcePathPlanner.PlanScriptCall(command) is not { } call) continue;
+                    var relative = NormalizeRelativePath(call.RelativePath);
+                    if (Path.IsPathRooted(relative) || WildcardPattern.ContainsWildcardCharacters(relative))
+                        throw PowerShellCompilationSourceFailure.Create(
+                            "A packaged script invocation needs a contained .ps1 target without wildcards.", current, call.Operand.Extent);
+                    var calledScript = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(current)!, relative));
+                    PowerShellCompilationPathSafety.EnsureContained(sourceRoot, calledScript, "A packaged script invocation escapes the executable source root.");
+                    if (callerScopeSources!.Contains(calledScript))
+                        throw PowerShellCompilationSourceFailure.Create(
+                            $"The packaged call target '{call.RelativePath}' is also in the caller's dot-sourced compilation set. Use separate authored files for caller-scope declarations and child-scope entry points, or run the source in PowerShell.",
+                            current, call.Operand.Extent);
+                    if (!File.Exists(calledScript))
+                        throw PowerShellCompilationSourceFailure.Create(
+                            $"The called script '{call.RelativePath}' is missing. Supply the contained script or run the source in PowerShell.", current, call.Operand.Extent);
+                    PowerShellCompilationPathSafety.EnsureNoLinks(sourceRoot, calledScript,
+                        "A packaged script invocation target traverses a symbolic link or junction.");
+                    if (discovered.Add(calledScript))
+                        pending.Enqueue((calledScript, RuntimeSelected: false));
+                    continue;
+                }
                 var expression = command.CommandElements.FirstOrDefault()
                     ?? throw new InvalidOperationException($"Dot-source expression at {current}:{command.Extent.StartLineNumber} has no path.");
                 if (expression is ScriptBlockExpressionAst)
@@ -207,7 +245,9 @@ internal static class PowerShellHybridDependencyResolver
                 else
                 {
                     if (knownPathsOnly) continue;
-                    throw new InvalidOperationException($"Dot-source expression at {current}:{command.Extent.StartLineNumber} must be a literal $PSScriptRoot path or a supported guarded script-root assignment for portable staging.");
+                    throw PowerShellCompilationSourceFailure.Create(
+                        $"Dot-source expression at {current}:{command.Extent.StartLineNumber} must be a literal $PSScriptRoot path or a supported guarded script-root assignment for portable staging.",
+                        current, expression.Extent);
                 }
 
                 foreach (var path in paths)
@@ -223,6 +263,10 @@ internal static class PowerShellHybridDependencyResolver
                         !PowerShellCompilationInputResolver.IsPowerShellSource(dependency) || !File.Exists(dependency)))
                         continue;
                     PowerShellCompilationPathSafety.EnsureContained(sourceRoot, dependency, $"Dot-source path at {current}:{command.Extent.StartLineNumber} escapes the hybrid module source root.");
+                    if (callerScopeSources is not null && !callerScopeSources.Contains(current) && callerScopeSources.Contains(dependency))
+                        throw PowerShellCompilationSourceFailure.Create(
+                            $"The child script dot-sources '{relativePath}', which is also in the caller's compilation set. Use separate authored files for the two scopes, or run the source in PowerShell.",
+                            current, expression.Extent);
                     if (selectedAtImport && PowerShellCompilationPathSafety.PathEquals(dependency, primarySource))
                         throw new InvalidOperationException($"Module switch alternative '{relativePath}' selects the importing source itself.");
                     if (!File.Exists(dependency))
