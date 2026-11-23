@@ -36,6 +36,8 @@ internal sealed class PowerForgeReleaseInvocationOptions
 
     public string? ReleaseVersion { get; set; }
 
+    public string? NativeArchiveRoot { get; set; }
+
     public string? ModuleFramework { get; set; }
 
     public ConfigurationGateMode? ModuleRunMode { get; set; }

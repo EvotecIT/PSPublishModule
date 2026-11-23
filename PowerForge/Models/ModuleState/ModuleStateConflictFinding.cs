@@ -50,9 +50,3 @@ internal sealed class ModuleStateConflictFinding
 
     internal string? ProfileName { get; }
 }
-
-internal enum ModuleStateConflictSeverity
-{
-    Warning,
-    Error
-}

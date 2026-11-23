@@ -107,6 +107,14 @@ file count and bytes alongside timing.
 
 ## Standalone CLI comparison
 
+Pass `PSResourceGetPath` to `Invoke-ModuleCliBenchmark.ps1` to add a pinned
+PSResourceGet manifest to the Linux comparison. The wrapper creates a private
+PowerShell home and repository store for the loopback feed. PSResourceGet
+timings include a new `pwsh -NoProfile` process and module import on every sample.
+The optional `PesterFind`, `PesterSave`, `PesterList`, and `PesterUninstall`
+scenarios compare PowerForge and PSResourceGet. ModuleFast participates in
+startup and fresh install, where the operations match.
+
 `module-cli.benchmark.ps1` compares the PowerForge self-contained Linux x64
 CLI with the ModuleFast 1.0.0 Native AOT executable. Both install from the same
 loopback NuGet v3 feed, with a fresh destination for every sample. The feed

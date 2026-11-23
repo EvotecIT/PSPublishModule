@@ -5,9 +5,9 @@ using PowerForge.Cli;
 internal static partial class Program
 {
     private const string ModuleRestoreUsage =
-        "Usage: powerforge module restore --requirements <modules.json> --lock-file <modules.lock.json> --destination <directory> [--source <feed-url-or-folder>] [--write-lock] [--plan] [--accept-license] [--allow-clobber] [--output json]";
+        "Usage: powerforge module restore --requirements <modules.json> --lock-file <modules.lock.json> --destination <directory> [--source <feed-url-or-folder> | --profile <name>] [--write-lock] [--plan] [--accept-license] [--allow-clobber] [--output json]";
 
-    private static bool IsModuleAction(string action) => action is "install" or "restore" or "manifest";
+    private static bool IsModuleAction(string action) => action is "install" or "restore" or "manifest" or "find" or "save" or "update" or "uninstall" or "pack" or "list" or "repository";
 
     private static int CommandModule(string[] args, CliOptions cli, ILogger logger)
     {
@@ -18,7 +18,15 @@ internal static partial class Program
             "install" => ModuleInstallUsage,
             "restore" => ModuleRestoreUsage,
             "manifest" => ModuleManifestUsage,
-            _ => string.Join(Environment.NewLine, ModuleInstallUsage, ModuleRestoreUsage, ModuleManifestUsage)
+            "find" => ModuleFindUsage,
+            "save" => ModuleSaveUsage,
+            "update" => ModuleUpdateUsage,
+            "uninstall" => ModuleUninstallUsage,
+            "pack" => ModulePackUsage,
+            "list" => ModuleListUsage,
+            "repository" => ModuleRepositoryUsage,
+            _ => string.Join(Environment.NewLine, ModuleInstallUsage, ModuleRestoreUsage, ModuleManifestUsage, ModuleFindUsage,
+                ModuleSaveUsage, ModuleUpdateUsage, ModuleUninstallUsage, ModulePackUsage, ModuleListUsage, ModuleRepositoryUsage)
         };
 
         var outputJson = IsJsonOutput(args);
@@ -50,9 +58,17 @@ internal static partial class Program
             Console.CancelKeyPress += cancel;
             try
             {
-                if (action == "install")
-                    return InstallModuleFromFeed(commandArgs, cli, commandLogger, logBuffer, outputJson, cancellation.Token);
-                return RestoreModules(commandArgs, cli, commandLogger, logBuffer, outputJson, cancellation.Token);
+                return action switch
+                {
+                    "install" or "save" => InstallModuleFromFeed(action, commandArgs, cli, commandLogger, logBuffer, outputJson, cancellation.Token),
+                    "find" => FindModules(commandArgs, commandLogger, logBuffer, outputJson, cancellation.Token),
+                    "update" => UpdateInstalledModule(commandArgs, commandLogger, logBuffer, outputJson, cancellation.Token),
+                    "uninstall" => UninstallModule(commandArgs, commandLogger, logBuffer, outputJson),
+                    "list" => ListInstalledModules(commandArgs, logBuffer, outputJson),
+                    "pack" => PackModule(commandArgs, commandLogger, logBuffer, outputJson),
+                    "repository" => ManageModuleRepository(commandArgs, commandLogger, logBuffer, outputJson),
+                    _ => RestoreModules(commandArgs, cli, commandLogger, logBuffer, outputJson, cancellation.Token)
+                };
             }
             finally
             {
@@ -74,12 +90,12 @@ internal static partial class Program
     private static int RestoreModules(string[] args, CliOptions cli, ILogger logger, BufferedLogger? logBuffer,
         bool outputJson, CancellationToken cancellationToken)
     {
-        var (options, _) = ParseModuleCommandOptions(args, "restore");
+        var (options, _) = ParseStandaloneCommandOptions(args, "restore");
         var request = new ManagedModuleRestoreRequest(
             RequireModuleOption(options, "--requirements", ModuleRestoreUsage),
             RequireModuleOption(options, "--lock-file", ModuleRestoreUsage),
             RequireModuleOption(options, "--destination", ModuleRestoreUsage),
-            options.GetValueOrDefault("--source") ?? ManagedModuleRestoreService.DefaultSource,
+            ResolveModuleRepository(options, "Module restore").Source,
             options.ContainsKey("--write-lock"), options.ContainsKey("--plan"),
             options.ContainsKey("--accept-license"), options.ContainsKey("--allow-clobber"));
 
@@ -107,13 +123,13 @@ internal static partial class Program
         return 0;
     }
 
-    private static (Dictionary<string, string?> Options, string? ModuleName) ParseModuleCommandOptions(string[] args, string action)
+    private static (Dictionary<string, string?> Options, string? ModuleName) ParseStandaloneCommandOptions(string[] args, string action)
     {
         var options = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
         string? moduleName = null;
         for (var index = 0; index < args.Length; index++)
         {
-            if (action == "install" && moduleName is null && !args[index].StartsWith("-", StringComparison.Ordinal))
+            if ((action is "install" or "save" or "update" or "uninstall") && moduleName is null && !args[index].StartsWith("-", StringComparison.Ordinal))
             {
                 moduleName = args[index];
                 continue;
@@ -126,20 +142,32 @@ internal static partial class Program
             switch (option)
             {
                 case "--write-lock" when action == "restore":
-                case "--prerelease" when action == "install":
-                case "--plan" when action != "manifest":
-                case "--accept-license" when action != "manifest":
-                case "--allow-clobber" when action != "manifest":
+                case "--prerelease" when action is "install" or "find" or "save" or "update":
+                case "--plan" when action is "install" or "restore" or "save" or "update" or "uninstall":
+                case "--accept-license" when action is "install" or "restore" or "save" or "update":
+                case "--allow-clobber" when action is "install" or "restore" or "save" or "update":
+                case "--force" when action is "save" or "update" or "pack":
+                case "--as-nupkg" when action == "save":
+                case "--trusted" when action is "repository add" or "repository set":
+                case "--untrusted" when action == "repository set":
+                case "--require-trusted-repository" when action is "install" or "save" or "update":
+                case "--authenticode-check" when action is "install" or "save" or "update":
                 case "--output-json":
                 case "--json":
                     options.Add(option, null);
                     break;
                 case "--requirements" when action == "restore":
                 case "--lock-file" when action == "restore":
-                case "--version" when action == "install":
-                case "--destination" when action != "manifest":
-                case "--source" when action != "manifest":
-                case "--path" when action == "manifest":
+                case "--version" when action is "install" or "find" or "save" or "update" or "uninstall" or "list":
+                case "--destination" when action is "install" or "restore" or "save" or "update" or "uninstall" or "list" or "pack":
+                case "--source" when action is "install" or "restore" or "find" or "save" or "update" or "repository add" or "repository set":
+                case "--profile" when action is "install" or "restore" or "find" or "save" or "update":
+                case "--scope" when action is "repository list" or "repository add" or "repository set" or "repository remove":
+                case "--path" when action is "manifest" or "pack":
+                case "--name" when action is "find" or "list" or "repository add" or "repository set" or "repository remove":
+                case "--limit" when action == "find":
+                case "--project-root" when action == "project versions":
+                case "--module-name" when action == "project versions":
                 case "--output":
                     if (index + 1 >= args.Length || args[index + 1].StartsWith("--", StringComparison.Ordinal) ||
                         string.IsNullOrWhiteSpace(args[index + 1]))
@@ -155,6 +183,14 @@ internal static partial class Program
             throw new ArgumentException($"Module {action} supports --output json.");
         return (options, moduleName);
     }
+
+    private static string? ReadExactModuleVersion(Dictionary<string, string?> options, string name)
+        => options.TryGetValue("--version", out var version)
+            ? ManagedModuleStandaloneInput.ValidateVersion(name, version)
+            : null;
+
+    private static ManagedModuleTrustPolicy? ReadModuleTrustPolicy(Dictionary<string, string?> options)
+        => options.ContainsKey("--require-trusted-repository") ? new() { RequireTrustedRepository = true } : null;
 
     private static string RequireModuleOption(Dictionary<string, string?> options, string option, string usage)
         => options.TryGetValue(option, out var value) ? value! : throw new ArgumentException($"Missing required option '{option}'. {usage}");

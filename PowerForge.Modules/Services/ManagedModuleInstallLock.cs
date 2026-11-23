@@ -19,7 +19,11 @@ internal sealed class ManagedModuleInstallLock : IDisposable
     {
         var lockDirectory = System.IO.Path.Combine(moduleRoot, ".powerforge", "locks");
         Directory.CreateDirectory(lockDirectory);
-        var lockPath = System.IO.Path.Combine(lockDirectory, Sanitize(moduleName) + ".lock");
+        return AcquireFile(System.IO.Path.Combine(lockDirectory, Sanitize(moduleName) + ".lock"), cancellationToken);
+    }
+
+    internal static ManagedModuleInstallLock AcquireFile(string lockPath, CancellationToken cancellationToken, bool writeMarker = true)
+    {
         var deadline = DateTimeOffset.UtcNow.Add(Timeout);
 
         while (true)
@@ -28,13 +32,23 @@ internal sealed class ManagedModuleInstallLock : IDisposable
             try
             {
                 var stream = new FileStream(lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
-                stream.SetLength(0);
-                var marker = System.Text.Encoding.UTF8.GetBytes(
-                    System.Diagnostics.Process.GetCurrentProcess().Id + Environment.NewLine +
-                    DateTimeOffset.UtcNow.ToString("O") + Environment.NewLine);
-                stream.Write(marker, 0, marker.Length);
-                stream.Position = 0;
-                return new ManagedModuleInstallLock(lockPath, stream);
+                if (!writeMarker)
+                    return new ManagedModuleInstallLock(lockPath, stream);
+                try
+                {
+                    stream.SetLength(0);
+                    var marker = System.Text.Encoding.UTF8.GetBytes(
+                        System.Diagnostics.Process.GetCurrentProcess().Id + Environment.NewLine +
+                        DateTimeOffset.UtcNow.ToString("O") + Environment.NewLine);
+                    stream.Write(marker, 0, marker.Length);
+                    stream.Position = 0;
+                    return new ManagedModuleInstallLock(lockPath, stream);
+                }
+                catch
+                {
+                    stream.Dispose();
+                    throw;
+                }
             }
             catch (IOException) when (DateTimeOffset.UtcNow < deadline)
             {

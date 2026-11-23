@@ -32,7 +32,7 @@ public static class PrivateGalleryRepositoryEndpoints
         {
             var feed = string.IsNullOrWhiteSpace(azureArtifactsFeed) ? repository : azureArtifactsFeed;
             var localRepositoryName = string.IsNullOrWhiteSpace(azureArtifactsFeed) ? repositoryName : repositoryName ?? repository;
-            var endpoint = AzureArtifactsRepositoryEndpoints.Create(
+            var endpoint = AzureArtifactsModuleEndpoints.Create(
                 azureDevOpsOrganization ?? string.Empty,
                 azureDevOpsProject,
                 feed ?? string.Empty,
@@ -161,11 +161,11 @@ public static class PrivateGalleryRepositoryEndpoints
     }
 
     // Upgrade saved preset JSON without treating arbitrary equal overrides as provider defaults.
-    internal static bool HasLegacyProtocolEndpointDefaults(PublishRepositoryConfiguration repository)
+    internal static bool HasLegacyProtocolEndpointDefaults(string? sourceUri, string? publishUri, string? uriValue)
     {
-        var source = NormalizeEndpointValue(repository.SourceUri);
-        if (source is null || !string.Equals(source, NormalizeEndpointValue(repository.PublishUri), StringComparison.Ordinal) ||
-            !Uri.TryCreate(NormalizeEndpointValue(repository.Uri), UriKind.Absolute, out var uri) ||
+        var source = NormalizeEndpointValue(sourceUri);
+        if (source is null || !string.Equals(source, NormalizeEndpointValue(publishUri), StringComparison.Ordinal) ||
+            !Uri.TryCreate(NormalizeEndpointValue(uriValue), UriKind.Absolute, out var uri) ||
             (uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeHttp) ||
             uri.Query.Length != 0 || uri.Fragment.Length != 0)
             return false;

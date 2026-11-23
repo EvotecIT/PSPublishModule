@@ -119,6 +119,8 @@ public sealed partial class ManagedModuleUninstallService
             return;
 
         EnsureModuleRootSpecified(plan.ModuleRoot);
+        foreach (var target in plan.Targets)
+            EnsureTargetUnderRoot(plan.ModuleRoot, target);
 
         if (!plan.AllowLoadedModuleUninstall)
             ThrowIfLoaded(plan.Targets);
@@ -157,9 +159,9 @@ public sealed partial class ManagedModuleUninstallService
     {
         var stopwatch = Stopwatch.StartNew();
         ManagedModulePackageIdentity.RequireSafeId(target.Name, nameof(target.Name));
-        EnsureTargetUnderRoot(plan.ModuleRoot, target.ModulePath);
         using (ManagedModuleInstallLock.Acquire(plan.ModuleRoot, target.Name, CancellationToken.None))
         {
+            EnsureTargetUnderRoot(plan.ModuleRoot, target);
             if (target.IsFlatLayout)
                 DeleteFlatModuleTarget(target);
             else
@@ -342,7 +344,7 @@ public sealed partial class ManagedModuleUninstallService
                         ModuleName = candidate.Name,
                         Version = candidate.Version,
                         ModulePath = candidate.ModulePath,
-                        RequiredVersion = ModulePublisher.FormatRequiredModuleConstraint(requiredModule)
+                        RequiredVersion = RequiredModuleVersionConstraint.FormatRequiredModuleConstraint(requiredModule)
                     }));
                 }
             }
@@ -373,14 +375,14 @@ public sealed partial class ManagedModuleUninstallService
         RequiredModuleReference requiredModule,
         ManagedModuleUninstallTarget target)
         => string.Equals(requiredModule.ModuleName, target.Name, StringComparison.OrdinalIgnoreCase) &&
-           ModulePublisher.DoesVersionMatchRequiredModule(requiredModule, target.Version) &&
+           RequiredModuleVersionConstraint.DoesVersionMatchRequiredModule(requiredModule, target.Version) &&
            RequiredModuleGuidMatches(requiredModule.Guid, target.Guid);
 
     private static bool RequiredModuleMatchesCandidate(
         RequiredModuleReference requiredModule,
         InstalledModuleCandidate candidate)
         => string.Equals(requiredModule.ModuleName, candidate.Name, StringComparison.OrdinalIgnoreCase) &&
-           ModulePublisher.DoesVersionMatchRequiredModule(requiredModule, candidate.Version) &&
+           RequiredModuleVersionConstraint.DoesVersionMatchRequiredModule(requiredModule, candidate.Version) &&
            RequiredModuleGuidMatches(requiredModule.Guid, candidate.Guid);
 
     private static bool RequiredModuleGuidMatches(string? requiredGuid, string? installedGuid)
@@ -542,18 +544,47 @@ public sealed partial class ManagedModuleUninstallService
     private static bool PathsEqual(string left, string right)
         => string.Equals(NormalizePath(left), NormalizePath(right), PathStringComparison);
 
-    private static void EnsureTargetUnderRoot(string moduleRoot, string modulePath)
+    private static void EnsureTargetUnderRoot(string moduleRoot, ManagedModuleUninstallTarget uninstallTarget)
     {
         EnsureModuleRootSpecified(moduleRoot);
+        var modulePath = uninstallTarget.ModulePath;
         var root = NormalizePath(moduleRoot);
         var target = NormalizePath(modulePath);
         if (string.Equals(root, target, PathStringComparison))
             throw new InvalidOperationException($"Refusing to remove module root as a module target: {modulePath}");
 
-        if (!target.StartsWith(root + Path.DirectorySeparatorChar, PathStringComparison) &&
-            !target.StartsWith(root + Path.AltDirectorySeparatorChar, PathStringComparison))
+        var separator = Path.DirectorySeparatorChar.ToString();
+        var rootPrefix = root.EndsWith(separator, StringComparison.Ordinal) ? root : root + separator;
+        if (!target.StartsWith(rootPrefix, PathStringComparison))
         {
             throw new InvalidOperationException($"Refusing to remove module path outside module root: {modulePath}");
+        }
+
+        // Inspect parents first, before resolving a child under a linked directory.
+        var paths = new Stack<string>();
+        for (var current = target; !string.Equals(current, root, PathStringComparison);)
+        {
+            paths.Push(current);
+            var parent = Path.GetDirectoryName(current) ??
+                throw new InvalidOperationException($"The module path has no parent under the selected root: {modulePath}");
+            current = NormalizePath(parent);
+        }
+
+        foreach (var current in paths)
+        {
+            FileAttributes attributes;
+            try
+            {
+                attributes = File.GetAttributes(GetFileSystemPath(current));
+            }
+            catch (IOException ex) when (uninstallTarget.IsFlatLayout && ex is (FileNotFoundException or DirectoryNotFoundException))
+            {
+                // A flat module can disappear after planning. Check any remaining ancestors.
+                continue;
+            }
+
+            if ((attributes & FileAttributes.ReparsePoint) != 0)
+                throw new InvalidOperationException($"Refusing to remove a module through a symbolic link or junction: {current}");
         }
     }
 
@@ -636,8 +667,12 @@ public sealed partial class ManagedModuleUninstallService
     }
 
     private static string NormalizePath(string path)
-        => Path.GetFullPath(path)
-            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+    {
+        var fullPath = Path.GetFullPath(path);
+        var rootLength = Path.GetPathRoot(fullPath)?.Length ?? 0;
+        var trimmed = fullPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        return trimmed.Length < rootLength ? fullPath.Substring(0, rootLength) : trimmed;
+    }
 
     private static string GetFileSystemPath(string path)
     {

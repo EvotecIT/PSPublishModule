@@ -83,6 +83,14 @@ internal static partial class Program
       powerforge module restore --requirements <modules.json> --lock-file <modules.lock.json> --destination <directory>
                                 [--source <feed-url-or-folder>] [--write-lock] [--plan] [--accept-license] [--allow-clobber] [--output json]
       powerforge module manifest --path <module.psd1> [--output json]
+      powerforge module find --name <id-or-pattern> [--source <feed-url-or-folder>] [--version <exact-version>] [--prerelease] [--limit <count>] [--output json]
+      powerforge module save <name> --destination <directory> [--version <exact-version>] [--as-nupkg]
+      powerforge module list --destination <module-root> [--name <name-or-pattern>] [--version <version-or-range>]
+      powerforge module update <name> --destination <module-root> [--version <exact-version>] [--plan]
+      powerforge module uninstall <name> --destination <module-root> --version <exact-version> [--plan]
+      powerforge module pack --path <module-directory> --destination <directory>
+      powerforge module repository <list|add|set|remove> [--help]
+      powerforge project versions [--project-root <directory>] [--module-name <name>] [--output json]
       powerforge pipeline [--config <Pipeline.json>] [--project-root <path>] [--diagnostics-baseline <file>] [--diagnostics-baseline-generate] [--diagnostics-baseline-update] [--fail-on-new-diagnostics] [--fail-on-diagnostics-severity <Warning|Error>] [--output json]
       powerforge plan [--config <Pipeline.json>] [--project-root <path>] [--output json]
       powerforge find --name <Name>[,<Name>...] [--repo <Repo>] [--version <X.Y.Z>] [--prerelease]

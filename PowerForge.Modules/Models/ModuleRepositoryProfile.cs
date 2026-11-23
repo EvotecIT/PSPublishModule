@@ -25,6 +25,11 @@ internal sealed class ModuleRepositoryProfile
     public string AuthenticationMode { get; set; } = "AzureArtifactsCredentialProvider";
     public DateTimeOffset CreatedAtUtc { get; set; }
     public DateTimeOffset UpdatedAtUtc { get; set; }
+
+    internal string ReadSource => new[] { RepositoryUri, RepositorySourceUri, Repository, RepositoryName, Name }
+        .First(static value => !string.IsNullOrWhiteSpace(value));
+
+    internal string EffectiveRepositoryName => string.IsNullOrWhiteSpace(RepositoryName) ? Name : RepositoryName;
 }
 
 internal sealed class ModuleRepositoryProfileDocument

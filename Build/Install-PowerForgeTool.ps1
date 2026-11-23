@@ -114,9 +114,72 @@ if ([string]::IsNullOrWhiteSpace($CacheRoot)) {
 }
 $CacheRoot = [IO.Path]::GetFullPath($CacheRoot)
 $installRoot = Join-Path $CacheRoot "$version/$rid/$expectedSha256"
-$executableName = if ($isWindowsHost) { 'PowerForge.exe' } else { 'PowerForge' }
+$suffix = if ($isWindowsHost) { '.exe' } else { '' }
+$executableName = [string] (Get-ManifestPropertyValue -Object $asset -Name 'executableName')
+$companionPayloadSha256 = ([string] (Get-ManifestPropertyValue -Object $asset -Name 'companionPayloadSha256')).ToLowerInvariant()
+$companionRelativePath = $null
+if ([string]::IsNullOrEmpty($executableName) -and [string]::IsNullOrEmpty($companionPayloadSha256)) {
+    $executableName = "PowerForge$suffix"
+} elseif ($schemaVersion -eq 2 -and $executableName -ceq "powerforge$suffix" -and $companionPayloadSha256 -match '^[a-f0-9]{64}$') {
+    $companionRelativePath = "full/powerforge-full$suffix"
+} else {
+    throw "PowerForge asset '$rid' has an invalid native launcher or managed companion entry."
+}
 $toolPath = Join-Path $installRoot $executableName
 $markerPath = Join-Path $installRoot '.powerforge-install.json'
+
+function Test-ManagedCompanion {
+    param([string] $Root)
+
+    if (-not $companionRelativePath) { return $true }
+    $directory = Get-Item -LiteralPath (Join-Path $Root 'full') -Force -ErrorAction SilentlyContinue
+    if (-not $directory -or -not $directory.PSIsContainer) { return $false }
+
+    $prefixLength = $directory.FullName.Length + 1
+    $directories = [Collections.Generic.Stack[IO.DirectoryInfo]]::new()
+    $directories.Push($directory)
+    $files = [Collections.Generic.Dictionary[string, string]]::new([StringComparer]::Ordinal)
+    while ($directories.Count) {
+        $current = $directories.Pop()
+        if ($current.Attributes -band [IO.FileAttributes]::ReparsePoint) { return $false }
+        foreach ($entry in Get-ChildItem -LiteralPath $current.FullName -Force) {
+            if ($entry.Attributes -band [IO.FileAttributes]::ReparsePoint) { return $false }
+            if ($entry.PSIsContainer) {
+                $directories.Push($entry)
+                continue
+            }
+            if (-not $isWindowsHost) {
+                # The Unix file provider exposes the type of devices and named pipes.
+                $unixStat = $entry.PSObject.Properties['UnixStat']
+                if ($unixStat -and $unixStat.Value.ItemType.ToString() -cne 'File') { return $false }
+            }
+            $relativePath = $entry.FullName.Substring($prefixLength).Replace([IO.Path]::DirectorySeparatorChar, [char] '/')
+            $files.Add("full/$relativePath", $entry.FullName)
+        }
+    }
+
+    # Match the release manifest's ordinal UTF-8 records of path, NUL, SHA-256, NUL.
+    $paths = [string[]] @($files.Keys)
+    [Array]::Sort($paths, [StringComparer]::Ordinal)
+    $payload = [Text.StringBuilder]::new()
+    foreach ($path in $paths) {
+        $digest = (Get-FileHash -LiteralPath $files[$path] -Algorithm SHA256).Hash.ToLowerInvariant()
+        $null = $payload.Append($path).Append([char] 0).Append($digest).Append([char] 0)
+    }
+    $sha256 = [Security.Cryptography.SHA256]::Create()
+    try {
+        $hash = $sha256.ComputeHash([Text.Encoding]::UTF8.GetBytes($payload.ToString()))
+        return [BitConverter]::ToString($hash).Replace('-', '').ToLowerInvariant() -ceq $companionPayloadSha256
+    } finally {
+        $sha256.Dispose()
+    }
+}
+
+function Test-PowerForgeForwarding {
+    param([string] $Tool)
+    $probe = & $Tool apple-release --help --output json 2>$null
+    return $LASTEXITCODE -eq 0 -and ($probe -join "`n") -match 'apple-release'
+}
 
 function Test-InstalledTool {
     if ([string]::IsNullOrWhiteSpace($trustedExecutableSha256)) {
@@ -131,6 +194,7 @@ function Test-InstalledTool {
         if ($actualExecutableSha256 -cne $trustedExecutableSha256) {
             return $false
         }
+        if (-not (Test-ManagedCompanion -Root $installRoot)) { return $false }
         $marker = Get-Content -LiteralPath $markerPath -Raw | ConvertFrom-Json
         if ([string] $marker.sha256 -cne $expectedSha256 -or
             [string] $marker.executableSha256 -cne $trustedExecutableSha256 -or
@@ -143,7 +207,8 @@ function Test-InstalledTool {
         $versionMatches = $observedVersion -ceq $version -or $observedVersion.StartsWith("$version+", [StringComparison]::Ordinal)
         $commitMatches = [string]::IsNullOrWhiteSpace($expectedCommit) -or
             $observedVersion.EndsWith("+$expectedCommit", [StringComparison]::OrdinalIgnoreCase)
-        return $toolExitCode -eq 0 -and $versionMatches -and $commitMatches
+        return $toolExitCode -eq 0 -and $versionMatches -and $commitMatches -and
+            (-not $companionRelativePath -or (Test-PowerForgeForwarding -Tool $toolPath))
     } catch {
         return $false
     }
@@ -200,9 +265,14 @@ if (-not $reused) {
         if ($legacyArchiveOnlyManifest) {
             $trustedExecutableSha256 = $stagedExecutableSha256
         }
+        if (-not (Test-ManagedCompanion -Root $stageRoot)) {
+            throw 'The managed PowerForge companion is missing or its checksum differs from the tool manifest.'
+        }
         if (-not $isWindowsHost) {
-            & chmod +x $stagedTool
-            if ($LASTEXITCODE -ne 0) { throw "Failed to mark '$stagedTool' executable." }
+            $executables = @($stagedTool)
+            if ($companionRelativePath) { $executables += Join-Path $stageRoot $companionRelativePath }
+            & chmod +x @executables
+            if ($LASTEXITCODE -ne 0) { throw 'Failed to mark the installed PowerForge executables.' }
         }
         $versionOutput = @(& $stagedTool --version)
         $toolExitCode = $LASTEXITCODE
@@ -213,8 +283,7 @@ if (-not $reused) {
         if ($toolExitCode -ne 0 -or -not $versionMatches -or -not $commitMatches) {
             throw "Verified PowerForge executable version '$observedVersion' does not match manifest version '$version'."
         }
-        $probe = & $stagedTool apple-release --help --output json
-        if ($LASTEXITCODE -ne 0 -or ($probe -join "`n") -notmatch 'apple-release') {
+        if (-not (Test-PowerForgeForwarding -Tool $stagedTool)) {
             throw 'The verified PowerForge executable does not expose the Apple release command.'
         }
         [ordered]@{
@@ -247,7 +316,7 @@ if (-not $reused) {
     }
 }
 
-if (-not (Test-InstalledTool)) {
+if (-not $reused -and -not (Test-InstalledTool)) {
     throw "PowerForge installation did not converge at '$installRoot'."
 }
 if ($AddToPath -and $env:GITHUB_PATH) {

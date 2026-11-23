@@ -146,6 +146,10 @@ public sealed partial class InvokePowerForgeReleaseCommand : PSCmdlet
     [Parameter]
     public string? ReleaseVersion { get; set; }
 
+    /// <summary>Directory containing the Windows and Linux x64 native PowerForge archives for a build-only run at the shared version.</summary>
+    [Parameter]
+    public string? NativeArchiveRoot { get; set; }
+
     /// <summary>
     /// Module pipeline gate used by the native module-release lane.
     /// </summary>
@@ -852,6 +856,9 @@ public sealed partial class InvokePowerForgeReleaseCommand : PSCmdlet
             SourceInputPaths = SourceInputPath ?? Array.Empty<string>(),
             ModuleHostPath = NormalizeNullable(ModuleHostPath),
             ReleaseVersion = NormalizeNullable(ReleaseVersion),
+            NativeArchiveRoot = NormalizeNullable(NativeArchiveRoot) is { } archiveRoot
+                ? SessionState.Path.GetUnresolvedProviderPathFromPSPath(archiveRoot)
+                : null,
             ModuleVersion = NormalizeNullable(ModuleVersion),
             ModulePreReleaseTag = NormalizeNullable(ModulePreReleaseTag),
             WorkspaceConfigPath = NormalizeNullable(WorkspaceConfigPath),

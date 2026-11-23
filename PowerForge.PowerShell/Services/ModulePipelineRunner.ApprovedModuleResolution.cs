@@ -193,7 +193,7 @@ public sealed partial class ModulePipelineRunner
 
                 if (resolution.VersionSource == ModuleDependencyVersionSource.Installed)
                 {
-                    _logger.Warn($"Approved module '{resolution.Name}' could not be bound to an installed path matching {ModulePublisher.FormatRequiredModuleConstraint(resolution.Constraint)}.");
+                    _logger.Warn($"Approved module '{resolution.Name}' could not be bound to an installed path matching {RequiredModuleVersionConstraint.FormatRequiredModuleConstraint(resolution.Constraint)}.");
                     continue;
                 }
 
@@ -217,7 +217,7 @@ public sealed partial class ModulePipelineRunner
                 if (selected is null)
                 {
                     throw new InvalidOperationException(
-                        $"Approved module '{resolution.Name}' has no version in repository '{repository}' matching {ModulePublisher.FormatRequiredModuleConstraint(resolution.Constraint)}.");
+                        $"Approved module '{resolution.Name}' has no version in repository '{repository}' matching {RequiredModuleVersionConstraint.FormatRequiredModuleConstraint(resolution.Constraint)}.");
                 }
 
                 var selectedVersion = ModulePublisher.GetRepositoryVersionText(selected);

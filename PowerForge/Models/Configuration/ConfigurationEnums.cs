@@ -29,65 +29,6 @@ public enum PublishTool
 }
 
 /// <summary>
-/// Tool selection used when registering repositories for end users.
-/// </summary>
-public enum RepositoryRegistrationTool
-{
-    /// <summary>
-    /// Prefer PSResourceGet first, then fall back to PowerShellGet when one of the tools is unavailable.
-    /// </summary>
-    Auto,
-    /// <summary>Register the PSResourceGet repository only.</summary>
-    PSResourceGet,
-    /// <summary>Register the PowerShellGet repository only.</summary>
-    PowerShellGet,
-    /// <summary>Register both PowerShellGet and PSResourceGet repositories.</summary>
-    Both
-}
-
-/// <summary>
-/// Private gallery provider used by end-user repository bootstrap commands.
-/// </summary>
-public enum PrivateGalleryProvider
-{
-    /// <summary>Azure Artifacts / Azure DevOps private feed.</summary>
-    AzureArtifacts = 0,
-    /// <summary>Alias for Azure Artifacts / Azure DevOps private feed.</summary>
-    Azure = 0,
-    /// <summary>JFrog Artifactory NuGet/PowerShell repository.</summary>
-    JFrog = 1,
-    /// <summary>Generic NuGet-backed PowerShell repository.</summary>
-    NuGet = 2,
-    /// <summary>GitHub Packages NuGet registry scoped to a GitHub user or organization.</summary>
-    GitHubPackages = 3,
-    /// <summary>Alias for GitHub Packages NuGet registry.</summary>
-    GitHub = 3
-}
-
-/// <summary>
-/// Bootstrap/authentication mode used by private gallery onboarding commands.
-/// </summary>
-public enum PrivateGalleryBootstrapMode
-{
-    /// <summary>
-    /// Choose the best available path: use explicit/prompted credentials when requested, otherwise prefer ExistingSession when Azure Artifacts prerequisites are ready and fall back to CredentialPrompt when they are not.
-    /// </summary>
-    Auto,
-    /// <summary>
-    /// Rely on an existing session or credential-provider flow without collecting credentials in the cmdlet.
-    /// </summary>
-    ExistingSession,
-    /// <summary>
-    /// Use credentials supplied to the cmdlet or prompt interactively for them.
-    /// </summary>
-    CredentialPrompt,
-    /// <summary>
-    /// Use JFrog CLI browser login before probing a JFrog private gallery. This validates whether the local JFrog CLI session can bridge to NuGet/PSResourceGet.
-    /// </summary>
-    JFrogCli
-}
-
-/// <summary>
 /// Source of the credential used by a private gallery bootstrap command.
 /// </summary>
 public enum PrivateGalleryCredentialSource
@@ -127,19 +68,6 @@ public enum JFrogOidcProviderType
 }
 
 /// <summary>
-/// Profile store scope used by private gallery profile commands.
-/// </summary>
-public enum ModuleRepositoryProfileScope
-{
-    /// <summary>Use the current user's profile store.</summary>
-    User,
-    /// <summary>Use the machine-wide profile store shared by all users on the workstation.</summary>
-    Machine,
-    /// <summary>Read from user and machine-wide stores, preferring the user store when both define the same profile.</summary>
-    All
-}
-
-/// <summary>
 /// Tool/provider used when downloading PowerShell modules (Save-PSResource/Save-Module).
 /// </summary>
 public enum ModuleSaveTool
@@ -171,25 +99,6 @@ public enum RequiredModulesSource
     /// Always download required modules (ignore locally available copies).
     /// </summary>
     Download
-}
-
-/// <summary>
-/// API version for PSResourceGet repository endpoints.
-/// </summary>
-public enum RepositoryApiVersion
-{
-    /// <summary>Automatic/default behavior (omit version unless required).</summary>
-    Auto = 0,
-    /// <summary>NuGet v2 API.</summary>
-    V2 = 1,
-    /// <summary>NuGet v3 API.</summary>
-    V3 = 2,
-    /// <summary>OCI/container registry API (Azure Container Registry, Microsoft Artifact Registry).</summary>
-    ContainerRegistry = 3,
-    /// <summary>Local filesystem repository API.</summary>
-    Local = 4,
-    /// <summary>NuGet.Server repository API.</summary>
-    NugetServer = 5
 }
 
 /// <summary>

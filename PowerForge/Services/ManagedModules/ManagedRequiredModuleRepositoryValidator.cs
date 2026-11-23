@@ -121,7 +121,7 @@ internal sealed class ManagedRequiredModuleRepositoryValidator
                         continue;
                 }
 
-                missing.Add($"{requiredModule.ModuleName} [{ModulePublisher.FormatRequiredModuleConstraint(requiredModule)}]");
+                missing.Add($"{requiredModule.ModuleName} [{RequiredModuleVersionConstraint.FormatRequiredModuleConstraint(requiredModule)}]");
             }
         }
         finally

@@ -377,6 +377,9 @@ public sealed partial class DotNetPublishPipelineRunner
         }
     }
 
+    internal static bool HasConfiguredPublisherSignature(string filePath, DotNetPublishSignOptions sign)
+        => SignatureMatchesPublisher(filePath, GetPublisherMatchOptions(sign));
+
     private static bool SignatureMatchesPublisher(string filePath, DotNetPublishSignOptions sign)
     {
         if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))

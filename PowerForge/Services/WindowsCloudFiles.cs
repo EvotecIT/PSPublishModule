@@ -26,7 +26,7 @@ internal static class WindowsCloudFiles
 
         const int fileAttributeTagInfo = 9;
         if (!GetFileInformationByHandleEx(handle, fileAttributeTagInfo, out var information,
-                (uint)Marshal.SizeOf(typeof(FileAttributeTagInfo))))
+                (uint)Marshal.SizeOf<FileAttributeTagInfo>()))
             throw MetadataError(path);
 
         return (information.FileAttributes & FileAttributes.ReparsePoint) != 0 &&

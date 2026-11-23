@@ -456,7 +456,8 @@ internal sealed partial class PowerForgeReleaseService
         var captureModuleArtifactProvenance =
             !request.PlanOnly && !request.ValidateOnly &&
             (ShouldCaptureVirusTotalModuleArtifactProvenance(spec, request, runModule) ||
-             runModule && (spec.Module?.IncludesPackages == true || publishUnifiedGitHub));
+             runModule && (spec.Module?.IncludesPackages == true || publishUnifiedGitHub ||
+                           !string.IsNullOrWhiteSpace(request.StageRoot ?? spec.Outputs?.Staging?.RootPath)));
 
         if (!runModule && !runPackages && !runTools && !runAppleApps && !runWorkspaceValidation)
         {
@@ -540,6 +541,50 @@ internal sealed partial class PowerForgeReleaseService
             request.Progress?.PhaseCompleted(
                 PowerForgeReleaseProgressPhase.Versioning,
                 $"Shared version {request.ResolvedReleaseVersion}");
+        }
+
+        PowerForgeToolReleasePlan? preparedNativeToolPlan = null;
+        PowerForgeReleaseAssetEntry[] nativeArchives = Array.Empty<PowerForgeReleaseAssetEntry>();
+        var explicitNativeArchives = !string.IsNullOrWhiteSpace(request.NativeArchiveRoot);
+        var nativeToolLaneSelected = willRunTools &&
+                                     selectedToolOutputs.Contains(PowerForgeReleaseToolOutputKind.Tool) &&
+                                     !UsesDotNetToolWorkflow(spec.Tools!) &&
+                                     (selectedTargets.Length == 0 ||
+                                      toolTargetMatches.Contains("PowerForge", StringComparer.OrdinalIgnoreCase));
+        if (explicitNativeArchives && !nativeToolLaneSelected)
+            throw new ArgumentException("Native archives require the standalone PowerForge tool output.");
+
+        if (nativeToolLaneSelected && (explicitNativeArchives || spec.Outputs?.NativePowerForgeArchivePaths?.Count > 0))
+        {
+            var legacyTargets = GetSectionSelectedTargets(selectedTargets, toolTargetMatches, runAppleApps, appleTargetMatches);
+            var plan = WithRequestTargets(request, legacyTargets, () => _planTools(spec.Tools!, configPath, request));
+            var powerForgeTarget = plan.Targets.SingleOrDefault(target =>
+                target.Name.Equals("PowerForge", StringComparison.OrdinalIgnoreCase));
+            if (explicitNativeArchives && powerForgeTarget is null)
+                throw new ArgumentException("Native archives require the PowerForge tool target.");
+
+            if (powerForgeTarget is not null)
+            {
+                var inputs = SelectNativePowerForgeArchives(spec, powerForgeTarget, request.NativeArchiveRoot);
+                if (explicitNativeArchives && inputs.Length == 0)
+                    throw new ArgumentException("The PowerForge tool plan has no matching native standalone archive combinations.");
+
+                if (inputs.Length > 0)
+                {
+                    if (result.PublishesFromSelectedLanes)
+                        throw new ArgumentException("Native PowerForge archives can only be staged in a build without publishing.");
+                    if ((runModule || runPackages) && !coordinateModuleAndPackageVersions)
+                    {
+                        throw new ArgumentException(
+                            "Native archives require a standalone PowerForge tool-only plan or a module-and-package plan with a shared version resolved before building.");
+                    }
+
+                    nativeArchives = ResolveNativePowerForgeArchives(spec, configDirectory, powerForgeTarget,
+                        inputs, temporaryReleaseDirectory, verifyContents: !request.PlanOnly,
+                        cancellationToken: request.CancellationToken);
+                    preparedNativeToolPlan = plan;
+                }
+            }
         }
 
         if (runModule)
@@ -806,7 +851,7 @@ internal sealed partial class PowerForgeReleaseService
                 if (willRunTools)
                 {
                     var legacyToolTargets = GetSectionSelectedTargets(selectedTargets, toolTargetMatches, runAppleApps, appleTargetMatches);
-                    var toolPlan = WithRequestTargets(
+                    var toolPlan = preparedNativeToolPlan ?? WithRequestTargets(
                         request,
                         legacyToolTargets,
                         () => _planTools(spec.Tools!, configPath, request));
@@ -820,6 +865,8 @@ internal sealed partial class PowerForgeReleaseService
                             spec.GitHub?.Commitish,
                             request.EffectiveConfigurationPath ?? configPath);
                     }
+                    if (nativeArchives.Length > 0)
+                        SkipManagedBuildsCoveredByNativeArchives(toolPlan, nativeArchives);
 
                     if (!request.PlanOnly && !request.ValidateOnly)
                     {
@@ -918,7 +965,7 @@ internal sealed partial class PowerForgeReleaseService
         if (!request.PlanOnly && !request.ValidateOnly && !explicitAppleAction)
         {
             ValidatePostBuildSourceState(request);
-            PopulateReleaseOutputs(spec, request, configDirectory, result, sharedReleaseVersion);
+            PopulateReleaseOutputs(spec, request, configDirectory, result, sharedReleaseVersion, nativeArchives);
             result.ToolGitHubReleasePlans = BuildToolGitHubReleasePlans(spec, result);
             GenerateWingetOutputs(spec, request, configDirectory, result);
             IncludeWingetOutputsInReleaseAssets(result);
@@ -3578,9 +3625,14 @@ internal sealed partial class PowerForgeReleaseService
         PowerForgeReleaseRequest request,
         string configDirectory,
         PowerForgeReleaseResult result,
-        string? sharedReleaseVersion)
+        string? sharedReleaseVersion,
+        IReadOnlyCollection<PowerForgeReleaseAssetEntry> nativeArchives)
     {
+        var standaloneToolsSelected = ResolveSelectedToolOutputs(request).Contains(PowerForgeReleaseToolOutputKind.Tool);
+        var nativeRuntimes = new HashSet<string?>(nativeArchives.Select(archive => archive.Runtime), StringComparer.OrdinalIgnoreCase);
         var producedAssetEntries = CollectReleaseAssetEntries(result, result.DotNetToolPlan, sharedReleaseVersion)
+            .Where(entry => !IsStandalonePowerForgeArchive(entry) || !nativeRuntimes.Contains(entry.Runtime))
+            .Concat(nativeArchives)
             .GroupBy(entry => entry.Path, StringComparer.OrdinalIgnoreCase)
             .Select(group => group.First())
             .ToArray();
@@ -3590,8 +3642,13 @@ internal sealed partial class PowerForgeReleaseService
             result,
             sharedReleaseVersion,
             producedAssetEntries,
-            ResolveSelectedToolOutputs(request).Contains(PowerForgeReleaseToolOutputKind.Tool));
-        var assetEntries = CollectReleaseAssetEntries(result, result.DotNetToolPlan, sharedReleaseVersion, additionalAssetPaths)
+            standaloneToolsSelected);
+        var assetEntries = producedAssetEntries.Concat(additionalAssetPaths.Select(path => new PowerForgeReleaseAssetEntry
+            {
+                Path = path,
+                Category = PowerForgeReleaseAssetCategory.Metadata,
+                Source = "ReleaseOutputs"
+            }))
             .GroupBy(entry => entry.Path, StringComparer.OrdinalIgnoreCase)
             .Select(group => group.First())
             .ToArray();
@@ -5183,8 +5240,7 @@ internal sealed partial class PowerForgeReleaseService
     private static PowerForgeReleaseAssetEntry[] CollectReleaseAssetEntries(
         PowerForgeReleaseResult result,
         DotNetPublishPlan? dotNetPlan,
-        string? sharedReleaseVersion,
-        IReadOnlyCollection<string>? additionalAssetPaths = null)
+        string? sharedReleaseVersion)
     {
         var assets = new List<PowerForgeReleaseAssetEntry>();
 
@@ -5261,17 +5317,6 @@ internal sealed partial class PowerForgeReleaseService
                 Path = path!,
                 Category = PowerForgeReleaseAssetCategory.Metadata,
                 Source = "DotNetPublish"
-            }));
-
-        assets.AddRange(
-            (additionalAssetPaths ?? Array.Empty<string>())
-            .Where(static path => !string.IsNullOrWhiteSpace(path) && File.Exists(path))
-            .Select(path => new PowerForgeReleaseAssetEntry
-            {
-                Path = path,
-                Category = PowerForgeReleaseAssetCategory.Metadata,
-                Source = "ReleaseOutputs",
-                IsFinalPackageOutput = false
             }));
 
         assets.AddRange(CreateConfigurationAssetEntries(
@@ -5414,6 +5459,7 @@ internal sealed partial class PowerForgeReleaseService
                 entry.StagedPath = destinationFullPath;
                 return new
                 {
+                    Asset = entry,
                     SourceFullPath = sourceFullPath,
                     DestinationFullPath = destinationFullPath,
                     SourceIsFile = sourceIsFile
@@ -5466,7 +5512,10 @@ internal sealed partial class PowerForgeReleaseService
             Directory.CreateDirectory(Path.GetDirectoryName(plannedEntry.DestinationFullPath)!);
             if (plannedEntry.SourceIsFile)
             {
-                File.Copy(plannedEntry.SourceFullPath, plannedEntry.DestinationFullPath, overwrite: true);
+                if (plannedEntry.Asset.Source == NativePowerForgeArchiveSource)
+                    StageNativePowerForgeArchive(plannedEntry.Asset, plannedEntry.SourceFullPath, plannedEntry.DestinationFullPath);
+                else
+                    File.Copy(plannedEntry.SourceFullPath, plannedEntry.DestinationFullPath, overwrite: true);
             }
             else
             {
@@ -5478,8 +5527,13 @@ internal sealed partial class PowerForgeReleaseService
 
         foreach (var entry in entries)
         {
-            if (!string.IsNullOrWhiteSpace(entry.StagedPath) && File.Exists(entry.StagedPath))
-                entry.StagedSha256 = ComputeSha256(entry.StagedPath!);
+            var stagedSha256 = !string.IsNullOrWhiteSpace(entry.StagedPath) && File.Exists(entry.StagedPath)
+                ? ComputeSha256(entry.StagedPath!)
+                : null;
+            if (entry.Source == NativePowerForgeArchiveSource)
+                VerifyNativePowerForgeStagingDigest(entry, stagedSha256);
+            if (stagedSha256 is not null)
+                entry.StagedSha256 = stagedSha256;
         }
 
         return entries;

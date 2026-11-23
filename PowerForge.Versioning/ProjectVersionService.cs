@@ -109,7 +109,7 @@ public sealed class ProjectVersionService
 
     private static IReadOnlyCollection<string> BuildExcludeFragments(IEnumerable<string>? excludeFolders)
     {
-        var excludeFragments = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "obj", "bin" };
+        var excludeFragments = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         if (excludeFolders is null)
             return excludeFragments;
 
@@ -410,7 +410,14 @@ public sealed class ProjectVersionService
             IEnumerable<string> directories = Array.Empty<string>();
             try { directories = Directory.EnumerateDirectories(current); } catch { }
             foreach (var directory in directories)
-                stack.Push(directory);
+            {
+                var name = Path.GetFileName(directory);
+                if (!string.Equals(name, "bin", StringComparison.OrdinalIgnoreCase) &&
+                    !string.Equals(name, "obj", StringComparison.OrdinalIgnoreCase))
+                {
+                    stack.Push(directory);
+                }
+            }
         }
     }
 

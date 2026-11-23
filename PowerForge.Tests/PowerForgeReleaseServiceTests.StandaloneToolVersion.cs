@@ -158,21 +158,61 @@ public sealed partial class PowerForgeReleaseServiceTests
         }
     }
 
-    [Fact]
-    public void Execute_WritesConsumerToolManifestWithoutCommitGuard()
+    [Theory]
+    [InlineData(false, null, false, false, null)]
+    [InlineData(true, "full/PowerForge.Cli.dll", false, false, null)]
+    [InlineData(true, "full/PowerForge.Cli.dll", false, false, "version")]
+    [InlineData(true, "full/PowerForge.Cli.dll", false, false, "revision")]
+    [InlineData(true, null, false, false, null)]
+    [InlineData(true, @"full\PowerForge.Cli.dll", false, false, null)]
+    [InlineData(true, "full/PowerForge.Cli.dll", true, false, null)]
+    [InlineData(true, "full/PowerForge.Cli.dll", false, true, null)]
+    public void Execute_StagesOnlyValidPowerForgeArchives(
+        bool includeNativeArchive, string? implementationEntry, bool publishToolGitHub, bool moduleOwnsPackages,
+        string? mismatchedIdentity)
     {
+        static string HashBytes(byte[] bytes) =>
+            Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes)).ToLowerInvariant();
+
         var root = CreateSandbox();
         try
         {
-            var zip = Path.Combine(root, "PowerForge-3.0.110-net10.0-osx-arm64-SingleContained.zip");
+            var repositoryRoot = PowerForgeCliTestHost.FindRepositoryRoot();
+            var cliProject = System.Xml.Linq.XDocument.Load(Path.Combine(repositoryRoot, "PowerForge.Cli", "PowerForge.Cli.csproj"));
+            var cliVersion = Version.Parse(cliProject.Descendants("VersionPrefix").Single().Value);
+            var version = !includeNativeArchive ? "3.0.110"
+                : mismatchedIdentity == "version" ? $"{cliVersion.Major}.{cliVersion.Minor}.{cliVersion.Build + 1}"
+                : cliVersion.ToString(3);
+            var runtime = includeNativeArchive ? "linux-x64" : "osx-arm64";
+            var zip = Path.Combine(root, $"PowerForge-{version}-net10.0-{runtime}-SingleContained.zip");
+            var nativeZip = Path.Combine(root, $"PowerForgeNative-{version}-{runtime}.zip");
             var installer = Path.Combine(root, "Install-PowerForgeTool.ps1");
             var lockManifest = Path.Combine(root, "PowerForge-tool-manifest.json");
             var executableBytes = System.Text.Encoding.UTF8.GetBytes("verified PowerForge executable");
+            var nativeBytes = System.Text.Encoding.UTF8.GetBytes("native PowerForge launcher");
+            var companionBytes = System.Text.Encoding.UTF8.GetBytes("managed companion");
+            var implementationBytes = includeNativeArchive && implementationEntry is not null
+                ? File.ReadAllBytes(PowerForgeCliTestHost.ResolveAssemblyPath(repositoryRoot,
+                    Environment.GetEnvironmentVariable(PowerForgeCliTestHost.AssemblyPathEnvironmentVariable)))
+                : Array.Empty<byte>();
             using (var archive = System.IO.Compression.ZipFile.Open(zip, System.IO.Compression.ZipArchiveMode.Create))
             {
                 var entry = archive.CreateEntry("PowerForge");
                 using var stream = entry.Open();
                 stream.Write(executableBytes, 0, executableBytes.Length);
+            }
+            if (includeNativeArchive)
+            {
+                using var archive = System.IO.Compression.ZipFile.Open(nativeZip, System.IO.Compression.ZipArchiveMode.Create);
+                using (var launcher = archive.CreateEntry("powerforge").Open())
+                    launcher.Write(nativeBytes);
+                using (var companion = archive.CreateEntry("full/powerforge-full").Open())
+                    companion.Write(companionBytes);
+                if (implementationEntry is not null)
+                {
+                    using var implementation = archive.CreateEntry(implementationEntry).Open();
+                    implementation.Write(implementationBytes);
+                }
             }
             File.WriteAllText(installer, "param()");
             var service = new PowerForgeReleaseService(
@@ -194,7 +234,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                             [
                                 new PowerForgeToolReleaseCombinationPlan
                                 {
-                                    Runtime = "osx-arm64",
+                                    Runtime = runtime,
                                     Framework = "net10.0",
                                     Flavor = PowerForgeToolReleaseFlavor.SingleContained,
                                     ZipPath = zip
@@ -203,7 +243,9 @@ public sealed partial class PowerForgeReleaseServiceTests
                         }
                     ]
                 },
-                runTools: plan => new PowerForgeToolReleaseResult
+                runTools: plan => includeNativeArchive && implementationEntry != "full/PowerForge.Cli.dll"
+                    ? throw new InvalidOperationException("The malformed archive must be rejected before building.")
+                    : new PowerForgeToolReleaseResult
                 {
                     Success = true,
                     Artefacts =
@@ -213,7 +255,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                             Target = "PowerForge",
                             Version = Assert.Single(plan.Targets).Version,
                             OutputName = "PowerForge",
-                            Runtime = "osx-arm64",
+                            Runtime = runtime,
                             Framework = "net10.0",
                             Flavor = PowerForgeToolReleaseFlavor.SingleContained,
                             OutputPath = root,
@@ -224,51 +266,242 @@ public sealed partial class PowerForgeReleaseServiceTests
                 },
                 publishGitHubRelease: _ => throw new InvalidOperationException("GitHub must not run."));
 
-            var result = service.Execute(
-                new PowerForgeReleaseSpec
+            var spec = new PowerForgeReleaseSpec
+            {
+                Outputs = new PowerForgeReleaseOutputsOptions
                 {
-                    Outputs = new PowerForgeReleaseOutputsOptions
-                    {
-                        PowerForgeToolManifestPath = lockManifest,
-                        AdditionalAssetPaths = [installer]
-                    },
-                    Tools = new PowerForgeToolReleaseSpec(),
-                    GitHub = new PowerForgeReleaseGitHubOptions
-                    {
-                        Owner = "EvotecIT",
-                        Repository = "PSPublishModule",
-                        TagTemplate = "v{Version}"
-                    }
+                    PowerForgeToolManifestPath = lockManifest,
+                    AdditionalAssetPaths = [installer],
+                    NativePowerForgeArchivePaths = includeNativeArchive ? new() { [runtime] = nativeZip } : new()
                 },
-                new PowerForgeReleaseRequest
+                Tools = new PowerForgeToolReleaseSpec(),
+                Module = moduleOwnsPackages ? new PowerForgeModuleReleaseOptions { IncludesPackages = true } : null,
+                GitHub = new PowerForgeReleaseGitHubOptions
                 {
-                    ConfigPath = Path.Combine(root, "release.json"),
-                    ToolsOnly = true,
-                    ReleaseVersion = "3.0.110"
-                });
+                    Owner = "EvotecIT",
+                    Repository = "PSPublishModule",
+                    TagTemplate = "v{Version}",
+                    Commitish = mismatchedIdentity == "revision" ? new string('0', 40) : null
+                }
+            };
+            var request = new PowerForgeReleaseRequest
+            {
+                ConfigPath = Path.Combine(root, "release.json"),
+                ToolsOnly = !moduleOwnsPackages,
+                PublishToolGitHub = publishToolGitHub,
+                ReleaseVersion = moduleOwnsPackages ? null : version,
+                ModuleRunMode = ConfigurationGateMode.Build
+            };
+
+            if (moduleOwnsPackages)
+            {
+                var error = Assert.Throws<ArgumentException>(() => service.Execute(spec, request));
+                Assert.Contains("shared version resolved before building", error.Message, StringComparison.Ordinal);
+                Assert.False(File.Exists(lockManifest));
+                return;
+            }
+
+            if (publishToolGitHub)
+            {
+                var error = Assert.Throws<ArgumentException>(() => service.Execute(spec, request));
+                Assert.Contains("build without publishing", error.Message, StringComparison.Ordinal);
+                Assert.False(File.Exists(lockManifest));
+                return;
+            }
+
+            if (includeNativeArchive && implementationEntry is null)
+            {
+                var error = Assert.Throws<InvalidOperationException>(() => service.Execute(spec, request));
+                Assert.Contains("full/PowerForge.Cli.dll", error.Message, StringComparison.Ordinal);
+                Assert.False(File.Exists(lockManifest));
+                return;
+            }
+            if (includeNativeArchive && implementationEntry != "full/PowerForge.Cli.dll")
+            {
+                var error = Assert.Throws<InvalidDataException>(() => service.Execute(spec, request));
+                Assert.Contains("must use forward slashes", error.Message, StringComparison.Ordinal);
+                Assert.False(File.Exists(lockManifest));
+                return;
+            }
+            if (mismatchedIdentity is not null)
+            {
+                var error = Assert.Throws<InvalidDataException>(() => service.Execute(spec, request));
+                Assert.Contains($"PowerForge.Cli.dll' {mismatchedIdentity}", error.Message, StringComparison.Ordinal);
+                Assert.False(File.Exists(lockManifest));
+                return;
+            }
+
+            var result = service.Execute(spec, request);
 
             Assert.True(result.Success, result.ErrorMessage);
             Assert.Contains(lockManifest, result.ReleaseAssets);
             Assert.Contains(installer, result.ReleaseAssets);
-            using var document = System.Text.Json.JsonDocument.Parse(File.ReadAllText(lockManifest));
+            var manifestJson = File.ReadAllText(lockManifest);
+            var schemaPath = Path.Combine(repositoryRoot, "Schemas", "powerforge.tool.schema.json");
+            var schema = Json.Schema.JsonSchema.FromText(File.ReadAllText(schemaPath));
+            var manifestNode = System.Text.Json.Nodes.JsonNode.Parse(manifestJson)!;
+            Assert.True(schema.Evaluate(manifestNode).IsValid);
+            using var document = System.Text.Json.JsonDocument.Parse(manifestJson);
             var json = document.RootElement;
             Assert.Equal(2, json.GetProperty("schemaVersion").GetInt32());
-            Assert.Equal("3.0.110", json.GetProperty("version").GetString());
-            Assert.Equal("v3.0.110", json.GetProperty("releaseTag").GetString());
+            Assert.Equal(version, json.GetProperty("version").GetString());
+            Assert.Equal("v" + version, json.GetProperty("releaseTag").GetString());
             Assert.False(json.TryGetProperty("commit", out _));
-            var asset = json.GetProperty("assets").GetProperty("osx-arm64");
-            Assert.Equal(Path.GetFileName(zip), asset.GetProperty("name").GetString());
+            var asset = json.GetProperty("assets").GetProperty(runtime);
+            var selectedZip = includeNativeArchive ? nativeZip : zip;
+            Assert.Contains(selectedZip, result.ReleaseAssets);
+            Assert.Equal(Path.GetFileName(selectedZip), asset.GetProperty("name").GetString());
             Assert.Equal(
-                Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(zip))).ToLowerInvariant(),
+                Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(selectedZip))).ToLowerInvariant(),
                 asset.GetProperty("sha256").GetString());
             Assert.Equal(
-                Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(executableBytes)).ToLowerInvariant(),
+                Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(includeNativeArchive ? nativeBytes : executableBytes)).ToLowerInvariant(),
                 asset.GetProperty("executableSha256").GetString());
+            if (includeNativeArchive)
+            {
+                Assert.Empty(Assert.Single(result.ToolPlan!.Targets).Combinations);
+                Assert.DoesNotContain(zip, result.ReleaseAssets);
+                Assert.Equal("powerforge", asset.GetProperty("executableName").GetString());
+                var launcherDigest = HashBytes(companionBytes);
+                var implementationDigest = HashBytes(implementationBytes);
+                var payload = $"full/PowerForge.Cli.dll\0{implementationDigest}\0full/powerforge-full\0{launcherDigest}\0";
+                Assert.Equal(HashBytes(System.Text.Encoding.UTF8.GetBytes(payload)),
+                    asset.GetProperty("companionPayloadSha256").GetString());
+
+                var nativeAsset = manifestNode["assets"]![runtime]!.AsObject();
+                nativeAsset["executableName"] = "powerforge.exe";
+                Assert.False(schema.Evaluate(manifestNode).IsValid);
+                nativeAsset["executableName"] = "powerforge";
+                nativeAsset.Remove("companionPayloadSha256");
+                Assert.False(schema.Evaluate(manifestNode).IsValid);
+            }
+            else
+            {
+                Assert.Single(Assert.Single(result.ToolPlan!.Targets).Combinations);
+                Assert.False(asset.TryGetProperty("executableName", out _));
+                Assert.False(asset.TryGetProperty("companionPayloadSha256", out _));
+            }
         }
         finally
         {
             TryDelete(root);
         }
+    }
+
+    [Theory]
+    [InlineData("PowerForgeWeb", "linux-x64", false)]
+    [InlineData("PowerForge", "osx-arm64", false)]
+    [InlineData("PowerForgeWeb", "linux-x64", true)]
+    [InlineData("PowerForge", "osx-arm64", true)]
+    public void Execute_ConfiguredNativeArchivesFollowTheSelectedStandaloneTool(string target, string runtime, bool explicitArchiveRoot)
+    {
+        using var root = new TemporaryDirectory();
+        var service = CreateService(_ => new PowerForgeToolReleasePlan
+        {
+            ProjectRoot = root.Path,
+            Targets =
+            [
+                new PowerForgeToolReleaseTargetPlan
+                {
+                    Name = target,
+                    Version = "3.0.110",
+                    Combinations =
+                    [
+                        new PowerForgeToolReleaseCombinationPlan
+                        {
+                            Runtime = runtime,
+                            Framework = "net10.0",
+                            Flavor = PowerForgeToolReleaseFlavor.SingleContained
+                        }
+                    ]
+                }
+            ]
+        });
+        var spec = new PowerForgeReleaseSpec
+        {
+            Tools = new PowerForgeToolReleaseSpec
+            {
+                Targets = [new PowerForgeToolReleaseTarget { Name = target }]
+            },
+            Outputs = new PowerForgeReleaseOutputsOptions
+            {
+                NativePowerForgeArchivePaths = new() { ["linux-x64"] = "missing-linux-archive.zip" }
+            }
+        };
+        var request = new PowerForgeReleaseRequest
+        {
+            ConfigPath = Path.Combine(root.Path, "release.json"),
+            Targets = [target],
+            ToolsOnly = true,
+            PlanOnly = true,
+            NativeArchiveRoot = explicitArchiveRoot ? root.Path : null
+        };
+
+        if (explicitArchiveRoot)
+        {
+            Assert.Throws<ArgumentException>(() => service.Execute(spec, request));
+            return;
+        }
+
+        var result = service.Execute(spec, request);
+
+        Assert.True(result.Success, result.ErrorMessage);
+        Assert.Equal(runtime, Assert.Single(Assert.Single(result.ToolPlan!.Targets).Combinations).Runtime);
+    }
+
+    [Fact]
+    public void Execute_PlansNativeArchivesBeforeTheyExistButValidatesTheirContents()
+    {
+        using var root = new TemporaryDirectory();
+        var service = CreateService(_ => new PowerForgeToolReleasePlan
+        {
+            ProjectRoot = root.Path,
+            Targets =
+            [
+                new PowerForgeToolReleaseTargetPlan
+                {
+                    Name = "PowerForge",
+                    Version = "3.0.110",
+                    Sign = new DotNetPublishSignOptions { Enabled = true },
+                    Combinations =
+                    [
+                        new PowerForgeToolReleaseCombinationPlan
+                        {
+                            Runtime = "win-x64",
+                            Framework = "net10.0",
+                            Flavor = PowerForgeToolReleaseFlavor.SingleContained
+                        }
+                    ]
+                }
+            ]
+        });
+        var spec = new PowerForgeReleaseSpec
+        {
+            Tools = new PowerForgeToolReleaseSpec(),
+            Outputs = new PowerForgeReleaseOutputsOptions
+            {
+                PowerForgeToolManifestPath = Path.Combine(root.Path, "tool-manifest.json")
+            }
+        };
+        var request = new PowerForgeReleaseRequest
+        {
+            ConfigPath = Path.Combine(root.Path, "release.json"),
+            ToolsOnly = true,
+            ReleaseVersion = "3.0.110",
+            NativeArchiveRoot = root.Path,
+            PlanOnly = true
+        };
+
+        var plan = service.Execute(spec, request);
+
+        Assert.True(plan.Success, plan.ErrorMessage);
+        Assert.Empty(Assert.Single(plan.ToolPlan!.Targets).Combinations);
+        Assert.False(File.Exists(spec.Outputs.PowerForgeToolManifestPath));
+
+        request.PlanOnly = false;
+        request.ValidateOnly = true;
+        var error = Assert.Throws<FileNotFoundException>(() => service.Execute(spec, request));
+        Assert.Equal(Path.Combine(root.Path, "PowerForgeNative-3.0.110-win-x64.zip"), error.FileName);
     }
 
     [Fact]
