@@ -485,7 +485,8 @@ namespace PowerForge.Generators.Fluent {
                             AppendMethod(Doc("Sets " + cref + summary, "The value.", "value") + Example(property), name, ", " + propertyType + " value", Assign(property, "value"));
                         }
                     }
-                    if (property.Type is INamedTypeSymbol option && IsReadable(property) && _emitter.IsOptionType(option) && Claim(property, name, Action(option))) {
+                    // A settings type from a referenced library is configured in place (its copy method is not visible here).
+                    if (property.Type is INamedTypeSymbol option && IsReadable(property) && IsSettingsType(option) && Claim(property, name, Action(option))) {
                         AppendOption(property, option, name, cref, summary);
                     }
                 }

@@ -449,11 +449,12 @@ public sealed class FluentGeneratorTests {
     }
 
     [Fact]
-    public void InlinedOptionsFromAReferencedLibraryReachDerivedTypes() {
+    public void SettingsFromAReferencedLibraryAreInlinedAndConfigured() {
         const string baseLibrary = @"
             using PowerForge.Fluent;
 
             namespace Sample.Blocks {
+                [Fluent]
                 public sealed class BlockOptions {
                     public bool ShowCard { get; set; } = true;
                     public string Theme { get; set; } = ""light"";
@@ -476,12 +477,14 @@ public sealed class FluentGeneratorTests {
             namespace Sample {
                 public sealed class Card : Block<Card> {
                     public string? Title { get; set; }
+
+                    public BlockOptions Footer { get; set; } = new BlockOptions();
                 }
 
                 public static class Usage {
                     public static object[] Run() {
-                        Card card = new Card().Title(""Uptime"").ShowCard(false).Theme(""dark"");
-                        return new object[] { card.Title!, card.Options.ShowCard, card.Options.Theme };
+                        Card card = new Card().Title(""Uptime"").ShowCard(false).Theme(""dark"").Footer(f => f.Theme(""muted""));
+                        return new object[] { card.Title!, card.Options.ShowCard, card.Options.Theme, card.Footer.Theme };
                     }
                 }
             }";
