@@ -9,7 +9,9 @@ internal static partial class Program
     private const string AppleSimulatorUsage =
         "Usage: powerforge apple-simulator run --owner <chat-or-run> --device <UUID> " +
         "[--state-root <shared-path>] [--device-set <existing-path>] [--require-shutdown] [--timeout-seconds <seconds>] " +
-        "[--simulator-timeout-seconds <seconds>] [--cleanup-timeout-seconds <seconds>] [--output json] -- <executable> [args...]\n" +
+        "[--simulator-timeout-seconds <seconds>] [--cleanup-timeout-seconds <seconds>] " +
+        "[--duo-pose closed|open [--duo-orientation any|portrait|landscape] [--duo-fold-tool <duoctl>] [--duo-pose-timeout-seconds <seconds>]] " +
+        "[--output json] -- <executable> [args...]\n" +
         "       powerforge apple-simulator status [--state-root <shared-path>] [--output json]\n" +
         "       powerforge apple-simulator acknowledge --session <session-id> [--state-root <shared-path>] [--output json]";
 
@@ -63,7 +65,8 @@ internal static partial class Program
                 SimulatorTimeout = AppleSimulatorTimeout(values, "--simulator-timeout-seconds", 120),
                 CleanupTimeout = AppleSimulatorTimeout(values, "--cleanup-timeout-seconds", 30),
                 Command = new ProcessRunRequest(args[separator + 1], Directory.GetCurrentDirectory(), args.Skip(separator + 2).ToArray(),
-                    AppleSimulatorTimeout(values, "--timeout-seconds", 1800)) { RequireDirectStart = true }
+                    AppleSimulatorTimeout(values, "--timeout-seconds", 1800)) { RequireDirectStart = true },
+                DuoPose = AppleSimulatorDuoPose(values)
             };
             var result = service.RunAsync(request, cancellation.Token).GetAwaiter().GetResult();
             if (json) WriteAppleSimulatorJson("run", result.Success, result.ExitCode,
@@ -100,7 +103,8 @@ internal static partial class Program
                 continue;
             }
             var common = option is "--state-root" or "--output";
-            var run = operation == "run" && option is "--device" or "--owner" or "--device-set" or "--timeout-seconds" or "--simulator-timeout-seconds" or "--cleanup-timeout-seconds";
+            var run = operation == "run" && option is "--device" or "--owner" or "--device-set" or "--timeout-seconds" or "--simulator-timeout-seconds" or "--cleanup-timeout-seconds"
+                or "--duo-pose" or "--duo-orientation" or "--duo-fold-tool" or "--duo-pose-timeout-seconds";
             if (!common && !run && !(operation == "acknowledge" && option == "--session")) throw new ArgumentException($"Unknown {operation} option '{option}'.");
             if (values.ContainsKey(option)) throw new ArgumentException($"Duplicate option '{option}'.");
             if (++index >= options.Length || string.IsNullOrWhiteSpace(options[index]) || options[index].StartsWith("--", StringComparison.Ordinal)) throw new ArgumentException($"Missing value for '{option}'.");
@@ -108,6 +112,39 @@ internal static partial class Program
             if (option == "--output" && options[index] is not ("json" or "text")) throw new ArgumentException("--output requires json or text.");
         }
         return values;
+    }
+
+    private static AppleDuoPoseRequest? AppleSimulatorDuoPose(Dictionary<string, string> values)
+    {
+        if (!values.TryGetValue("--duo-pose", out var poseValue))
+        {
+            if (values.Keys.Any(key => key.StartsWith("--duo-", StringComparison.Ordinal)))
+                throw new ArgumentException("--duo-orientation, --duo-fold-tool and --duo-pose-timeout-seconds require --duo-pose.");
+            return null;
+        }
+        var pose = poseValue.ToLowerInvariant() switch
+        {
+            "closed" => AppleDuoPose.Closed,
+            "open" => AppleDuoPose.Open,
+            _ => throw new ArgumentException("--duo-pose requires closed or open.")
+        };
+        var orientation = !values.TryGetValue("--duo-orientation", out var orientationValue) ? AppleDuoOrientation.Any
+            : orientationValue.ToLowerInvariant() switch
+            {
+                "any" => AppleDuoOrientation.Any,
+                "portrait" => AppleDuoOrientation.Portrait,
+                "landscape" => AppleDuoOrientation.Landscape,
+                _ => throw new ArgumentException("--duo-orientation requires any, portrait or landscape.")
+            };
+        // The fold tool is opt-in: an explicit option, or POWERFORGE_DUO_FOLD_TOOL for scripts that enable it per machine.
+        var tool = values.TryGetValue("--duo-fold-tool", out var toolValue) ? toolValue
+            : Environment.GetEnvironmentVariable("POWERFORGE_DUO_FOLD_TOOL");
+        return new AppleDuoPoseRequest
+        {
+            Pose = pose, Orientation = orientation,
+            FoldToolPath = string.IsNullOrWhiteSpace(tool) ? null : Path.GetFullPath(tool!),
+            PromptTimeout = AppleSimulatorTimeout(values, "--duo-pose-timeout-seconds", 300)
+        };
     }
 
     private static string RequiredAppleSimulatorValue(Dictionary<string, string> values, string option)

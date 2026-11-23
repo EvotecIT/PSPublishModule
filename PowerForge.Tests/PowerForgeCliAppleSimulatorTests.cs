@@ -37,4 +37,33 @@ public sealed class PowerForgeCliAppleSimulatorTests
         }
         finally { Directory.Delete(root, recursive: true); }
     }
+
+    [Theory]
+    [InlineData("--duo-orientation", "portrait")]
+    [InlineData("--duo-fold-tool", "/usr/local/bin/duoctl")]
+    public async Task Simulator_run_rejects_duo_options_without_a_pose_before_touching_a_device(string option, string value)
+    {
+        var repository = PowerForgeCliTestHost.FindRepositoryRoot();
+        var configuration = typeof(PowerForgeCliAppleSimulatorTests).Assembly
+            .GetCustomAttribute<AssemblyConfigurationAttribute>()!.Configuration;
+        var configuredCli = Environment.GetEnvironmentVariable(PowerForgeCliTestHost.AssemblyPathEnvironmentVariable);
+        var cli = configuredCli is null
+            ? Path.Combine(repository, "PowerForge.Cli", "bin", configuration, "net10.0", "PowerForge.Cli.dll")
+            : PowerForgeCliTestHost.ResolveAssemblyPath(repository, configuredCli);
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "SimulatorCli-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var result = await new ProcessRunner().RunAsync(new ProcessRunRequest(
+                Environment.GetEnvironmentVariable("DOTNET_HOST_PATH") ?? "dotnet", repository,
+                new[] { cli, "apple-simulator", "run", "--owner", "duo-test", "--device", "11111111-1111-1111-1111-111111111111",
+                    "--state-root", root, option, value, "--output", "json", "--", "/usr/bin/true" }, TimeSpan.FromSeconds(30)));
+
+            Assert.Equal(2, result.ExitCode);
+            using var json = JsonDocument.Parse(result.StdOut);
+            Assert.Contains("require --duo-pose", json.RootElement.GetProperty("error").GetString());
+            Assert.Empty(Directory.EnumerateFiles(root));
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
 }

@@ -19,6 +19,8 @@ public sealed class AppleSimulatorSessionRequest
     public TimeSpan SimulatorTimeout { get; set; } = TimeSpan.FromMinutes(2);
     /// <summary>Maximum duration of the entire independent shutdown and verification attempt.</summary>
     public TimeSpan CleanupTimeout { get; set; } = TimeSpan.FromSeconds(30);
+    /// <summary>iPhone Duo pose that must be live before the command starts; null leaves the device as it is.</summary>
+    public AppleDuoPoseRequest? DuoPose { get; set; }
 }
 
 /// <summary>Compact persisted ownership evidence; excludes child arguments, environment, and captured output.</summary>
@@ -77,6 +79,8 @@ public sealed class AppleSimulatorSessionResult
     public string? Error { get; set; }
     /// <summary>Shutdown or verification diagnostic.</summary>
     public string? CleanupError { get; set; }
+    /// <summary>iPhone Duo pose reached before the command started; null when no pose was requested or it wasn't reached.</summary>
+    public AppleDuoPoseResult? DuoPose { get; set; }
     /// <summary>Whether the foreground command exited normally with code zero; bounded log truncation is informational.</summary>
     public bool ValidationSucceeded => CommandResult is { ExitCode: 0, TimedOut: false, StartFailed: false };
     /// <summary>True only when validation and release both succeeded without session cancellation.</summary>
