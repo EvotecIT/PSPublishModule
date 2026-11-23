@@ -325,8 +325,9 @@ public sealed class FluentGeneratorTests {
                     internal LegendBase Clone() => (LegendBase)MemberwiseClone();
                 }
 
-                // Inherits the copy method, which returns the base type.
+                // Inherits the copy method, which returns the base type, and hides it with a method the copy must not call.
                 public sealed class Legend : LegendBase {
+                    public new int Clone() => 0;
                 }
 
                 public static class Usage {
@@ -365,6 +366,96 @@ public sealed class FluentGeneratorTests {
     }
 
     [Fact]
+    public void PresetsAssignFittingIntegralConstantsAndTheStaticMemberThatWasAccepted() {
+        const string library = """
+            using PowerForge.Fluent;
+
+            namespace Sample {
+                [Fluent]
+                public sealed class Gauge {
+                    [FluentPreset("Small", 1)]
+                    public byte Size { get; set; }
+                    [FluentPreset("Few", 5)]
+                    public uint Count { get; set; }
+                    [FluentPreset("Near", 2)]
+                    public short? Offset { get; set; }
+                    [FluentPreset("Far", 7L)]
+                    public ulong Distance { get; set; }
+                    [FluentPreset("Standard", typeof(Styles), "Default")]
+                    public int Style { get; set; }
+                }
+
+                public class BaseStyles {
+                    public static readonly int Default = 3;
+                }
+
+                // Hides the base field with one an int property cannot take.
+                public sealed class Styles : BaseStyles {
+                    public static new readonly string Default = "plain";
+                }
+
+                public static class Usage {
+                    public static object[] Run() {
+                        Gauge gauge = new Gauge().Small().Few().Near().Far().Standard();
+                        return new object[] { gauge.Size, gauge.Count, gauge.Offset!.Value, gauge.Distance, gauge.Style };
+                    }
+                }
+            }
+            """;
+
+        (Compilation compilation, ImmutableArray<Diagnostic> generatorDiagnostics) = Run(library);
+        Assert.Empty(generatorDiagnostics);
+        Assert.Empty(compilation.GetDiagnostics().Where(d => d.Severity >= DiagnosticSeverity.Warning));
+
+        Assert.Equal(new object[] { (byte)1, 5U, (short)2, 7UL, 3 }, Execute(compilation));
+    }
+
+    [Fact]
+    public void InlinedSettingsBringTheirForwardsToTheOwner() {
+        const string library = """
+            using PowerForge.Fluent;
+
+            namespace Sample {
+                [Fluent]
+                public class Chart {
+                    [FluentInline]
+                    public ChartOptions Options { get; } = new();
+                }
+
+                public sealed class LineChart : Chart {
+                }
+
+                [FluentForward("Content", typeof(ContentBuilder), "Replace")]
+                public sealed class ChartOptions {
+                    public string? Content { get; set; }
+                    public string? Theme { get; set; }
+                }
+
+                public static class ContentBuilder {
+                    public static void Replace(ChartOptions options, string text) => options.Content = "text:" + text;
+                    public static void Replace(ChartOptions options, int count) => options.Content = "count:" + count;
+                }
+
+                public static class Usage {
+                    public static object[] Run() {
+                        LineChart chart = new LineChart().Content("a").Theme("dark");
+                        LineChart counted = new LineChart().Content(3);
+                        LineChart configured = new LineChart().Options(o => o.Content("b"));
+                        return new object[] { chart.Options.Content!, chart.Options.Theme!, counted.Options.Content!, configured.Options.Content! };
+                    }
+                }
+            }
+            """;
+
+        (Compilation compilation, ImmutableArray<Diagnostic> generatorDiagnostics) = Run(library);
+        Assert.Empty(generatorDiagnostics);
+        Assert.Empty(compilation.GetDiagnostics().Where(d => d.Severity >= DiagnosticSeverity.Warning));
+
+        // Content(...) goes through the forward on the owner too, never straight to the property.
+        Assert.Equal(new object[] { "text:a", "dark", "count:3", "text:b" }, Execute(compilation));
+    }
+
+    [Fact]
     public void ShortcutsThatCannotWorkAreBuildErrors() {
         const string library = """
             using PowerForge.Fluent;
@@ -386,6 +477,10 @@ public sealed class FluentGeneratorTests {
                     public int Fixed { get; } = 0;
                     [FluentPreset("Visible", false)]
                     public bool IsVisible { get; set; }
+                    [FluentPreset("Huge", 256)]
+                    public byte Huge { get; set; }
+                    [FluentPreset("Negative", -1)]
+                    public uint Count { get; set; }
                 }
 
                 public sealed class Options {
@@ -406,8 +501,9 @@ public sealed class FluentGeneratorTests {
 
         // Theme is both the owner's and the inlined one (PFF003); Animated(bool) exists on the owner (PFF002); the preset
         // Visible() takes the short form of Visible(bool value = true) (PFF003); a string preset for an int, a missing static
-        // member and a get-only property (PFF010); Clone needs no parameters (PFF011); Name is no settings type (PFF012).
-        Assert.Equal(new[] { "PFF002", "PFF003", "PFF003", "PFF010", "PFF010", "PFF010", "PFF011", "PFF012" }, diagnostics.Select(d => d.Id).OrderBy(id => id, StringComparer.Ordinal));
+        // member, a get-only property, 256 for a byte and -1 for a uint (PFF010); Clone needs no parameters (PFF011); Name is
+        // no settings type (PFF012).
+        Assert.Equal(new[] { "PFF002", "PFF003", "PFF003", "PFF010", "PFF010", "PFF010", "PFF010", "PFF010", "PFF011", "PFF012" }, diagnostics.Select(d => d.Id).OrderBy(id => id, StringComparer.Ordinal));
     }
 
     [Fact]
@@ -454,10 +550,12 @@ public sealed class FluentGeneratorTests {
             using PowerForge.Fluent;
 
             namespace Sample.Blocks {
-                [Fluent]
+                // The copy method is internal, so a consuming library configures this type in place.
+                [Fluent(Copy = ""Clone"")]
                 public sealed class BlockOptions {
                     public bool ShowCard { get; set; } = true;
                     public string Theme { get; set; } = ""light"";
+                    internal BlockOptions Clone() => (BlockOptions)MemberwiseClone();
                 }
 
                 [Fluent]

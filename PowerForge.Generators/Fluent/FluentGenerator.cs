@@ -229,8 +229,9 @@ namespace PowerForge.Generators.Fluent {
                 _ => false
             };
 
-            // [FluentForward] declarations on the type, its bases and its interfaces.
-            private IEnumerable<(string Name, IMethodSymbol Target, string Summary, string ValueSummary)> Forwards(INamedTypeSymbol type) {
+            // [FluentForward] declarations on the type, its bases and its interfaces. A missing target is reported where the type
+            // itself is generated, not again where it is inlined.
+            private IEnumerable<(string Name, IMethodSymbol Target, string Summary, string ValueSummary)> Forwards(INamedTypeSymbol type, bool report = true) {
                 IEnumerable<INamedTypeSymbol> declarers = BaseTypes(type).Concat(type.AllInterfaces).Select(t => t.OriginalDefinition);
                 foreach (INamedTypeSymbol declarer in declarers) {
                     foreach (AttributeData attribute in declarer.GetAttributes().Where(a => a.AttributeClass?.ToDisplayString() == FluentAttributes.Forward)) {
@@ -244,7 +245,7 @@ namespace PowerForge.Generators.Fluent {
                             .Where(m => m.IsStatic && !m.IsGenericMethod && m.Parameters.Length == 2 && m.Parameters.All(p => p.RefKind == RefKind.None)
                                 && Receives(m.Parameters[0].Type, type) && _compilation.IsSymbolAccessibleWithin(m, _compilation.Assembly))
                             .ToList();
-                        if (overloads.Count == 0) {
+                        if (overloads.Count == 0 && report) {
                             _output.ReportDiagnostic(Diagnostic.Create(FluentDiagnostics.ForwardMethodMissing, attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation() ?? Location.None, declarer.Name, target.Name, method, type.Name));
                         }
                         foreach (IMethodSymbol overload in overloads) {
@@ -295,7 +296,11 @@ namespace PowerForge.Generators.Fluent {
                     _constraint = open ? " where TSelf : " + typeName : Constraints(type);
                     string receiver = Camel(type.Name);
                     string stem = receiver.TrimStart('@');
-                    bool Clashes(string name) => Reserved.Contains(name) || _forwards.Any(forward => forward.Target.Parameters[1].Name == name);
+                    // Forwards of an inlined settings type are emitted on this type too, with their own value parameter names.
+                    HashSet<string> parameters = new HashSet<string>(_forwards.Concat(Properties(type).Where(p => Attribute(p, FluentAttributes.Inline) != null)
+                        .Select(p => p.Type).OfType<INamedTypeSymbol>().SelectMany(t => emitter.Forwards(t, report: false)))
+                        .Select(forward => forward.Target.Parameters[1].Name), StringComparer.Ordinal);
+                    bool Clashes(string name) => Reserved.Contains(name) || parameters.Contains(name);
                     for (int attempt = 0; Clashes(receiver.TrimStart('@')); attempt++) {
                         receiver = stem + "Instance" + (attempt == 0 ? string.Empty : attempt.ToString(System.Globalization.CultureInfo.InvariantCulture));
                     }
@@ -324,15 +329,7 @@ namespace PowerForge.Generators.Fluent {
                         AppendConfigure();
                     }
                     foreach ((string name, IMethodSymbol target, string summary, string valueSummary) in _forwards) {
-                        IParameterSymbol value = target.Parameters[1];
-                        if (!SyntaxFacts.IsValidIdentifier(name)) {
-                            _emitter._output.ReportDiagnostic(Diagnostic.Create(FluentDiagnostics.InvalidName, target.Locations.FirstOrDefault() ?? Location.None, name, _type.Name, target.Name));
-                            continue;
-                        }
-                        if (Prefixed ? Taken(name, value.Type) || !_generated.Add(name + "(" + value.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) + ")")
-                            : !Claim(target.Locations.FirstOrDefault(), target.Name, name, value.Type)) { continue; }
-                        AppendMethod(Doc(summary, valueSummary, value.Name), Escape(name), ", " + value.Type.ToDisplayString(TypeFormat) + " " + Escape(value.Name),
-                            "            " + target.ContainingType.ToDisplayString(TypeFormat) + "." + Escape(target.Name) + "(" + _receiver + ", " + Escape(value.Name) + ");\n");
+                        AppendForward(name, target, summary, valueSummary);
                     }
                     foreach (IPropertySymbol property in Properties(_type)) {
                         if (_forwards.Any(forward => forward.Name == property.Name)) { continue; }

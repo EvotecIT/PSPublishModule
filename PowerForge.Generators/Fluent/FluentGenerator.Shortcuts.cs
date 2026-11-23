@@ -14,13 +14,19 @@ namespace PowerForge.Generators.Fluent {
             private readonly Dictionary<INamedTypeSymbol, IMethodSymbol?> _copies = new Dictionary<INamedTypeSymbol, IMethodSymbol?>(SymbolEqualityComparer.Default);
 
             // The copy method a settings type declares, or inherits, with [Fluent(Copy = "Name")]; null when it has none or
-            // the named method does not fit (reported once per type).
+            // the named method does not fit (reported once per type, when this assembly declares the attribute). A settings
+            // type from a referenced library has none here: it is configured in place, since its copy method usually is not
+            // visible outside that library and the consumer could not fix it.
             internal IMethodSymbol? CopyMethod(INamedTypeSymbol type) {
                 type = (INamedTypeSymbol)type.WithNullableAnnotation(NullableAnnotation.NotAnnotated);
                 if (_copies.TryGetValue(type, out IMethodSymbol? cached)) {
                     return cached;
                 }
                 IMethodSymbol? result = null;
+                if (!SymbolEqualityComparer.Default.Equals(type.ContainingAssembly, _compilation.Assembly)) {
+                    _copies[type] = null;
+                    return null;
+                }
                 // The most derived declaration wins.
                 AttributeData? attribute = BaseTypes(type).Select(t => Attribute(t.OriginalDefinition, FluentAttributes.Fluent))
                     .FirstOrDefault(a => a != null && a.NamedArguments.Any(n => n.Key == "Copy" && n.Value.Value is string));
@@ -31,9 +37,9 @@ namespace PowerForge.Generators.Fluent {
                             && !m.ReturnsVoid && m.RefKind == RefKind.None && _compilation.IsSymbolAccessibleWithin(m, _compilation.Assembly)
                             && (_compilation.ClassifyCommonConversion(m.ReturnType, type) is { Exists: true, IsUserDefined: false } conversion
                                 && (conversion.IsIdentity || conversion.IsReference)));
-                    if (result == null) {
-                        Location location = attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation() ?? type.Locations.FirstOrDefault() ?? Location.None;
-                        _output.ReportDiagnostic(Diagnostic.Create(FluentDiagnostics.InvalidCopy, location, name, type.Name));
+                    // An attribute inherited from a referenced base has no syntax here: this project cannot change it.
+                    if (result == null && attribute.ApplicationSyntaxReference is SyntaxReference reference) {
+                        _output.ReportDiagnostic(Diagnostic.Create(FluentDiagnostics.InvalidCopy, reference.GetSyntax().GetLocation(), name, type.Name));
                     }
                 }
                 _copies[type] = result;
@@ -55,6 +61,9 @@ namespace PowerForge.Generators.Fluent {
                         .Select(a => a.ConstructorArguments[0].Value as string).Where(name => name != null).Select(name => name!), StringComparer.Ordinal);
                     _via = property;
                     try {
+                        foreach ((string name, IMethodSymbol target, string summary, string valueSummary) in _emitter.Forwards(option, report: false)) {
+                            AppendForward(name, target, summary, valueSummary);
+                        }
                         foreach (IPropertySymbol member in Properties(option)) {
                             if (!forwarded.Contains(member.Name)) {
                                 AppendConvention(member);
@@ -63,6 +72,22 @@ namespace PowerForge.Generators.Fluent {
                     } finally {
                         _via = null;
                     }
+                }
+
+                // [FluentForward]: name(value) calls the static target with the receiver, or with the inlined property's value.
+                private void AppendForward(string name, IMethodSymbol target, string summary, string valueSummary) {
+                    IParameterSymbol value = target.Parameters[1];
+                    if (!SyntaxFacts.IsValidIdentifier(name)) {
+                        if (_via == null) {
+                            _emitter._output.ReportDiagnostic(Diagnostic.Create(FluentDiagnostics.InvalidName, target.Locations.FirstOrDefault() ?? Location.None, name, _type.Name, target.Name));
+                        }
+                        return;
+                    }
+                    if (Prefixed ? Taken(name, value.Type) || !_generated.Add(name + "(" + value.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) + ")")
+                        : !Claim(_via?.Locations.FirstOrDefault() ?? target.Locations.FirstOrDefault(), _via == null ? target.Name : _via.Name + "." + name, name, value.Type)) { return; }
+                    string owner = _via == null ? _receiver : _receiver + "." + Escape(_via.Name);
+                    AppendMethod(Doc(summary, valueSummary, value.Name), Escape(name), ", " + value.Type.ToDisplayString(TypeFormat) + " " + Escape(value.Name),
+                        "            " + target.ContainingType.ToDisplayString(TypeFormat) + "." + Escape(target.Name) + "(" + owner + ", " + Escape(value.Name) + ");\n");
                 }
 
                 // [FluentPreset]: name() assigns a fixed value.
@@ -119,8 +144,12 @@ namespace PowerForge.Generators.Fluent {
                         name, ", global::System.Action<" + optionType + "> configure", statements);
                 }
 
+                // Calls the validated method through its declaring type, so a member of the same name that a derived type
+                // declares with new cannot take the call.
                 private string Copy(string target, INamedTypeSymbol option, IMethodSymbol copy, string optionType) {
-                    string call = target + "." + Escape(copy.Name) + "()";
+                    string receiver = SymbolEqualityComparer.Default.Equals(copy.ContainingType, option) ? target
+                        : "((" + copy.ContainingType.WithNullableAnnotation(NullableAnnotation.NotAnnotated).ToDisplayString(TypeFormat) + ")" + target + ")";
+                    string call = receiver + "." + Escape(copy.Name) + "()";
                     bool cast = !Compilation.ClassifyCommonConversion(copy.ReturnType, option).IsImplicit;
                     string suppress = _emitter.Nullable && copy.ReturnType.NullableAnnotation == NullableAnnotation.Annotated ? "!" : string.Empty;
                     return cast ? "(" + optionType + ")" + call + suppress : call + suppress;
@@ -142,8 +171,14 @@ namespace PowerForge.Generators.Fluent {
                     }
                     Conversion conversion = ((CSharpCompilation)Compilation).ClassifyConversion(constant.Type, target);
                     if (!conversion.IsImplicit) {
-                        failure = "has a " + constant.Type.ToDisplayString() + " value, which cannot be assigned to " + target.ToDisplayString();
-                        return null;
+                        // An integral constant that fits converts implicitly (byte size = 1), and is emitted with the target's type.
+                        object? fitted = FitConstant(constant.Value, target);
+                        string? converted = fitted == null ? null : Literal(fitted);
+                        if (converted == null) {
+                            failure = "has a " + constant.Type.ToDisplayString() + " value, which cannot be assigned to " + target.ToDisplayString();
+                            return null;
+                        }
+                        return (converted, Convert.ToString(constant.Value, CultureInfo.InvariantCulture));
                     }
                     if (constant.Kind == TypedConstantKind.Type && constant.Value is ITypeSymbol type) {
                         return ("typeof(" + type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) + ")", "typeof(" + type.ToDisplayString() + ")");
@@ -194,10 +229,36 @@ namespace PowerForge.Generators.Fluent {
                         }
                         if (!((CSharpCompilation)Compilation).ClassifyConversion(valueType, target).IsImplicit) { continue; }
                         string suffix = call ? "()" : string.Empty;
-                        return (type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) + "." + Escape(name) + suffix, type.Name + "." + name + suffix);
+                        // Qualified by the type that declares the accepted member, so a hiding member of the requested type is not read.
+                        INamedTypeSymbol declaring = candidate.ContainingType;
+                        return (declaring.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) + "." + Escape(name) + suffix, declaring.Name + "." + name + suffix);
                     }
                     failure = "names '" + type.Name + "." + name + "', which is not an accessible static method without parameters, property or field whose value can be assigned to " + target.ToDisplayString();
                     return null;
+                }
+
+                // The C# implicit constant expression conversions: an int constant to sbyte, byte, short, ushort, uint or ulong,
+                // and a long constant to ulong, when the value is in range (also for the nullable form of the target).
+                private static object? FitConstant(object? value, ITypeSymbol target) {
+                    if (target.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T && target is INamedTypeSymbol nullable) {
+                        target = nullable.TypeArguments[0];
+                    }
+                    switch (value) {
+                        case int number:
+                            switch (target.SpecialType) {
+                                case SpecialType.System_SByte: return number >= sbyte.MinValue && number <= sbyte.MaxValue ? (sbyte)number : null;
+                                case SpecialType.System_Byte: return number >= byte.MinValue && number <= byte.MaxValue ? (byte)number : null;
+                                case SpecialType.System_Int16: return number >= short.MinValue && number <= short.MaxValue ? (short)number : null;
+                                case SpecialType.System_UInt16: return number >= ushort.MinValue && number <= ushort.MaxValue ? (ushort)number : null;
+                                case SpecialType.System_UInt32: return number >= 0 ? (uint)number : null;
+                                case SpecialType.System_UInt64: return number >= 0 ? (ulong)number : null;
+                                default: return null;
+                            }
+                        case long number:
+                            return target.SpecialType == SpecialType.System_UInt64 && number >= 0 ? (ulong)number : null;
+                        default:
+                            return null;
+                    }
                 }
 
                 private static string? Literal(object? value) {
