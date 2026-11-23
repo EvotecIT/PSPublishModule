@@ -507,6 +507,54 @@ public sealed class FluentGeneratorTests {
     }
 
     [Fact]
+    public void PresetCollidesWithMethodCallableWithoutArguments() {
+        const string library = """
+            using PowerForge.Fluent;
+
+            namespace Sample {
+                [Fluent]
+                public sealed class Chart {
+                    public Chart Reset(int size = 10) => this;
+                    public Chart Clear(params string[] names) => this;
+                    [FluentPreset("Reset", 0)]
+                    public int Size { get; set; }
+                    [FluentPreset("Clear", null)]
+                    public string? Title { get; set; }
+                }
+            }
+            """;
+
+        (_, ImmutableArray<Diagnostic> diagnostics) = Run(library);
+
+        // chart.Reset() and chart.Clear() bind to the existing methods, so neither preset could be called.
+        Assert.Equal(new[] { "PFF002", "PFF002" }, diagnostics.Select(d => d.Id));
+    }
+
+    [Fact]
+    public void EnumPresetForIntegralPropertyIsBuildError() {
+        const string library = """
+            using PowerForge.Fluent;
+
+            namespace Sample {
+                public enum Mode { One = 1 }
+
+                [Fluent]
+                public sealed class Chart {
+                    [FluentPreset("Small", Mode.One)]
+                    public byte Size { get; set; }
+                    [FluentPreset("Single", Mode.One)]
+                    public int Count { get; set; }
+                }
+            }
+            """;
+
+        (_, ImmutableArray<Diagnostic> diagnostics) = Run(library);
+
+        // C# has no implicit conversion from an enum constant to byte or int, even when the value fits.
+        Assert.Equal(new[] { "PFF010", "PFF010" }, diagnostics.Select(d => d.Id));
+    }
+
+    [Fact]
     public void GeneratedCodeCompilesAsCSharp73() {
         const string library = @"
             using System.Collections.Generic;

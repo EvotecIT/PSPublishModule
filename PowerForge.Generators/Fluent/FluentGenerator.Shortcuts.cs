@@ -172,7 +172,7 @@ namespace PowerForge.Generators.Fluent {
                     Conversion conversion = ((CSharpCompilation)Compilation).ClassifyConversion(constant.Type, target);
                     if (!conversion.IsImplicit) {
                         // An integral constant that fits converts implicitly (byte size = 1), and is emitted with the target's type.
-                        object? fitted = FitConstant(constant.Value, target);
+                        object? fitted = FitConstant(constant.Type, constant.Value, target);
                         string? converted = fitted == null ? null : Literal(fitted);
                         if (converted == null) {
                             failure = "has a " + constant.Type.ToDisplayString() + " value, which cannot be assigned to " + target.ToDisplayString();
@@ -238,8 +238,12 @@ namespace PowerForge.Generators.Fluent {
                 }
 
                 // The C# implicit constant expression conversions: an int constant to sbyte, byte, short, ushort, uint or ulong,
-                // and a long constant to ulong, when the value is in range (also for the nullable form of the target).
-                private static object? FitConstant(object? value, ITypeSymbol target) {
+                // and a long constant to ulong, when the value is in range (also for the nullable form of the target). An enum
+                // constant has none of these conversions, even when its underlying value would fit.
+                private static object? FitConstant(ITypeSymbol source, object? value, ITypeSymbol target) {
+                    if (source.SpecialType != SpecialType.System_Int32 && source.SpecialType != SpecialType.System_Int64) {
+                        return null;
+                    }
                     if (target.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T && target is INamedTypeSymbol nullable) {
                         target = nullable.TypeArguments[0];
                     }
