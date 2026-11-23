@@ -448,6 +448,49 @@ public sealed class FluentGeneratorTests {
         Assert.Equal(new object[] { "old", true, 1, 4L, 10L }, Execute(compilation));
     }
 
+    [Fact]
+    public void InlinedOptionsFromAReferencedLibraryReachDerivedTypes() {
+        const string baseLibrary = @"
+            using PowerForge.Fluent;
+
+            namespace Sample.Blocks {
+                public sealed class BlockOptions {
+                    public bool ShowCard { get; set; } = true;
+                    public string Theme { get; set; } = ""light"";
+                }
+
+                [Fluent]
+                public abstract class Block<TSelf> where TSelf : Block<TSelf> {
+                    [FluentInline]
+                    public BlockOptions Options { get; } = new BlockOptions();
+                }
+            }";
+        (Compilation baseCompilation, ImmutableArray<Diagnostic> baseDiagnostics) = Run(baseLibrary);
+        Assert.Empty(baseDiagnostics);
+        using MemoryStream image = new MemoryStream();
+        Assert.True(baseCompilation.Emit(image).Success);
+
+        const string derivedLibrary = @"
+            using Sample.Blocks;
+
+            namespace Sample {
+                public sealed class Card : Block<Card> {
+                    public string? Title { get; set; }
+                }
+
+                public static class Usage {
+                    public static object[] Run() {
+                        Card card = new Card().Title(""Uptime"").ShowCard(false).Theme(""dark"");
+                        return new object[] { card.Title!, card.Options.ShowCard, card.Options.Theme };
+                    }
+                }
+            }";
+        (Compilation compilation, ImmutableArray<Diagnostic> diagnostics) = TestCompiler.Run(derivedLibrary, LanguageVersion.Latest, null,
+            new[] { MetadataReference.CreateFromImage(image.ToArray()) }, new FluentGenerator());
+        Assert.Empty(diagnostics);
+        Assert.Empty(compilation.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error));
+    }
+
     private static (Compilation Compilation, ImmutableArray<Diagnostic> Diagnostics) Run(string source, LanguageVersion version = LanguageVersion.Latest, bool prefixed = false) =>
         TestCompiler.Run(source, version, prefixed ? new Dictionary<string, string> { ["PowerForgeFluentNaming"] = "Prefixed" } : null, new FluentGenerator());
 

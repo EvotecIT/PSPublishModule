@@ -45,7 +45,7 @@ namespace PowerForge.Generators.Fluent {
                 private void AppendInline(IPropertySymbol property) {
                     if (Prefixed) { return; }
                     if (!IsReadable(property) || property.Type is not INamedTypeSymbol option || property.Type.NullableAnnotation == NullableAnnotation.Annotated
-                        || CollectionItem(property.Type) != null || !_emitter.IsOptionType(option)) {
+                        || CollectionItem(property.Type) != null || !IsSettingsType(option)) {
                         Report(FluentDiagnostics.InvalidInline, property, _type.Name, property.Name);
                         return;
                     }

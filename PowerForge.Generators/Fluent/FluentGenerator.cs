@@ -156,8 +156,12 @@ namespace PowerForge.Generators.Fluent {
 
             // A public class of this assembly with something to set or add.
             private bool IsOptionType(INamedTypeSymbol type) =>
-                SymbolEqualityComparer.Default.Equals(type.ContainingAssembly, _compilation.Assembly) && IsCandidate(type)
-                && Properties(type).Any(p => IsSettable(p) || CollectionItem(p.Type) != null);
+                SymbolEqualityComparer.Default.Equals(type.ContainingAssembly, _compilation.Assembly) && IsSettingsType(type);
+
+            // A public class, from any assembly, with something to set or add. An inlined property may use one declared in a
+            // referenced library: a block deriving from another library's base still inlines that base's options.
+            private static bool IsSettingsType(INamedTypeSymbol type) =>
+                IsCandidate(type) && Properties(type).Any(p => IsSettable(p) || CollectionItem(p.Type) != null);
 
             // Whether an extension method declared for receiver applies to type. An open TSelf receiver applies when the
             // type satisfies its constraints.
