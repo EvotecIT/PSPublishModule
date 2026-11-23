@@ -26,7 +26,7 @@ namespace PowerForge.Generators.Fluent {
     /// </para>
     /// </summary>
     [Generator(LanguageNames.CSharp)]
-    public sealed class FluentGenerator : IIncrementalGenerator {
+    public sealed partial class FluentGenerator : IIncrementalGenerator {
         /// <inheritdoc />
         public void Initialize(IncrementalGeneratorInitializationContext context) {
             context.RegisterPostInitializationOutput(output => output.AddSource("PowerForge.Fluent.Attributes.g.cs", FluentAttributes.Source));
@@ -55,7 +55,7 @@ namespace PowerForge.Generators.Fluent {
             public override int GetHashCode() => (Prefixed ? 1 : 0) ^ (Factory?.GetHashCode() ?? 0);
         }
 
-        private sealed class Emitter {
+        private sealed partial class Emitter {
             private static readonly SymbolDisplayFormat NullableFormat = SymbolDisplayFormat.FullyQualifiedFormat
                 .AddMiscellaneousOptions(SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier);
 
@@ -89,6 +89,9 @@ namespace PowerForge.Generators.Fluent {
 
             internal void Run() {
                 List<INamedTypeSymbol> types = FluentTypes();
+                foreach (INamedTypeSymbol type in types) {
+                    CopyMethod(type);
+                }
                 foreach (INamedTypeSymbol type in types) {
                     string? source = Generate(type, types);
                     if (source != null) {
@@ -252,7 +255,7 @@ namespace PowerForge.Generators.Fluent {
                 return builder.Build();
             }
 
-            private sealed class Builder {
+            private sealed partial class Builder {
                 private readonly Emitter _emitter;
                 private readonly INamedTypeSymbol _type;
                 private readonly IReadOnlyList<INamedTypeSymbol> _types;
@@ -267,6 +270,9 @@ namespace PowerForge.Generators.Fluent {
                 private readonly HashSet<string> _generated = new HashSet<string>(StringComparer.Ordinal);
                 private readonly StringBuilder _body = new StringBuilder();
                 private int _methods;
+
+                // While a [FluentInline] property's type is being expanded onto the owner: that property.
+                private IPropertySymbol? _via;
 
                 // Parameter and local names the generated methods use; the receiver parameter must differ from all of them.
                 private static readonly string[] Reserved = { "value", "item", "items", "configure" };
@@ -422,6 +428,14 @@ namespace PowerForge.Generators.Fluent {
 
                 // The shared authoring convention: property-named setters, singular-named children, declared delegate verbs.
                 private void AppendConvention(IPropertySymbol property) {
+                    AppendPresets(property);
+                    AppendProperty(property);
+                    if (_via == null && Attribute(property, FluentAttributes.Inline) != null) {
+                        AppendInline(property);
+                    }
+                }
+
+                private void AppendProperty(IPropertySymbol property) {
                     string propertyType = property.Type.ToDisplayString(TypeFormat);
                     string cref = Cref(property);
                     string summary = Summary(property);
@@ -459,7 +473,8 @@ namespace PowerForge.Generators.Fluent {
                     }
                     if (IsSettable(property)) {
                         if (property.Type.SpecialType == SpecialType.System_Boolean) {
-                            if (Claim(property, name, property.Type)) {
+                            // Visible(bool value = true) also answers Visible(), which a preset must not take.
+                            if (Claim(property, name, property.Type) && ClaimShortForm(property, name)) {
                                 AppendMethod(Doc("Sets " + cref + summary, "The value; true when omitted.", "value") + Example(property), name, ", " + propertyType + " value = true", Assign(property, "value"));
                             }
                         } else if (Claim(property, name, property.Type)) {
@@ -485,6 +500,10 @@ namespace PowerForge.Generators.Fluent {
                 private void AppendOption(IPropertySymbol property, INamedTypeSymbol option, string name, string cref, string summary) {
                     string optionType = option.WithNullableAnnotation(NullableAnnotation.NotAnnotated).ToDisplayString(TypeFormat);
                     bool canCreate = IsSettable(property) && Creatable(option);
+                    if (IsSettable(property) && _emitter.CopyMethod(option) is IMethodSymbol copy) {
+                        AppendCopyOption(property, option, copy, name, cref, summary, optionType, canCreate);
+                        return;
+                    }
                     string statements = NullCheck("configure")
                         + "            " + optionType + " value = " + Member(property) + " ?? "
                         + (canCreate ? "new " + optionType + "()" : "throw new global::System.InvalidOperationException(\"" + property.Name + " is not set.\")") + ";\n"
@@ -508,27 +527,34 @@ namespace PowerForge.Generators.Fluent {
                     return false;
                 }
 
-                private bool Claim(IPropertySymbol property, string name, ITypeSymbol parameter) => Claim(property.Locations.FirstOrDefault(), property.Name, name, parameter);
+                private bool Claim(IPropertySymbol property, string name, params ITypeSymbol[] parameters) => Claim((_via ?? property).Locations.FirstOrDefault(), Label(property), name, parameters);
+
+                // The member a diagnostic names: Options.Legend for a member reached through [FluentInline].
+                private string Label(IPropertySymbol property) => _via == null ? property.Name : _via.Name + "." + property.Name;
 
                 // Convention mode: a name taken by an existing or already generated method, or one a delegate-valued member
                 // of the type would capture (x.Name(...) invokes the delegate), is a build error.
-                private bool Claim(Location? location, string member, string name, ITypeSymbol parameter) {
+                private bool Claim(Location? location, string member, string name, params ITypeSymbol[] parameters) {
                     bool captured = BaseTypes(_type).SelectMany(t => t.GetMembers(name)).Any(m => m.DeclaredAccessibility != Accessibility.Private
                         && (m is IPropertySymbol { Type.TypeKind: TypeKind.Delegate } || m is IFieldSymbol { Type.TypeKind: TypeKind.Delegate } || m is IEventSymbol));
-                    if (captured || Taken(name, parameter)) {
+                    if (captured || Taken(name, parameters)) {
                         _emitter._output.ReportDiagnostic(Diagnostic.Create(FluentDiagnostics.Collision, location ?? Location.None, name, _type.Name, member));
                         return false;
                     }
                     // Nullable annotations do not distinguish C# signatures.
-                    if (!_generated.Add(name + "(" + parameter.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) + ")")) {
+                    if (!_generated.Add(name + "(" + string.Join(", ", parameters.Select(parameter => parameter.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat))) + ")")) {
                         _emitter._output.ReportDiagnostic(Diagnostic.Create(FluentDiagnostics.Duplicate, location ?? Location.None, name, _type.Name, member));
                         return false;
                     }
                     return true;
                 }
 
-                private void Report(DiagnosticDescriptor descriptor, IPropertySymbol property, params object[] arguments) =>
-                    _emitter._output.ReportDiagnostic(Diagnostic.Create(descriptor, property.Locations.FirstOrDefault() ?? Location.None, arguments));
+                // A member reached through [FluentInline] reports its own problems when its declaring type is generated.
+                private void Report(DiagnosticDescriptor descriptor, IPropertySymbol property, params object[] arguments) {
+                    if (_via == null) {
+                        _emitter._output.ReportDiagnostic(Diagnostic.Create(descriptor, property.Locations.FirstOrDefault() ?? Location.None, arguments));
+                    }
+                }
 
                 // Compares complete value-parameter signatures. A handwritten extension for another receiver leaves the name free.
                 private bool Taken(string name, params ITypeSymbol[] parameters) => _existing.Where(m => m.Name == name).Concat(_emitter.Extensions[name]).Any(m => {
@@ -540,7 +566,7 @@ namespace PowerForge.Generators.Fluent {
 
                 private INamedTypeSymbol Action(ITypeSymbol argument) => Compilation.GetTypeByMetadataName("System.Action`1")!.Construct(argument);
 
-                private string Member(IPropertySymbol property) => _receiver + "." + Escape(property.Name);
+                private string Member(IPropertySymbol property) => _receiver + (_via == null ? string.Empty : "." + Escape(_via.Name)) + "." + Escape(property.Name);
 
                 private string Assign(IPropertySymbol property, string value) => "            " + Member(property) + " = " + value + ";\n";
 
@@ -595,7 +621,7 @@ namespace PowerForge.Generators.Fluent {
                 /// <summary>Shows both configuration forms in the generated API reference, without assuming a parameterless constructor.</summary>
                 private string Example(IPropertySymbol property) {
                     bool constructible = _type.InstanceConstructors.Any(ctor => ctor.DeclaredAccessibility == Accessibility.Public && ctor.Parameters.All(parameter => parameter.IsOptional));
-                    string initializer = constructible ? "new " + _type.ToDisplayString(TypeFormat) + " { " + property.Name + " = value }" : _receiver + "." + property.Name + " = value;";
+                    string initializer = _via != null ? Member(property) + " = value;" : constructible ? "new " + _type.ToDisplayString(TypeFormat) + " { " + property.Name + " = value }" : _receiver + "." + property.Name + " = value;";
                     IMethodSymbol? factory = _emitter._factories.SelectMany(holder => holder.GetMembers().OfType<IMethodSymbol>()).FirstOrDefault(method => method.IsStatic && !method.IsGenericMethod
                         && method.Parameters.All(parameter => parameter.IsOptional) && SymbolEqualityComparer.Default.Equals(method.ReturnType, _type));
                     string entry = factory == null ? _receiver : factory.ContainingType.Name + "." + factory.Name + "()";
@@ -614,7 +640,8 @@ namespace PowerForge.Generators.Fluent {
                         + "        /// </code></example>\n";
                 }
 
-                private static string Cref(IPropertySymbol property) => "<see cref=\"" + (property.GetDocumentationCommentId() ?? property.Name) + "\"/>";
+                private string Cref(IPropertySymbol property) => _via == null ? "<see cref=\"" + (property.GetDocumentationCommentId() ?? property.Name) + "\"/>"
+                    : "<see cref=\"" + (property.GetDocumentationCommentId() ?? property.Name) + "\">" + _via.Name + "." + property.Name + "</see>";
 
                 private static string Camel(string name) {
                     string camel = char.ToLowerInvariant(name[0]) + name.Substring(1);

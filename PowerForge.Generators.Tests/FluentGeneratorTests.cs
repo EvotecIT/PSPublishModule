@@ -276,6 +276,141 @@ public sealed class FluentGeneratorTests {
     }
 
     [Fact]
+    public void InlinedSettingsPresetsAndCopiesConfigureTheOwner() {
+        const string library = """
+            using System;
+            using System.Collections.Generic;
+            using PowerForge.Fluent;
+
+            namespace Sample {
+                public enum BarMode { Grouped, Stacked }
+
+                [Fluent]
+                public class Chart {
+                    [FluentInline]
+                    public ChartOptions Options { get; } = new();
+                    public string? Title { get; set; }
+                }
+
+                public sealed class LineChart : Chart {
+                }
+
+                public sealed class ChartOptions {
+                    public string? Theme { get; set; }
+                    public bool IsAnimated { get; set; }
+                    [FluentPreset("Stacked", BarMode.Stacked)]
+                    [FluentPreset("Grouped", BarMode.Grouped)]
+                    public BarMode Mode { get; set; }
+                    [FluentPreset("PlainLine", typeof(LineStyle), nameof(LineStyle.Plain))]
+                    [FluentPreset("DashedLine", typeof(LineStyle), nameof(LineStyle.Dashed))]
+                    public LineStyle? Line { get; set; }
+                    [FluentPreset("Wide", 2.5)]
+                    public double Width { get; set; }
+                    [FluentPreset("Untitled", null)]
+                    public string? Caption { get; set; }
+                    public Legend? Legend { get; set; }
+                    public Legend Tooltip { get; } = new();
+                    public List<string> Notes { get; } = new();
+                }
+
+                public sealed class LineStyle {
+                    public static readonly LineStyle Dashed = new() { Name = "dashed" };
+                    public string? Name { get; set; }
+                    public static LineStyle Plain() => new() { Name = "plain" };
+                }
+
+                [Fluent(Copy = "Clone")]
+                public class LegendBase {
+                    public string? Position { get; set; }
+                    internal LegendBase Clone() => (LegendBase)MemberwiseClone();
+                }
+
+                // Inherits the copy method, which returns the base type.
+                public sealed class Legend : LegendBase {
+                }
+
+                public static class Usage {
+                    public static object[] Run() {
+                        LineChart chart = new LineChart().Title("Sales").Theme("dark").Animated().Stacked().PlainLine().Wide().Note("n")
+                            .Options(options => options.Caption("caption")).Untitled();
+                        Legend? captured = null;
+                        chart.Legend(legend => { captured = legend; legend.Position("Top"); });
+                        captured!.Position("Left");
+                        bool threw = false;
+                        try {
+                            chart.Legend(legend => { legend.Position("Bottom"); throw new InvalidOperationException(); });
+                        } catch (InvalidOperationException) {
+                            threw = true;
+                        }
+                        Legend? tooltip = null;
+                        chart.Tooltip(t => { tooltip = t; t.Position("Right"); });
+                        ChartOptions dashed = new ChartOptions().DashedLine().Grouped();
+                        return new object[] { chart.Title!, chart.Options.Theme!, chart.Options.IsAnimated, chart.Options.Mode.ToString(), chart.Options.Line!.Name!,
+                            chart.Options.Width, chart.Options.Caption ?? "null", chart.Options.Notes.Count, chart.Options.Legend!.Position!, threw,
+                            ReferenceEquals(tooltip, chart.Options.Tooltip), dashed.Line!.Name!, dashed.Mode.ToString() };
+                    }
+                }
+            }
+            """;
+
+        (Compilation compilation, ImmutableArray<Diagnostic> generatorDiagnostics) = Run(library);
+        Assert.Empty(generatorDiagnostics);
+        Assert.Empty(compilation.GetDiagnostics().Where(d => d.Severity >= DiagnosticSeverity.Warning));
+        // Enum presets read as the member, not as a cast of its value.
+        Assert.Contains(compilation.SyntaxTrees, tree => tree.ToString().Contains("= global::Sample.BarMode.Stacked;", StringComparison.Ordinal));
+
+        // The legend callback's copy was committed as a fresh copy, so neither the later edit through the captured reference
+        // nor the failing callback reached it; the read-only tooltip was configured in place.
+        Assert.Equal(new object[] { "Sales", "dark", true, "Stacked", "plain", 2.5, "null", 1, "Top", true, true, "dashed", "Grouped" }, Execute(compilation));
+    }
+
+    [Fact]
+    public void ShortcutsThatCannotWorkAreBuildErrors() {
+        const string library = """
+            using PowerForge.Fluent;
+
+            namespace Sample {
+                [Fluent]
+                public sealed class Chart {
+                    [FluentInline]
+                    public Options Options { get; } = new();
+                    [FluentInline]
+                    public string? Name { get; set; }
+                    public string? Theme { get; set; }
+                    public Chart Animated(bool value) => this;
+                    [FluentPreset("Big", "large")]
+                    public int Size { get; set; }
+                    [FluentPreset("Missing", typeof(Chart), "Nowhere")]
+                    public string? Label { get; set; }
+                    [FluentPreset("Fixed", 1)]
+                    public int Fixed { get; } = 0;
+                    [FluentPreset("Visible", false)]
+                    public bool IsVisible { get; set; }
+                }
+
+                public sealed class Options {
+                    public string? Theme { get; set; }
+                    public bool IsAnimated { get; set; }
+                    public Broken? Broken { get; set; }
+                }
+
+                [Fluent(Copy = "Clone")]
+                public sealed class Broken {
+                    public int Size { get; set; }
+                    public Broken Clone(bool deep) => this;
+                }
+            }
+            """;
+
+        (_, ImmutableArray<Diagnostic> diagnostics) = Run(library);
+
+        // Theme is both the owner's and the inlined one (PFF003); Animated(bool) exists on the owner (PFF002); the preset
+        // Visible() takes the short form of Visible(bool value = true) (PFF003); a string preset for an int, a missing static
+        // member and a get-only property (PFF010); Clone needs no parameters (PFF011); Name is no settings type (PFF012).
+        Assert.Equal(new[] { "PFF002", "PFF003", "PFF003", "PFF010", "PFF010", "PFF010", "PFF011", "PFF012" }, diagnostics.Select(d => d.Id).OrderBy(id => id, StringComparer.Ordinal));
+    }
+
+    [Fact]
     public void GeneratedCodeCompilesAsCSharp73() {
         const string library = @"
             using System.Collections.Generic;
@@ -288,16 +423,21 @@ public sealed class FluentGeneratorTests {
                     public bool IsVisible { get; set; }
                     public List<string> Tags { get; set; } = new List<string>();
                     public Settings Settings { get; set; }
+                    [FluentInline]
+                    public Settings Inlined { get; } = new Settings();
                 }
 
+                [Fluent(Copy = ""Copy"")]
                 public sealed class Settings {
-                    public int Size { get; set; }
+                    [FluentPreset(""Large"", 10L)]
+                    public long Size { get; set; }
+                    public Settings Copy() => (Settings)MemberwiseClone();
                 }
 
                 public static class Usage {
                     public static object[] Run() {
-                        Legacy legacy = new Legacy().Title(""old"").Visible().Tag(""a"").Settings(s => s.Size(4));
-                        return new object[] { legacy.Title, legacy.IsVisible, legacy.Tags.Count, legacy.Settings.Size };
+                        Legacy legacy = new Legacy().Title(""old"").Visible().Tag(""a"").Settings(s => s.Size(4)).Large();
+                        return new object[] { legacy.Title, legacy.IsVisible, legacy.Tags.Count, legacy.Settings.Size, legacy.Inlined.Size };
                     }
                 }
             }";
@@ -305,7 +445,7 @@ public sealed class FluentGeneratorTests {
         (Compilation compilation, ImmutableArray<Diagnostic> generatorDiagnostics) = Run(library, LanguageVersion.CSharp7_3);
         Assert.Empty(generatorDiagnostics);
 
-        Assert.Equal(new object[] { "old", true, 1, 4 }, Execute(compilation));
+        Assert.Equal(new object[] { "old", true, 1, 4L, 10L }, Execute(compilation));
     }
 
     private static (Compilation Compilation, ImmutableArray<Diagnostic> Diagnostics) Run(string source, LanguageVersion version = LanguageVersion.Latest, bool prefixed = false) =>

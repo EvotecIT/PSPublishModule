@@ -48,5 +48,20 @@ namespace PowerForge.Generators.Fluent {
             "PFF009", "[FluentCmdlet] names an unknown property",
             "'{0}' in {1} on '{2}' is not a property of '{3}'",
             Category, DiagnosticSeverity.Error, isEnabledByDefault: true);
+
+        internal static readonly DiagnosticDescriptor InvalidPreset = new DiagnosticDescriptor(
+            "PFF010", "Fluent preset cannot be assigned",
+            "[FluentPreset(\"{0}\")] on '{1}.{2}' {3}",
+            Category, DiagnosticSeverity.Error, isEnabledByDefault: true);
+
+        internal static readonly DiagnosticDescriptor InvalidCopy = new DiagnosticDescriptor(
+            "PFF011", "Fluent copy method is missing or has the wrong shape",
+            "[Fluent(Copy = \"{0}\")] applies to '{1}', which has no accessible, non-generic, parameterless instance method '{0}' returning '{1}' or a base type it can be cast to",
+            Category, DiagnosticSeverity.Error, isEnabledByDefault: true);
+
+        internal static readonly DiagnosticDescriptor InvalidInline = new DiagnosticDescriptor(
+            "PFF012", "[FluentInline] needs a settings-type property",
+            "'{0}.{1}' is marked [FluentInline] but is not a readable, non-nullable property whose type is a fluent settings type of this assembly",
+            Category, DiagnosticSeverity.Error, isEnabledByDefault: true);
     }
 }

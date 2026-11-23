@@ -23,6 +23,54 @@ namespace PowerForge.Fluent {
         }
 
         public string Name { get; }
+
+        /// <summary>
+        /// On a settings type: a parameterless instance method (public or internal, declared or inherited) that returns a
+        /// copy. A settable property of this type, or of a type deriving from it, is then configured on a copy that is
+        /// assigned, copied again, only after the callback returns, so a failing callback leaves the owner unchanged.
+        /// </summary>
+        public string Copy { get; set; }
+    }
+
+    /// <summary>
+    /// On a property of a settings type: the owning type also gets every fluent method of that settings type, applied to
+    /// the property and returning the owner, so <c>chart.Legend(...)</c> stands for <c>chart.Options(o =&gt; o.Legend(...))</c>.
+    /// The property must be readable and set (not nullable). Only the property's own type is inlined, not its inlined properties.
+    /// </summary>
+    [global::Microsoft.CodeAnalysis.Embedded]
+    [global::System.AttributeUsage(global::System.AttributeTargets.Property, Inherited = false)]
+    internal sealed class FluentInlineAttribute : global::System.Attribute {
+    }
+
+    /// <summary>
+    /// Generates the argument-less method <c>name()</c>, which assigns a fixed value to the property: a constant (enum
+    /// member, bool, number, string or null), or the static member <c>type.member</c> (a parameterless static method is
+    /// called, a static property or field is read).
+    /// </summary>
+    [global::Microsoft.CodeAnalysis.Embedded]
+    [global::System.AttributeUsage(global::System.AttributeTargets.Property, AllowMultiple = true, Inherited = false)]
+    internal sealed class FluentPresetAttribute : global::System.Attribute {
+        public FluentPresetAttribute(string name, object value) {
+            Name = name;
+            Value = value;
+        }
+
+        public FluentPresetAttribute(string name, global::System.Type type, string member) {
+            Name = name;
+            Type = type;
+            Member = member;
+        }
+
+        public string Name { get; }
+
+        public object Value { get; }
+
+        public global::System.Type Type { get; }
+
+        public string Member { get; }
+
+        /// <summary>The documentation summary of the generated method.</summary>
+        public string Summary { get; set; }
     }
 
     /// <summary>Leaves a property, or a whole type, out of the generated methods.</summary>
