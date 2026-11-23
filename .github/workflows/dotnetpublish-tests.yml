@@ -16,6 +16,7 @@ on:
       - PowerForge/**
       - PowerForge.Cli/**
       - PowerForge.PowerShell/**
+      - PowerForge.Compiler/**
       - PowerForge.Tests/**
       - PSPublishModule/**
       - Schemas/**

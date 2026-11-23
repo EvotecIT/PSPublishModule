@@ -14,6 +14,7 @@ on:
       - '.github/scripts/set-module-test-environment.test.cjs'
       - 'PowerForge/**'
       - 'PowerForge.PowerShell/**'
+      - 'PowerForge.Compiler/**'
       - 'PowerForge.Cli/**'
       - 'PSPublishModule/**'
       - 'Tests/ModuleTestSample/**'

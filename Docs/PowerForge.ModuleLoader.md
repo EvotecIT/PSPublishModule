@@ -1,7 +1,7 @@
 # PowerForge module loader
 
 Binary and hybrid modules built by PowerForge ship a small precompiled loader,
-`PowerForge.ModuleLoader.V2.dll`, beside the generated `.psm1`:
+`PowerForge.ModuleLoader.V3.dll`, beside the generated `.psm1`:
 
 ```text
 <Module>/
@@ -9,8 +9,8 @@ Binary and hybrid modules built by PowerForge ship a small precompiled loader,
   <Module>.psm1            generated bootstrapper (plain script, no reflection)
   <Module>.Libraries.ps1   Windows PowerShell dependency preload list
   Lib/<payload folders>/   module and dependency assemblies
-  Loader/Core/PowerForge.ModuleLoader.V2.dll      PowerShell 7 (netcoreapp3.1, the PowerShell 7.0 floor)
-  Loader/Desktop/PowerForge.ModuleLoader.V2.dll   Windows PowerShell 5.1 (net472)
+  Loader/Core/PowerForge.ModuleLoader.V3.dll      PowerShell 7 (netcoreapp3.1, the PowerShell 7.0 floor)
+  Loader/Desktop/PowerForge.ModuleLoader.V3.dll   Windows PowerShell 5.1 (net472)
 ```
 
 The bootstrapper loads the build for the running edition with `Add-Type -Path` and calls its public
@@ -51,13 +51,13 @@ take priority over an earlier version-blind resolver.
 | A module ships another module's library (for example `ConsoleMonster.dll`) | Both copies load in separate contexts. Objects from one copy are not instances of the other copy's types; declare the library in `NETSharedAssemblies` when modules must exchange them. | The dependency rule above applies. |
 | Two modules expose the same type accelerator name | The first registration keeps the name. The next module reports it once and takes the name over when the first module is removed. PowerShell caches a type name once a script resolves it, so a name already used in the session keeps its first type. | Same. |
 
-The contract version is part of the assembly name. The corrected Desktop resolver ships as `V2`,
-so an older `V1` loader already loaded by another module cannot replace it. Future public contract
-changes, or fixes that must coexist with an older loader, require a new identity. Rebuild modules
-to give them the corrected loader; importing a newer builder does not rewrite installed modules.
-The type accelerator registrar deliberately keeps its `V1` type name in both assemblies. Generated
-scripts select the first loaded registrar, keeping accelerator ownership and handover shared with
-modules built before V2.
+The contract version is part of the assembly name so different releases can load in the same
+session. V2 introduced the scoped Desktop resolver. V3 resolves types forwarded by opted-in
+assemblies. Earlier registrars receive a forwarding target only when its exported types match
+the configured surface. The registrar keeps its
+`V1` type name across loader releases. Generated scripts select the first loaded registrar, so
+modules share accelerator ownership and handover in either import order. Rebuild a module to
+give it the current loader.
 PowerForge embeds both builds and writes them during the
 module build, so building a module no longer needs the .NET SDK for the loader. Module signing
 signs them with the module's other binaries. Packaging always includes the `Loader` folder,

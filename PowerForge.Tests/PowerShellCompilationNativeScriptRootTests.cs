@@ -45,7 +45,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         var repositoryRoot = System.IO.Path.GetFullPath(System.IO.Path.Combine(fixtureRoot, "..", "..", ".."));
         var project = System.IO.Path.Combine(projectRoot, "NativeRoot.csproj");
         System.IO.File.WriteAllText(project, System.IO.File.ReadAllText(fixtureProject)
-            .Replace("..\\..\\..\\PowerForge.PowerShell", System.IO.Path.Combine(repositoryRoot, "PowerForge.PowerShell"), System.StringComparison.Ordinal));
+            .Replace("..\\..\\..\\PowerForge.Compiler", System.IO.Path.Combine(repositoryRoot, "PowerForge.Compiler"), System.StringComparison.Ordinal));
         System.IO.File.WriteAllText(System.IO.Path.Combine(projectRoot, "CompiledRoot.cs"), generated.ToString());
         System.IO.File.Copy(System.IO.Path.Combine(fixtureRoot, "NativeScriptEntryFixture.cs"),
             System.IO.Path.Combine(projectRoot, "NativeScriptEntryFixture.cs"));

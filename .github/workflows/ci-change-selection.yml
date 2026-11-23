@@ -71,7 +71,7 @@ jobs:
           def outside_web(path):
               # Projects the website engine neither references nor tests.
               top = pathlib.PurePosixPath(path).parts[0]
-              return top in ('PSPublishModule', 'Module', 'Modules', 'PowerForge.Cli') or \
+              return top in ('PSPublishModule', 'Module', 'Modules', 'PowerForge.Cli', 'PowerForge.Compiler') or \
                   top.startswith(('PowerForge.PowerShell', 'PowerForge.Backups', 'PowerForgeStudio'))
 
           build = web = powershell = True

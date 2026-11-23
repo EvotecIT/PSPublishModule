@@ -15,14 +15,14 @@ try {
     # The loader runs in its own scope, so its working variables do not stay in the module.
     & {
         # Load the precompiled PowerForge module loader built for this PowerShell edition.
-        if (-not ('PowerForge.ModuleLoader.V2.SharedAssemblyPolicy' -as [type])) {
+        if (-not ('PowerForge.ModuleLoader.V3.ForwardedTypeAccelerators' -as [type])) {
             $PowerForgeLoaderEdition = if ($PSEdition -eq 'Core') { 'Core' } else { 'Desktop' }
-            $PowerForgeLoaderPath = [IO.Path]::Combine($PowerForgeModuleRoot, 'Loader', $PowerForgeLoaderEdition, 'PowerForge.ModuleLoader.V2.dll')
+            $PowerForgeLoaderPath = [IO.Path]::Combine($PowerForgeModuleRoot, 'Loader', $PowerForgeLoaderEdition, 'PowerForge.ModuleLoader.V3.dll')
             try {
                 Add-Type -Path $PowerForgeLoaderPath -ErrorAction Stop
             } catch {
                 # Another runspace can load the same loader between the probe and Add-Type.
-                if (-not ('PowerForge.ModuleLoader.V2.SharedAssemblyPolicy' -as [type])) {
+                if (-not ('PowerForge.ModuleLoader.V3.ForwardedTypeAccelerators' -as [type])) {
                     throw
                 }
             }

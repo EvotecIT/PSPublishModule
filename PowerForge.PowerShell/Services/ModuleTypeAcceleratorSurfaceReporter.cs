@@ -237,7 +237,9 @@ internal sealed class ModuleTypeAcceleratorSurfaceReporter
     {
         try
         {
-            return assembly.GetExportedTypes();
+            return assembly.GetExportedTypes()
+                .Concat(ModuleLoader.V1.TypeAcceleratorForwardedTypes.Read(assembly, warnings.Add))
+                .ToArray();
         }
         catch (ReflectionTypeLoadException ex)
         {

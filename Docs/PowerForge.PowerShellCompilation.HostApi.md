@@ -4,7 +4,10 @@ Desktop tools, editor extensions and CI steps can use the same compiler service 
 
 ## Host API
 
-The service lives in `PowerForge.PowerShell` in the `PowerForge` namespace.
+The service lives in the `PowerForge.Compiler` assembly and NuGet package,
+in the `PowerForge` namespace. `PowerForge.PowerShell` brings the compiler
+package in as a dependency and forwards the existing compiler types for
+applications built against the earlier assembly.
 
 ```csharp
 public PowerShellCompilationCheckResult Check(

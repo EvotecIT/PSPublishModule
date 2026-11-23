@@ -29,7 +29,7 @@ def qualify(module_source, output):
     hosts=[('net10.0',shutil.which('pwsh')),('net472',str(Path(os.environ['SystemRoot'])/'System32/WindowsPowerShell/v1.0/powershell.exe'))]
     assert cli.is_file() and all(host for _,host in hosts)
     summary={'compilerCommit':subprocess.check_output(['git','-C',str(repo),'rev-parse','HEAD'],text=True).strip(),'moduleSourceSha256':digest(module_source),'functionSourceSha256':digest(original),'targets':[]}
-    summary['compilerSourceHashes']={'PowerForge.PowerShell/Services/Compilation/PowerShellCompilationParameterTypePolicy.cs':digest(repo/'PowerForge.PowerShell/Services/Compilation/PowerShellCompilationParameterTypePolicy.cs')}
+    summary['compilerSourceHashes']={'PowerForge.Compiler/Services/Compilation/PowerShellCompilationParameterTypePolicy.cs':digest(repo/'PowerForge.Compiler/Services/Compilation/PowerShellCompilationParameterTypePolicy.cs')}
     summary['compilerBinarySha256']=digest(cli)
     for framework,host in hosts:
         build=subprocess.run(['dotnet',str(cli),'powershell','build',str(original),'--kind','dll','--mode','Hybrid','--framework',framework,'--out',str(output/framework),'--name','Offline.HelpName','--allow-unreviewed-dependencies','--output','json'],capture_output=True,timeout=180)

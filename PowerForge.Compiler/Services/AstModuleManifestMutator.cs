@@ -67,9 +67,28 @@ public sealed class AstModuleManifestMutator : IModuleManifestMutator
 
     /// <inheritdoc />
     public bool TrySetManifestExports(string filePath, string[]? functions, string[]? cmdlets, string[]? aliases)
-        => BuildServices.SetManifestExports(filePath, functions, cmdlets, aliases);
+        => SetManifestExports(filePath, functions, cmdlets, aliases);
 
     /// <inheritdoc />
     public bool TrySetRepository(string filePath, string? branch, string[]? paths)
-        => BuildServices.SetRepository(filePath, branch, paths);
+        => SetRepository(filePath, branch, paths);
+
+    internal static bool SetManifestExports(string filePath, IEnumerable<string>? functions, IEnumerable<string>? cmdlets, IEnumerable<string>? aliases)
+    {
+        bool changed = false;
+        if (functions != null) changed |= ManifestEditor.TrySetTopLevelStringArray(filePath, "FunctionsToExport", functions.ToArray());
+        if (cmdlets != null) changed |= ManifestEditor.TrySetTopLevelStringArray(filePath, "CmdletsToExport", cmdlets.ToArray());
+        if (aliases != null) changed |= ManifestEditor.TrySetTopLevelStringArray(filePath, "AliasesToExport", aliases.ToArray());
+        return changed;
+    }
+
+    internal static bool SetRepository(string filePath, string? branch, IEnumerable<string>? paths)
+    {
+        bool changed = false;
+        if (!string.IsNullOrWhiteSpace(branch))
+            changed |= ManifestEditor.TrySetPsDataSubString(filePath, "Repository", "Branch", branch!);
+        if (paths != null)
+            changed |= ManifestEditor.TrySetPsDataSubStringArray(filePath, "Repository", "Paths", paths.ToArray());
+        return changed;
+    }
 }
