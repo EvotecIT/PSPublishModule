@@ -28,6 +28,7 @@ namespace PowerForge.Fluent {
         /// On a settings type: a parameterless instance method (public or internal, declared or inherited) that returns a
         /// copy. A settable property of this type, or of a type deriving from it, is then configured on a copy that is
         /// assigned, copied again, only after the callback returns, so a failing callback leaves the owner unchanged.
+        /// Another assembly uses the method only when it can call it (a public method); otherwise it configures in place.
         /// </summary>
         public string Copy { get; set; }
     }

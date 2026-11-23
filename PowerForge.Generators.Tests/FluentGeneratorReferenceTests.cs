@@ -288,6 +288,72 @@ public sealed class FluentGeneratorReferenceTests {
         Assert.Equal(new object[] { (byte)1, 0 }, Execute(usage));
     }
 
+    [Fact]
+    public void ReferencedSettingsWithAPublicCopyMethodAreConfiguredOnACopy() {
+        const string baseLibrary = """
+            using PowerForge.Fluent;
+
+            namespace Sample.Blocks {
+                [Fluent(Copy = "Clone")]
+                public sealed class Shared {
+                    public string Name { get; set; } = "first";
+                    public Shared Clone() => (Shared)MemberwiseClone();
+                }
+
+                [Fluent(Copy = "Clone")]
+                public sealed class Hidden {
+                    public string Name { get; set; } = "first";
+                    internal Hidden Clone() => (Hidden)MemberwiseClone();
+                }
+            }
+            """;
+        (Compilation baseCompilation, ImmutableArray<Diagnostic> baseDiagnostics) = Run(baseLibrary);
+        Assert.Empty(baseDiagnostics);
+        using MemoryStream image = new MemoryStream();
+        Assert.True(baseCompilation.Emit(image).Success);
+
+        const string consumer = """
+            using System;
+            using Sample.Blocks;
+
+            namespace Sample {
+                [PowerForge.Fluent.Fluent]
+                public sealed class Canvas {
+                    public Shared Shared { get; set; } = new Shared();
+                    public Hidden Hidden { get; set; } = new Hidden();
+                }
+
+                public static class Usage {
+                    public static object[] Run() {
+                        Canvas canvas = new Canvas();
+                        Shared? seen = null;
+                        Hidden? hidden = null;
+                        canvas.Shared(s => { seen = s; s.Name = "second"; }).Hidden(h => { hidden = h; h.Name = "second"; });
+                        seen!.Name = "late";
+                        try {
+                            canvas.Shared(s => { s.Name = "partial"; throw new InvalidOperationException(); });
+                        } catch (InvalidOperationException) {
+                        }
+                        return new object[] { canvas.Shared.Name, ReferenceEquals(hidden, canvas.Hidden), canvas.Hidden.Name };
+                    }
+                }
+            }
+            """;
+        (Compilation compilation, ImmutableArray<Diagnostic> diagnostics) = TestCompiler.Run(consumer, LanguageVersion.Latest, null,
+            new[] { MetadataReference.CreateFromImage(image.ToArray()) }, new FluentGenerator());
+        Assert.Empty(diagnostics);
+
+        // The public Clone is used across the assembly boundary; the internal one is not visible, so Hidden is edited in place.
+        Assembly blocks = Assembly.Load(image.ToArray());
+        ResolveEventHandler resolve = (_, args) => args.Name == blocks.FullName ? blocks : null;
+        AppDomain.CurrentDomain.AssemblyResolve += resolve;
+        try {
+            Assert.Equal(new object[] { "second", true, "second" }, Execute(compilation));
+        } finally {
+            AppDomain.CurrentDomain.AssemblyResolve -= resolve;
+        }
+    }
+
     private static (Compilation Compilation, ImmutableArray<Diagnostic> Diagnostics) Run(string source, LanguageVersion version = LanguageVersion.Latest, bool prefixed = false) =>
         TestCompiler.Run(source, version, prefixed ? new Dictionary<string, string> { ["PowerForgeFluentNaming"] = "Prefixed" } : null, new FluentGenerator());
 

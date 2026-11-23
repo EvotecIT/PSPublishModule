@@ -15,18 +15,14 @@ namespace PowerForge.Generators.Fluent {
 
             // The copy method a settings type declares, or inherits, with [Fluent(Copy = "Name")]; null when it has none or
             // the named method does not fit (reported once per type, when this assembly declares the attribute). A settings
-            // type from a referenced library has none here: it is configured in place, since its copy method usually is not
-            // visible outside that library and the consumer could not fix it.
+            // type from a referenced library uses its copy method only when that method is visible here; otherwise it is
+            // configured in place, since the consumer could not fix it.
             internal IMethodSymbol? CopyMethod(INamedTypeSymbol type) {
                 type = (INamedTypeSymbol)type.WithNullableAnnotation(NullableAnnotation.NotAnnotated);
                 if (_copies.TryGetValue(type, out IMethodSymbol? cached)) {
                     return cached;
                 }
                 IMethodSymbol? result = null;
-                if (!SymbolEqualityComparer.Default.Equals(type.ContainingAssembly, _compilation.Assembly)) {
-                    _copies[type] = null;
-                    return null;
-                }
                 // The most derived declaration wins.
                 AttributeData? attribute = BaseTypes(type).Select(t => Attribute(t.OriginalDefinition, FluentAttributes.Fluent))
                     .FirstOrDefault(a => a != null && a.NamedArguments.Any(n => n.Key == "Copy" && n.Value.Value is string));
