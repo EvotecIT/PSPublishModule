@@ -161,27 +161,29 @@ public sealed class FluentGeneratorReferenceTests {
     }
 
     [Fact]
-    public void GenericOptionalMethodsLeavePresetNamesFree() {
+    public void GenericMethodsLeavePresetNamesFree() {
         const string library = """
             using PowerForge.Fluent;
 
             namespace Sample {
                 [Fluent]
                 public sealed class Card {
-                    // card.Reset() cannot infer T, so it binds to the generated preset.
+                    // card.Reset() and card.Clear() cannot infer T, so they bind to the generated presets.
                     public Card Reset<T>(int size = 10) { Size = size; return this; }
+                    public Card Clear<T>() { Size = 99; return this; }
                     [FluentPreset("Reset", 0)]
+                    [FluentPreset("Clear", -1)]
                     public int Size { get; set; } = 5;
                 }
 
                 public static class Usage {
-                    public static object[] Run() => new object[] { new Card().Reset().Size };
+                    public static object[] Run() => new object[] { new Card().Reset().Size, new Card().Clear().Size };
                 }
             }
             """;
         (Compilation compilation, ImmutableArray<Diagnostic> diagnostics) = Run(library);
         Assert.Empty(diagnostics);
-        Assert.Equal(new object[] { 0 }, Execute(compilation));
+        Assert.Equal(new object[] { 0, -1 }, Execute(compilation));
     }
 
     [Fact]
@@ -354,8 +356,116 @@ public sealed class FluentGeneratorReferenceTests {
         }
     }
 
+    [Fact]
+    public void DerivableTypesReuseTheMethodsOfAReferencedGeneratedBase() {
+        const string baseLibrary = """
+            using PowerForge.Fluent;
+
+            namespace Sample.Charts {
+                public sealed class ChartOptions {
+                    public string Theme { get; set; } = "light";
+                }
+
+                [Fluent]
+                public class Chart {
+                    public string? Title { get; set; }
+                    [FluentInline]
+                    public ChartOptions Options { get; } = new ChartOptions();
+                }
+            }
+            """;
+        (Compilation baseCompilation, ImmutableArray<Diagnostic> baseDiagnostics) = Run(baseLibrary);
+        Assert.Empty(baseDiagnostics);
+        using MemoryStream image = new MemoryStream();
+        Assert.True(baseCompilation.Emit(image).Success);
+
+        const string consumer = """
+            namespace Sample.Charts {
+                public class Pie : Chart {
+                    public int Slices { get; set; }
+                }
+
+                public sealed class Donut : Pie {
+                    public int Hole { get; set; }
+                }
+            }
+
+            namespace Sample {
+                using Sample.Charts;
+
+                public static class Usage {
+                    public static object[] Run() {
+                        Pie pie = new Pie().Title("Share").Theme("dark").Slices(3);
+                        Donut donut = new Donut().Theme("muted").Hole(2).Title("Ring").Slices(4);
+                        return new object[] { pie.Title!, pie.Options.Theme, pie.Slices, donut.Title!, donut.Options.Theme, donut.Hole, donut.Slices };
+                    }
+                }
+            }
+            """;
+        (Compilation compilation, ImmutableArray<Diagnostic> diagnostics) = TestCompiler.Run(consumer, LanguageVersion.Latest, null,
+            new[] { MetadataReference.CreateFromImage(image.ToArray()) }, new FluentGenerator());
+        Assert.Empty(diagnostics);
+        Assert.Equal(new object[] { "Share", "dark", 3, "Ring", "muted", 2, 4 }, ExecuteWith(compilation, image.ToArray()));
+    }
+
+    [Fact]
+    public void ReferencedPresetsBackedByInternalMembersReachTheOwner() {
+        const string baseLibrary = """
+            using PowerForge.Fluent;
+
+            namespace Sample.Blocks {
+                [Fluent]
+                public sealed class BlockOptions {
+                    [FluentPreset("Standard", typeof(Defaults), "Standard")]
+                    public string Theme { get; set; } = "light";
+                }
+
+                internal static class Defaults {
+                    internal static string Standard => "standard";
+                }
+            }
+            """;
+        (Compilation baseCompilation, ImmutableArray<Diagnostic> baseDiagnostics) = Run(baseLibrary);
+        Assert.Empty(baseDiagnostics);
+        using MemoryStream image = new MemoryStream();
+        Assert.True(baseCompilation.Emit(image).Success);
+
+        const string consumer = """
+            using PowerForge.Fluent;
+            using Sample.Blocks;
+
+            namespace Sample {
+                [Fluent]
+                public sealed class Card {
+                    [FluentInline]
+                    public BlockOptions Options { get; } = new BlockOptions();
+                }
+
+                public static class Usage {
+                    public static object[] Run() => new object[] { new Card().Standard().Options.Theme };
+                }
+            }
+            """;
+        (Compilation compilation, ImmutableArray<Diagnostic> diagnostics) = TestCompiler.Run(consumer, LanguageVersion.Latest, null,
+            new[] { MetadataReference.CreateFromImage(image.ToArray()) }, new FluentGenerator());
+        Assert.Empty(diagnostics);
+        Assert.Equal(new object[] { "standard" }, ExecuteWith(compilation, image.ToArray()));
+    }
+
     private static (Compilation Compilation, ImmutableArray<Diagnostic> Diagnostics) Run(string source, LanguageVersion version = LanguageVersion.Latest, bool prefixed = false) =>
         TestCompiler.Run(source, version, prefixed ? new Dictionary<string, string> { ["PowerForgeFluentNaming"] = "Prefixed" } : null, new FluentGenerator());
 
     private static object[] Execute(Compilation compilation) => (object[])TestCompiler.Load(compilation).GetType("Sample.Usage")!.GetMethod("Run")!.Invoke(null, null)!;
+
+    // Runs the consumer with the referenced library it was compiled against.
+    private static object[] ExecuteWith(Compilation compilation, byte[] library) {
+        Assembly referenced = Assembly.Load(library);
+        ResolveEventHandler resolve = (_, args) => args.Name == referenced.FullName ? referenced : null;
+        AppDomain.CurrentDomain.AssemblyResolve += resolve;
+        try {
+            return Execute(compilation);
+        } finally {
+            AppDomain.CurrentDomain.AssemblyResolve -= resolve;
+        }
+    }
 }

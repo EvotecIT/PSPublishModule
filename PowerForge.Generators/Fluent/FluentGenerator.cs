@@ -342,12 +342,14 @@ namespace PowerForge.Generators.Fluent {
                     foreach (IPropertySymbol property in Properties(_type)) {
                         if (_forwards.Any(forward => forward.Name == property.Name)) { continue; }
                         // A property first declared by a generated base that can be derived from (overrides included) is covered
-                        // by the base's generic methods; generating it again would make calls ambiguous. An abstract base's
-                        // methods still get non-generic copies on sealed types, which win overload resolution.
+                        // by the base's generic methods; generating it again would make calls ambiguous. That base may be in a
+                        // referenced library that generated its own methods. An abstract base's methods still get non-generic
+                        // copies on sealed types, which win overload resolution.
                         IPropertySymbol origin = property;
                         while (origin.OverriddenProperty != null) { origin = origin.OverriddenProperty; }
                         INamedTypeSymbol owner = origin.ContainingType;
-                        if (!SymbolEqualityComparer.Default.Equals(owner, _type) && !owner.IsSealed && _types.Contains(owner.OriginalDefinition, SymbolEqualityComparer.Default)
+                        if (!SymbolEqualityComparer.Default.Equals(owner, _type) && !owner.IsSealed
+                            && (_types.Contains(owner.OriginalDefinition, SymbolEqualityComparer.Default) || _emitter.GeneratedSignatures(owner.OriginalDefinition) != null)
                             && (IsCandidate(owner) || !_type.IsSealed)) {
                             continue;
                         }
@@ -553,7 +555,7 @@ namespace PowerForge.Generators.Fluent {
                     // same value parameters both apply to this type and its derived types, so calls would be ambiguous. A sealed
                     // type's non-generic method wins over the base's.
                     bool inherited = !_type.IsSealed && BaseTypes(_type).Skip(1)
-                        .Any(type => _emitter._signatures.TryGetValue(type.OriginalDefinition, out HashSet<string>? generated) && generated.Contains(signature));
+                        .Any(type => _emitter.GeneratedSignatures(type.OriginalDefinition) is HashSet<string> generated && generated.Contains(signature));
                     if (captured || inherited || Taken(name, parameters)) {
                         _emitter._output.ReportDiagnostic(Diagnostic.Create(FluentDiagnostics.Collision, location ?? Location.None, name, _type.Name, member));
                         return false;
@@ -574,12 +576,13 @@ namespace PowerForge.Generators.Fluent {
 
                 // Compares complete value-parameter signatures. A handwritten extension for another receiver leaves the name free.
                 // An instance method callable without arguments (only optional or params parameters) takes name() too: C#
-                // binds the call to it before looking at extensions. A generic one does not, since name() cannot infer its type
-                // arguments.
+                // binds the call to it before looking at extensions. A generic instance method whose type arguments its
+                // parameters cannot infer (Reset<T>()) never takes a call written without type arguments.
                 private bool Taken(string name, params ITypeSymbol[] parameters) => _existing.Where(m => m.Name == name).Concat(_emitter.Extensions[name]).Any(m => {
                     // Internal members of a referenced library can't capture a call made from this one.
                     if (!m.IsExtensionMethod && m.DeclaredAccessibility != Accessibility.Public
                         && !SymbolEqualityComparer.Default.Equals(m.ContainingAssembly, Compilation.Assembly)) { return false; }
+                    if (!m.IsExtensionMethod && m.TypeParameters.Any(type => !m.Parameters.Any(parameter => Mentions(parameter.Type, type)))) { return false; }
                     int offset = m.IsExtensionMethod ? 1 : 0;
                     if (m.IsExtensionMethod && m.Parameters.Length > 0 && !Receives(m.Parameters[0].Type, _type)) { return false; }
                     if (parameters.Length == 0 && !m.IsExtensionMethod && !m.IsStatic && !m.IsGenericMethod && m.Name == name
@@ -587,6 +590,13 @@ namespace PowerForge.Generators.Fluent {
                     return m.Name == name && m.Parameters.Length == parameters.Length + offset
                         && parameters.Select((parameter, index) => SymbolEqualityComparer.Default.Equals(parameter, m.Parameters[index + offset].Type)).All(equal => equal);
                 });
+
+                private static bool Mentions(ITypeSymbol type, ITypeParameterSymbol parameter) => type switch {
+                    ITypeParameterSymbol candidate => SymbolEqualityComparer.Default.Equals(candidate, parameter),
+                    IArrayTypeSymbol array => Mentions(array.ElementType, parameter),
+                    INamedTypeSymbol named => named.TypeArguments.Any(argument => Mentions(argument, parameter)),
+                    _ => false
+                };
 
                 private INamedTypeSymbol Action(ITypeSymbol argument) => Compilation.GetTypeByMetadataName("System.Action`1")!.Construct(argument);
 

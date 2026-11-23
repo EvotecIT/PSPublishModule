@@ -52,9 +52,7 @@ namespace PowerForge.Generators.Fluent {
                     return result;
                 }
                 List<INamedTypeSymbol> declarers = BaseTypes(option).Concat(option.AllInterfaces).Select(t => t.OriginalDefinition).ToList();
-                List<INamedTypeSymbol> fluentClasses = declarers.SelectMany(t => new[] { t.Name, t.ContainingNamespace.IsGlobalNamespace ? "Global" : t.ContainingNamespace.Name }
-                        .Select(stem => t.ContainingNamespace.IsGlobalNamespace ? stem + "Fluent" : t.ContainingNamespace.ToDisplayString() + "." + stem + "Fluent"))
-                    .Distinct(StringComparer.Ordinal).Select(name => _compilation.GetTypeByMetadataName(name)).Where(type => type != null).Select(type => type!).ToList();
+                List<INamedTypeSymbol> fluentClasses = FluentClasses(declarers);
                 foreach (AttributeData attribute in declarers.SelectMany(t => t.GetAttributes()).Where(a => a.AttributeClass?.ToDisplayString() == FluentAttributes.Forward)) {
                     if (attribute.ConstructorArguments.Length != 3 || attribute.ConstructorArguments[0].Value is not string name) {
                         continue;
@@ -72,6 +70,51 @@ namespace PowerForge.Generators.Fluent {
                 }
                 return result;
             }
+
+            // The fluent classes a library generates for these types: one per type, or one per namespace in Prefixed naming.
+            private List<INamedTypeSymbol> FluentClasses(IEnumerable<INamedTypeSymbol> types) => types
+                .SelectMany(t => new[] { t.Name, t.ContainingNamespace.IsGlobalNamespace ? "Global" : t.ContainingNamespace.Name }
+                    .Select(stem => t.ContainingNamespace.IsGlobalNamespace ? stem + "Fluent" : t.ContainingNamespace.ToDisplayString() + "." + stem + "Fluent"))
+                .Distinct(StringComparer.Ordinal).Select(name => _compilation.GetTypeByMetadataName(name)).Where(type => type != null).Select(type => type!).ToList();
+
+            private readonly Dictionary<INamedTypeSymbol, HashSet<string>?> _referencedSignatures = new Dictionary<INamedTypeSymbol, HashSet<string>?>(SymbolEqualityComparer.Default);
+
+            // The value-parameter signatures generated for a type that can be derived from: by this run for a type of this
+            // assembly, or read from the generic (TSelf : type) extensions a referenced library generated for its own type.
+            // Null when nothing was generated for it.
+            internal HashSet<string>? GeneratedSignatures(INamedTypeSymbol type) {
+                if (_signatures.TryGetValue(type, out HashSet<string>? local)) {
+                    return local;
+                }
+                if (SymbolEqualityComparer.Default.Equals(type.ContainingAssembly, _compilation.Assembly)) {
+                    return null;
+                }
+                if (_referencedSignatures.TryGetValue(type, out HashSet<string>? cached)) {
+                    return cached;
+                }
+                HashSet<string>? result = null;
+                IEnumerable<IMethodSymbol> methods = FluentClasses(new[] { type }).SelectMany(t => t.GetMembers()).OfType<IMethodSymbol>()
+                    .Where(m => m.IsExtensionMethod && m.DeclaredAccessibility == Accessibility.Public && m.TypeParameters.Length == 1
+                        && m.Parameters[0].Type is ITypeParameterSymbol self && SymbolEqualityComparer.Default.Equals(self, m.TypeParameters[0])
+                        && self.ConstraintTypes.Any(constraint => SymbolEqualityComparer.Default.Equals(constraint.OriginalDefinition, type)));
+                foreach (IMethodSymbol method in methods) {
+                    List<IParameterSymbol> values = method.Parameters.Skip(1).ToList();
+                    result ??= new HashSet<string>(StringComparer.Ordinal);
+                    result.Add(method.Name + "(" + string.Join(", ", values.Select(parameter => parameter.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat))) + ")");
+                    if (values.Count > 0 && values.All(parameter => parameter.IsOptional)) {
+                        result.Add(method.Name + "()");
+                    }
+                }
+                _referencedSignatures[type] = result;
+                return result;
+            }
+
+            // The public preset extension (name(this T)) a referenced library generated for its settings type, or null.
+            internal IMethodSymbol? ReferencedPreset(INamedTypeSymbol option, string name) =>
+                SymbolEqualityComparer.Default.Equals(option.ContainingAssembly, _compilation.Assembly) ? null
+                : FluentClasses(BaseTypes(option).Select(t => t.OriginalDefinition)).SelectMany(t => t.GetMembers(name)).OfType<IMethodSymbol>()
+                    .FirstOrDefault(m => m.IsExtensionMethod && m.Parameters.Length == 1 && m.Parameters[0].RefKind == RefKind.None
+                        && Receives(m.Parameters[0].Type, option) && _compilation.IsSymbolAccessibleWithin(m, _compilation.Assembly));
 
             private sealed partial class Builder {
                 // [FluentInline]: the owner gets every method the property's type gets, applied to the property.
@@ -132,6 +175,16 @@ namespace PowerForge.Generators.Fluent {
                             value = Constant(attribute.ConstructorArguments[1], property.Type, out failure);
                         } else {
                             value = StaticMember(attribute.ConstructorArguments[1], attribute.ConstructorArguments[2], property.Type, out failure);
+                        }
+                        if (value == null && _via?.Type is INamedTypeSymbol inlined && _emitter.ReferencedPreset(inlined, name) is IMethodSymbol preset) {
+                            // A referenced library's preset backed by a member only it can read: call the extension it generated.
+                            if (Claim(property, name)) {
+                                AppendMethod("        /// <summary>" + (attribute.NamedArguments.FirstOrDefault(a => a.Key == "Summary").Value.Value as string ?? "Applies the " + new XText(name) + " preset of " + Cref(property) + ".") + "</summary>\n"
+                                    + "        /// <param name=\"" + _receiver.TrimStart('@') + "\">The instance.</param>\n"
+                                    + "        /// <returns>The same instance.</returns>\n", name, string.Empty,
+                                    "            " + preset.ContainingType.ToDisplayString(TypeFormat) + "." + Escape(preset.Name) + "(" + _receiver + "." + Escape(_via.Name) + ");\n");
+                            }
+                            continue;
                         }
                         if (value == null) {
                             if (_via == null) {
