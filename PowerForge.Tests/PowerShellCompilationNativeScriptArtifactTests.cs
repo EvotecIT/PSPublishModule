@@ -679,7 +679,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         var plan = new PowerShellCompilationAnalyzer().Analyze(input, PowerShellCompilationMode.Hybrid,
             "net10.0", PowerShellCompilationResourceMode.Declared, null, null, fixture.OutputPath, spec.TargetContract);
         var compiled = PowerShellTypedExecutableCompiler.CompileHybridNativeEntry(
-            fixture.ScriptPath, plan, "net10.0", spec.SemanticProfileId);
+            fixture.ScriptPath, plan, "net10.0", spec.TargetContract.SemanticProfileId);
         Assert.Empty(compiled.LocalMethods);
         Assert.Contains("DeclareFunction", compiled.EntryPointMethod.Source);
         Assert.True(Assert.Single(Assert.Single(PowerShellCompilationExplainShaper

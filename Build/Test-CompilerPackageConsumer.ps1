@@ -7,7 +7,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$packageIds = @('PowerForge.Compiler', 'PowerForge', 'PowerForge.Modules')
+$packageIds = @('PowerForge.Compiler', 'PowerForge', 'PowerForge.Modules', 'PowerForge.Versioning')
 $compiler = @($Packages | Where-Object {
     [IO.Path]::GetFileName($_) -match '^PowerForge\.Compiler\.[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?\.nupkg$'
 })
@@ -55,6 +55,7 @@ try {
       <package pattern="PowerForge.Compiler" />
       <package pattern="PowerForge" />
       <package pattern="PowerForge.Modules" />
+      <package pattern="PowerForge.Versioning" />
     </packageSource>
     <packageSource key="nuget.org">
       <package pattern="*" />
