@@ -118,6 +118,49 @@ $process.Id
         Assert.True(SpinWait.SpinUntil(() => !IsProcessRunning(processId), TimeSpan.FromSeconds(3)));
     }
 
+    [Fact]
+    public void JobObjectObserverCountsStartupChildThatExitedBeforeItsLaunchPacketWasRead()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        var startupChildGone = new ManualResetEventSlim();
+        var rootProcessId = 0;
+        using var root = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(
+            Environment.GetEnvironmentVariable("ComSpec") ?? "cmd.exe", "/d /q")
+        {
+            UseShellExecute = false,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            CreateNoWindow = true
+        })!;
+        rootProcessId = root.Id;
+        try
+        {
+            using var observer = new PowerShellCompilationSemanticWindowsProcessObserver(64, processId =>
+            {
+                if (processId == (uint)Volatile.Read(ref rootProcessId) || IsConsoleHost(processId)) return;
+                // Hold the packet until the child has exited and released its id, as a busy runner does with
+                // the compiler Windows PowerShell starts for Add-Type before authored source runs.
+                if (SpinWait.SpinUntil(() => !CanOpenProcess(processId), TimeSpan.FromSeconds(30)))
+                    startupChildGone.Set();
+            });
+            observer.Attach(root.Id);
+            root.StandardInput.WriteLine("cmd /d /c exit 0");
+            root.StandardInput.Flush();
+            Assert.True(startupChildGone.Wait(TimeSpan.FromSeconds(60)), "The startup child did not exit.");
+
+            observer.BeginAuthoredObservation(TimeSpan.FromSeconds(30));
+            root.StandardInput.WriteLine("exit");
+            root.StandardInput.Flush();
+            Assert.True(root.WaitForExit(30_000));
+
+            Assert.Empty(observer.Complete(TimeSpan.FromSeconds(30)));
+        }
+        finally
+        {
+            if (!root.HasExited) root.Kill();
+        }
+    }
+
     [PinnedSemanticHostFact]
     public void DirectProcessEffectsExecuteOnPinnedPowerShell76AndInstalledWindowsPowerShell()
     {
@@ -170,6 +213,35 @@ $process.Id
             Assert.True(launch.Sequence < exit.Sequence);
         }
     }
+
+    private static bool IsConsoleHost(uint processId)
+    {
+        try
+        {
+            using var process = System.Diagnostics.Process.GetProcessById((int)processId);
+            return process.ProcessName.Equals("conhost", StringComparison.OrdinalIgnoreCase);
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
+        }
+    }
+
+    private static bool CanOpenProcess(uint processId)
+    {
+        using var handle = OpenProcess(0x1000, false, processId);
+        return !handle.IsInvalid;
+    }
+
+    [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+    private static extern Microsoft.Win32.SafeHandles.SafeProcessHandle OpenProcess(
+        uint desiredAccess,
+        bool inheritHandle,
+        uint processId);
 
     private static bool IsProcessRunning(int processId)
     {

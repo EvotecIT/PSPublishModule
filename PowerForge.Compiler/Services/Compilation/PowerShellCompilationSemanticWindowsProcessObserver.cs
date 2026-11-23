@@ -35,23 +35,25 @@ internal sealed class PowerShellCompilationSemanticWindowsProcessObserver : IDis
     private readonly Task _monitor;
     private readonly List<PowerShellCompilationSemanticProcessEffectObservation> _effects = new();
     private readonly Dictionary<uint, DirectProcess> _directProcesses = new();
-    private readonly HashSet<uint> _observedJobProcesses = new();
+    private readonly Action<uint>? _launchPacketReceived;
     private readonly HashSet<uint> _activeAtCompletionBoundary = new();
     private volatile bool _disposed;
     private int _rootProcessId;
     private int _nextInvocation;
+    private uint _observedLaunchPackets;
     private long _authoredBoundaryFileTime;
     private uint _barrierIssued;
     private uint _barrierAcknowledged;
     private Exception? _failure;
 
-    internal PowerShellCompilationSemanticWindowsProcessObserver(int maximumItems)
+    internal PowerShellCompilationSemanticWindowsProcessObserver(int maximumItems, Action<uint>? launchPacketReceived = null)
     {
         if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             throw new PlatformNotSupportedException("Windows Job Object process observation requires Windows.");
         if (maximumItems <= 0)
             throw new ArgumentOutOfRangeException(nameof(maximumItems));
         _maximumItems = maximumItems;
+        _launchPacketReceived = launchPacketReceived;
         _job = CreateJobObject(IntPtr.Zero, null);
         if (_job == IntPtr.Zero)
             throw NewWin32Exception("CreateJobObject");
@@ -216,6 +218,7 @@ internal sealed class PowerShellCompilationSemanticWindowsProcessObserver : IDis
                 switch (message)
                 {
                     case JobObjectMessageNewProcess:
+                        _launchPacketReceived?.Invoke(processId);
                         ObserveLaunch(processId);
                         break;
                     case JobObjectMessageExitProcess:
@@ -244,9 +247,20 @@ internal sealed class PowerShellCompilationSemanticWindowsProcessObserver : IDis
         long authoredBoundary;
         lock (_sync)
         {
+            ThrowIfFailed();
+            if (_observedLaunchPackets >= _maximumItems)
+                throw new InvalidOperationException(
+                    $"Job process launches exceed the {_maximumItems}-item semantic observation limit.");
+            _observedLaunchPackets++;
             rootProcessId = _rootProcessId;
             authoredBoundary = _authoredBoundaryFileTime;
+            Monitor.PulseAll(_sync);
         }
+        // A packet dequeued before the authored boundary exists belongs to a process created before it, such as the
+        // compiler Windows PowerShell starts for Add-Type. Those processes are only counted: they may already have
+        // exited and released their id, so opening them could fail or reach an unrelated process that reused the id.
+        if (processId == rootProcessId || authoredBoundary == 0)
+            return;
         var handle = OpenProcess(ProcessQueryLimitedInformation | Synchronize, false, processId);
         if (handle.IsInvalid)
         {
@@ -268,24 +282,7 @@ internal sealed class PowerShellCompilationSemanticWindowsProcessObserver : IDis
             handle.Dispose();
             throw NewWin32Exception($"GetProcessTimes({processId})");
         }
-        var creationFileTime = ToInt64(created);
-        lock (_sync)
-        {
-            ThrowIfFailed();
-            if (_observedJobProcesses.Count >= _maximumItems)
-            {
-                handle.Dispose();
-                throw new InvalidOperationException(
-                    $"Job process launches exceed the {_maximumItems}-item semantic observation limit.");
-            }
-            if (!_observedJobProcesses.Add(processId))
-            {
-                handle.Dispose();
-                throw new InvalidOperationException($"Job process id {processId} was observed more than once; PID reuse cannot produce portable evidence.");
-            }
-            Monitor.PulseAll(_sync);
-        }
-        if (processId == rootProcessId || !IsAuthoredLaunch(creationFileTime, authoredBoundary))
+        if (!IsAuthoredLaunch(ToInt64(created), authoredBoundary))
         {
             handle.Dispose();
             return;
@@ -376,8 +373,7 @@ internal sealed class PowerShellCompilationSemanticWindowsProcessObserver : IDis
             lock (_sync)
             {
                 ThrowIfFailed();
-                var observed = (uint)_observedJobProcesses.Count;
-                if (IsCompleteLaunchHistory(observed, accounting.TotalProcesses) &&
+                if (IsCompleteLaunchHistory(_observedLaunchPackets, accounting.TotalProcesses) &&
                     (!requireNoActiveProcesses || accounting.ActiveProcesses == 0))
                     return;
             }
@@ -460,7 +456,7 @@ internal sealed class PowerShellCompilationSemanticWindowsProcessObserver : IDis
     private void ThrowIfFailed()
     {
         if (_failure is not null)
-            throw new InvalidOperationException("Direct child-process Job Object observation failed.", _failure);
+            throw new InvalidOperationException($"Direct child-process Job Object observation failed: {_failure.Message}", _failure);
     }
 
     private static string GetExecutableName(SafeFileHandle process, uint processId)
