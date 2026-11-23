@@ -86,6 +86,29 @@ public sealed class AppleSimulatorDuoPoseTests
         Assert.Equal("Shutdown", fixture.State);
     }
 
+    [Fact]
+    public async Task Late_matching_screenshot_cannot_start_capture_after_the_pose_prompt_deadline()
+    {
+        using var fixture = new Fixture
+        {
+            LiveDisplay = "primary", PersonOpensAfterProbes = 1, MatchingScreenshotDelay = TimeSpan.FromMilliseconds(1100)
+        };
+        var invoked = false;
+        fixture.Validation = _ => invoked = true;
+        var request = fixture.Request(AppleDuoPose.Open, foldTool: false);
+        request.DuoPose!.PromptTimeout = TimeSpan.FromSeconds(1);
+
+        var result = await fixture.Service.RunAsync(request);
+
+        Assert.False(result.Success);
+        Assert.False(invoked);
+        Assert.Contains("within 1 s", result.Error);
+        var promptProbeTimeout = Assert.Single(fixture.ScreenshotTimeouts.Skip(1));
+        Assert.InRange(promptProbeTimeout, TimeSpan.FromTicks(1), request.DuoPose.PromptTimeout);
+        Assert.True(result.Receipt.CleanupSucceeded);
+        Assert.Equal("Shutdown", fixture.State);
+    }
+
     internal static byte[] Png(int width, int height, bool lit, byte filter)
     {
         const int channels = 4;
@@ -172,6 +195,8 @@ public sealed class AppleSimulatorDuoPoseTests
         internal int FoldExitCode { get; init; }
         internal string FoldToolVersion { get; init; } = "duoctl " + AppleSimulatorSessionService.PinnedDuoFoldToolVersion;
         internal int PersonOpensAfterProbes { get; init; } = int.MaxValue;
+        internal TimeSpan MatchingScreenshotDelay { get; init; }
+        internal List<TimeSpan> ScreenshotTimeouts { get; } = new();
         internal List<string> FoldToolCalls { get; } = new();
         internal StringWriter Prompt { get; } = new();
         internal Action<ProcessRunRequest> Validation { get; set; } = _ => { };
@@ -211,10 +236,13 @@ public sealed class AppleSimulatorDuoPoseTests
                 case "bootstatus": return Result();
                 case "shutdown": State = "Shutdown"; return Result();
                 case "io":
+                    ScreenshotTimeouts.Add(request.Timeout);
                     if (++_probes > PersonOpensAfterProbes) LiveDisplay = "primary-1";
                     var display = request.Arguments[6].Substring("--display=".Length);
                     var (width, height) = display == "primary" ? (1398, 2034) : (2853, 2007);
                     File.WriteAllBytes(request.Arguments[7], Image(width, height, display == LiveDisplay));
+                    if (display == LiveDisplay && MatchingScreenshotDelay > TimeSpan.Zero)
+                        Thread.Sleep(MatchingScreenshotDelay);
                     return Result();
                 default: throw new InvalidOperationException("Unexpected simulator command " + command);
             }

@@ -113,8 +113,8 @@ control. It needs no Accessibility permission.
 **duoctl relies on private, undocumented simulator interfaces.** An Xcode or
 simulator runtime update can break it. PowerForge treats it as a convenience:
 
-- It only runs duoctl when its `--version` reports exactly
-  `duoctl 0.2.1`, the release PowerForge was checked against.
+- It checks the selected tool's version and only asks it to fold or rotate if
+  it reports `duoctl 0.2.1`, the release PowerForge was checked against.
 - It doesn't trust duoctl's exit code. duoctl confirms each change through
   `devicectl`, which doesn't list simulators on device-specific runtimes such
   as `iOS-27-2-iPhone19-4`, so it can report a failure after folding correctly.
@@ -127,9 +127,19 @@ duoctl is a build tool. Install it on the capture Mac, never in what the app
 ships. Pin the release by tag and commit:
 
 ```bash
-git clone --depth 1 --branch v0.2.1 https://github.com/skarol/duoctl.git "$TOOLS/duoctl"
-test "$(git -C "$TOOLS/duoctl" rev-parse HEAD)" = c6ff3e961a9858fb061907448e702d7d1617dc4a
-export POWERFORGE_DUO_FOLD_TOOL="$TOOLS/duoctl/skills/duoctl/scripts/duoctl"
+unset POWERFORGE_DUO_FOLD_TOOL
+duoctl_dir="$HOME/.local/share/powerforge/duoctl-v0.2.1"
+if mkdir -p "$(dirname "$duoctl_dir")" &&
+   { test -d "$duoctl_dir/.git" ||
+     git clone --depth 1 --branch v0.2.1 https://github.com/skarol/duoctl.git "$duoctl_dir"; } &&
+   test "$(git -C "$duoctl_dir" rev-parse --verify HEAD)" = c6ff3e961a9858fb061907448e702d7d1617dc4a &&
+   duoctl_status="$(git -C "$duoctl_dir" status --porcelain --untracked-files=all)" &&
+   test -z "$duoctl_status" &&
+   test -x "$duoctl_dir/skills/duoctl/scripts/duoctl"; then
+    export POWERFORGE_DUO_FOLD_TOOL="$duoctl_dir/skills/duoctl/scripts/duoctl"
+else
+    printf '%s\n' 'Could not verify the pinned duoctl checkout. PowerForge will use Device Hub.' >&2
+fi
 ```
 
 On Xcode 27.2 with the `iOS-27-2-iPhone19-4` runtime, duoctl folds reliably but

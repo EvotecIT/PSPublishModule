@@ -1,3 +1,5 @@
+using System.Diagnostics;
+
 namespace PowerForge;
 
 public sealed partial class AppleSimulatorSessionService
@@ -26,16 +28,17 @@ public sealed partial class AppleSimulatorSessionService
 
         _promptWriter.WriteLine($"iPhone Duo {deviceId}: in Device Hub, choose {DescribePose(pose)}. " +
             $"Waiting up to {FormatDuration(pose.PromptTimeout)} for the {DescribeDisplay(pose.Pose)} display...");
-        var prompted = System.Diagnostics.Stopwatch.StartNew();
+        var prompted = Stopwatch.StartNew();
         for (var waited = TimeSpan.Zero; waited < pose.PromptTimeout && prompted.Elapsed < pose.PromptTimeout; waited += DuoPollInterval)
         {
-            await _delay(DuoPollInterval, cancellationToken).ConfigureAwait(false);
-            reading = await ProbeDuoDisplayAsync(deviceId, deviceSet, display, simulatorTimeout, cancellationToken).ConfigureAwait(false);
+            reading = await ProbeDuoDisplayBeforeDeadlineAsync(deviceId, deviceSet, display, simulatorTimeout,
+                prompted, pose.PromptTimeout, cancellationToken).ConfigureAwait(false);
             if (DuoPoseReached(pose, reading))
             {
                 _promptWriter.WriteLine($"iPhone Duo {deviceId}: {DescribeDisplay(pose.Pose)} display is live at {reading!.Value.Width}x{reading.Value.Height}.");
                 return Complete(result, reading.Value, "prompt");
             }
+            await DelayDuoWithinBudgetAsync(DuoPollInterval, prompted, pose.PromptTimeout, cancellationToken).ConfigureAwait(false);
         }
         throw new InvalidOperationException($"The iPhone Duo {DescribeDisplay(pose.Pose)} display wasn't live " +
             $"{DescribeOrientation(pose.Orientation)}within {FormatDuration(pose.PromptTimeout)}. Set {DescribePose(pose)} in Device Hub.");
@@ -55,22 +58,25 @@ public sealed partial class AppleSimulatorSessionService
         // code isn't trusted either way: the screenshot of the target display decides.
         await RunFoldToolAsync(tool, new[] { "-d", deviceId, pose.Pose == AppleDuoPose.Closed ? "close" : "open", "--duration", "1" },
             pose.FoldTimeout, cancellationToken).ConfigureAwait(false);
-        var clock = System.Diagnostics.Stopwatch.StartNew();
+        var clock = Stopwatch.StartNew();
         AppleDuoScreenshotProbe.Reading? reading = null;
         for (var waited = TimeSpan.Zero; waited < pose.FoldTimeout && clock.Elapsed < pose.FoldTimeout; waited += DuoPollInterval)
         {
-            reading = await ProbeDuoDisplayAsync(deviceId, deviceSet, display, simulatorTimeout, cancellationToken).ConfigureAwait(false);
+            reading = await ProbeDuoDisplayBeforeDeadlineAsync(deviceId, deviceSet, display, simulatorTimeout,
+                clock, pose.FoldTimeout, cancellationToken).ConfigureAwait(false);
             if (DuoPoseReached(pose, reading)) return (reading, string.Empty);
             if (reading is { Live: true }) break;
-            await _delay(DuoPollInterval, cancellationToken).ConfigureAwait(false);
+            await DelayDuoWithinBudgetAsync(DuoPollInterval, clock, pose.FoldTimeout, cancellationToken).ConfigureAwait(false);
         }
         if (reading is { Live: true } && pose.Orientation != AppleDuoOrientation.Any)
         {
             // The display is live in the other orientation. One rotate, then one more look once it has settled.
             await RunFoldToolAsync(tool, new[] { "-d", deviceId, "rotate", pose.Orientation == AppleDuoOrientation.Portrait ? "portrait" : "landscape" },
                 pose.FoldTimeout, cancellationToken).ConfigureAwait(false);
-            await _delay(DuoRotationSettle, cancellationToken).ConfigureAwait(false);
-            reading = await ProbeDuoDisplayAsync(deviceId, deviceSet, display, simulatorTimeout, cancellationToken).ConfigureAwait(false);
+            var rotationClock = Stopwatch.StartNew();
+            await DelayDuoWithinBudgetAsync(DuoRotationSettle, rotationClock, pose.FoldTimeout, cancellationToken).ConfigureAwait(false);
+            reading = await ProbeDuoDisplayBeforeDeadlineAsync(deviceId, deviceSet, display, simulatorTimeout,
+                rotationClock, pose.FoldTimeout, cancellationToken).ConfigureAwait(false);
             if (DuoPoseReached(pose, reading)) return (reading, string.Empty);
         }
         var seen = reading is null ? "no screenshot" : reading.Value.Live ? $"live at {reading.Value.Width}x{reading.Value.Height}" : "not live";
@@ -80,6 +86,25 @@ public sealed partial class AppleSimulatorSessionService
     private Task<ProcessRunResult> RunFoldToolAsync(string tool, IReadOnlyList<string> arguments, TimeSpan timeout, CancellationToken cancellationToken)
         => _simulatorRunner.RunAsync(new ProcessRunRequest(tool, Directory.GetCurrentDirectory(), arguments, timeout)
         { MaxCapturedOutputCharacters = 64 * 1024 }, cancellationToken);
+
+    private async Task<AppleDuoScreenshotProbe.Reading?> ProbeDuoDisplayBeforeDeadlineAsync(string deviceId, string? deviceSet,
+        string display, TimeSpan simulatorTimeout, Stopwatch clock, TimeSpan budget, CancellationToken cancellationToken)
+    {
+        var remaining = budget - clock.Elapsed;
+        if (remaining <= TimeSpan.Zero) return null;
+        var reading = await ProbeDuoDisplayAsync(deviceId, deviceSet, display,
+            remaining < simulatorTimeout ? remaining : simulatorTimeout, cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        return clock.Elapsed < budget ? reading : null;
+    }
+
+    private Task DelayDuoWithinBudgetAsync(TimeSpan delay, Stopwatch clock, TimeSpan budget, CancellationToken cancellationToken)
+    {
+        var remaining = budget - clock.Elapsed;
+        return remaining > TimeSpan.Zero
+            ? _delay(remaining < delay ? remaining : delay, cancellationToken)
+            : Task.CompletedTask;
+    }
 
     private async Task<AppleDuoScreenshotProbe.Reading?> ProbeDuoDisplayAsync(string deviceId, string? deviceSet, string display,
         TimeSpan timeout, CancellationToken cancellationToken)
