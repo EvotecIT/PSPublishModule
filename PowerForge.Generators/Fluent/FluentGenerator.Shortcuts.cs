@@ -46,6 +46,32 @@ namespace PowerForge.Generators.Fluent {
                 return result;
             }
 
+            // The forwards an owner inlining a settings type emits. A target this assembly cannot call (an internal helper of a
+            // referenced library) is reached through the public extension that library generated for the settings type; a
+            // forward with neither is left out, and the settings type's own property methods stay on the owner.
+            internal List<(string Name, IMethodSymbol Target, string Summary, string ValueSummary)> InlineForwards(INamedTypeSymbol option) {
+                List<(string Name, IMethodSymbol Target, string Summary, string ValueSummary)> result = Forwards(option, report: false).ToList();
+                if (SymbolEqualityComparer.Default.Equals(option.ContainingAssembly, _compilation.Assembly)) {
+                    return result;
+                }
+                List<INamedTypeSymbol> declarers = BaseTypes(option).Concat(option.AllInterfaces).Select(t => t.OriginalDefinition).ToList();
+                List<INamedTypeSymbol> fluentClasses = declarers.SelectMany(t => new[] { t.Name, t.ContainingNamespace.IsGlobalNamespace ? "Global" : t.ContainingNamespace.Name }
+                        .Select(stem => t.ContainingNamespace.IsGlobalNamespace ? stem + "Fluent" : t.ContainingNamespace.ToDisplayString() + "." + stem + "Fluent"))
+                    .Distinct(StringComparer.Ordinal).Select(name => _compilation.GetTypeByMetadataName(name)).Where(type => type != null).Select(type => type!).ToList();
+                foreach (AttributeData attribute in declarers.SelectMany(t => t.GetAttributes()).Where(a => a.AttributeClass?.ToDisplayString() == FluentAttributes.Forward)) {
+                    if (attribute.ConstructorArguments.Length != 3 || attribute.ConstructorArguments[0].Value is not string name || result.Any(forward => forward.Name == name)) {
+                        continue;
+                    }
+                    string summary = attribute.NamedArguments.FirstOrDefault(a => a.Key == "Summary").Value.Value as string ?? "Sets " + name + ".";
+                    string value = attribute.NamedArguments.FirstOrDefault(a => a.Key == "ValueSummary").Value.Value as string ?? "The value.";
+                    result.AddRange(fluentClasses.SelectMany(type => type.GetMembers(name)).OfType<IMethodSymbol>()
+                        .Where(m => m.IsStatic && m.IsExtensionMethod && m.Parameters.Length == 2 && m.Parameters.All(p => p.RefKind == RefKind.None)
+                            && Receives(m.Parameters[0].Type, option) && _compilation.IsSymbolAccessibleWithin(m, _compilation.Assembly))
+                        .Select(m => (name, m, summary, value)));
+                }
+                return result;
+            }
+
             private sealed partial class Builder {
                 // [FluentInline]: the owner gets every method the property's type gets, applied to the property.
                 private void AppendInline(IPropertySymbol property) {
@@ -55,13 +81,12 @@ namespace PowerForge.Generators.Fluent {
                         Report(FluentDiagnostics.InvalidInline, property, _type.Name, property.Name);
                         return;
                     }
-                    // A [FluentForward] name replaces the property of that name on the inlined type too.
-                    HashSet<string> forwarded = new HashSet<string>(BaseTypes(option).Concat(option.AllInterfaces).Select(t => t.OriginalDefinition)
-                        .SelectMany(t => t.GetAttributes()).Where(a => a.AttributeClass?.ToDisplayString() == FluentAttributes.Forward && a.ConstructorArguments.Length == 3)
-                        .Select(a => a.ConstructorArguments[0].Value as string).Where(name => name != null).Select(name => name!), StringComparer.Ordinal);
+                    // A [FluentForward] name the owner can call replaces the property of that name on the inlined type too.
+                    List<(string Name, IMethodSymbol Target, string Summary, string ValueSummary)> forwards = _emitter.InlineForwards(option);
+                    HashSet<string> forwarded = new HashSet<string>(forwards.Select(forward => forward.Name), StringComparer.Ordinal);
                     _via = property;
                     try {
-                        foreach ((string name, IMethodSymbol target, string summary, string valueSummary) in _emitter.Forwards(option, report: false)) {
+                        foreach ((string name, IMethodSymbol target, string summary, string valueSummary) in forwards) {
                             AppendForward(name, target, summary, valueSummary);
                         }
                         foreach (IPropertySymbol member in Properties(option)) {
@@ -171,6 +196,10 @@ namespace PowerForge.Generators.Fluent {
                     }
                     Conversion conversion = ((CSharpCompilation)Compilation).ClassifyConversion(constant.Type, target);
                     if (!conversion.IsImplicit) {
+                        // The constant 0 converts to any enum (C# implicit enumeration conversion), also to its nullable form.
+                        if (constant.Type.SpecialType == SpecialType.System_Int32 && constant.Value is 0 && EnumOf(target) is INamedTypeSymbol zeroEnum) {
+                            return ("((" + zeroEnum.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) + ")0)", "0");
+                        }
                         // An integral constant that fits converts implicitly (byte size = 1), and is emitted with the target's type.
                         object? fitted = FitConstant(constant.Type, constant.Value, target);
                         string? converted = fitted == null ? null : Literal(fitted);
@@ -235,6 +264,13 @@ namespace PowerForge.Generators.Fluent {
                     }
                     failure = "names '" + type.Name + "." + name + "', which is not an accessible static method without parameters, property or field whose value can be assigned to " + target.ToDisplayString();
                     return null;
+                }
+
+                private static INamedTypeSymbol? EnumOf(ITypeSymbol target) {
+                    if (target.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T && target is INamedTypeSymbol nullable) {
+                        target = nullable.TypeArguments[0];
+                    }
+                    return target.TypeKind == TypeKind.Enum ? target as INamedTypeSymbol : null;
                 }
 
                 // The C# implicit constant expression conversions: an int constant to sbyte, byte, short, ushort, uint or ulong,

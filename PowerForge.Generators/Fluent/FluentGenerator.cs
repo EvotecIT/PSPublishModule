@@ -65,6 +65,9 @@ namespace PowerForge.Generators.Fluent {
             private readonly List<INamedTypeSymbol> _factories;
             private ILookup<string, IMethodSymbol>? _extensions;
 
+            // The value-parameter signatures generated for each type, so a derived type sees what its bases already emit.
+            private readonly Dictionary<INamedTypeSymbol, HashSet<string>> _signatures = new Dictionary<INamedTypeSymbol, HashSet<string>>(SymbolEqualityComparer.Default);
+
             internal Emitter(Compilation compilation, FluentSettings settings, SourceProductionContext output) {
                 _compilation = compilation;
                 _settings = settings;
@@ -92,7 +95,8 @@ namespace PowerForge.Generators.Fluent {
                 foreach (INamedTypeSymbol type in types) {
                     CopyMethod(type);
                 }
-                foreach (INamedTypeSymbol type in types) {
+                // Bases first, so each derived type can check the signatures its bases generated.
+                foreach (INamedTypeSymbol type in types.OrderBy(type => BaseTypes(type).Count())) {
                     string? source = Generate(type, types);
                     if (source != null) {
                         string hint = type.ToDisplayString().Replace('<', '_').Replace('>', '_').Replace(',', '_').Replace(' ', '_');
@@ -257,7 +261,9 @@ namespace PowerForge.Generators.Fluent {
 
             private string? Generate(INamedTypeSymbol type, IReadOnlyList<INamedTypeSymbol> types) {
                 Builder builder = new Builder(this, type, types);
-                return builder.Build();
+                string? source = builder.Build();
+                _signatures[type.OriginalDefinition] = builder.Generated;
+                return source;
             }
 
             private sealed partial class Builder {
@@ -298,7 +304,7 @@ namespace PowerForge.Generators.Fluent {
                     string stem = receiver.TrimStart('@');
                     // Forwards of an inlined settings type are emitted on this type too, with their own value parameter names.
                     HashSet<string> parameters = new HashSet<string>(_forwards.Concat(Properties(type).Where(p => Attribute(p, FluentAttributes.Inline) != null)
-                        .Select(p => p.Type).OfType<INamedTypeSymbol>().SelectMany(t => emitter.Forwards(t, report: false)))
+                        .Select(p => p.Type).OfType<INamedTypeSymbol>().SelectMany(t => emitter.InlineForwards(t)))
                         .Select(forward => forward.Target.Parameters[1].Name), StringComparer.Ordinal);
                     bool Clashes(string name) => Reserved.Contains(name) || parameters.Contains(name);
                     for (int attempt = 0; Clashes(receiver.TrimStart('@')); attempt++) {
@@ -321,6 +327,8 @@ namespace PowerForge.Generators.Fluent {
                 }
 
                 private bool Prefixed => _emitter._settings.Prefixed;
+
+                internal HashSet<string> Generated => _generated;
 
                 private Compilation Compilation => _emitter._compilation;
 
@@ -539,12 +547,18 @@ namespace PowerForge.Generators.Fluent {
                 private bool Claim(Location? location, string member, string name, params ITypeSymbol[] parameters) {
                     bool captured = BaseTypes(_type).SelectMany(t => t.GetMembers(name)).Any(m => m.DeclaredAccessibility != Accessibility.Private
                         && (m is IPropertySymbol { Type.TypeKind: TypeKind.Delegate } || m is IFieldSymbol { Type.TypeKind: TypeKind.Delegate } || m is IEventSymbol));
-                    if (captured || Taken(name, parameters)) {
+                    // Nullable annotations do not distinguish C# signatures.
+                    string signature = name + "(" + string.Join(", ", parameters.Select(parameter => parameter.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat))) + ")";
+                    // A generic method a base generated (its own or an inlined property's) and this type's generic method with the
+                    // same value parameters both apply to this type and its derived types, so calls would be ambiguous. A sealed
+                    // type's non-generic method wins over the base's.
+                    bool inherited = !_type.IsSealed && BaseTypes(_type).Skip(1)
+                        .Any(type => _emitter._signatures.TryGetValue(type.OriginalDefinition, out HashSet<string>? generated) && generated.Contains(signature));
+                    if (captured || inherited || Taken(name, parameters)) {
                         _emitter._output.ReportDiagnostic(Diagnostic.Create(FluentDiagnostics.Collision, location ?? Location.None, name, _type.Name, member));
                         return false;
                     }
-                    // Nullable annotations do not distinguish C# signatures.
-                    if (!_generated.Add(name + "(" + string.Join(", ", parameters.Select(parameter => parameter.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat))) + ")")) {
+                    if (!_generated.Add(signature)) {
                         _emitter._output.ReportDiagnostic(Diagnostic.Create(FluentDiagnostics.Duplicate, location ?? Location.None, name, _type.Name, member));
                         return false;
                     }

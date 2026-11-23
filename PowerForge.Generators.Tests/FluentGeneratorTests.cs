@@ -383,7 +383,13 @@ public sealed class FluentGeneratorTests {
                     public ulong Distance { get; set; }
                     [FluentPreset("Standard", typeof(Styles), "Default")]
                     public int Style { get; set; }
+                    [FluentPreset("Unset", 0)]
+                    public Mode Mode { get; set; } = Mode.One;
+                    [FluentPreset("Cleared", 0)]
+                    public Mode? Fallback { get; set; }
                 }
+
+                public enum Mode { One = 1 }
 
                 public class BaseStyles {
                     public static readonly int Default = 3;
@@ -396,8 +402,8 @@ public sealed class FluentGeneratorTests {
 
                 public static class Usage {
                     public static object[] Run() {
-                        Gauge gauge = new Gauge().Small().Few().Near().Far().Standard();
-                        return new object[] { gauge.Size, gauge.Count, gauge.Offset!.Value, gauge.Distance, gauge.Style };
+                        Gauge gauge = new Gauge().Small().Few().Near().Far().Standard().Unset().Cleared();
+                        return new object[] { gauge.Size, gauge.Count, gauge.Offset!.Value, gauge.Distance, gauge.Style, (int)gauge.Mode, (int)gauge.Fallback!.Value };
                     }
                 }
             }
@@ -407,7 +413,7 @@ public sealed class FluentGeneratorTests {
         Assert.Empty(generatorDiagnostics);
         Assert.Empty(compilation.GetDiagnostics().Where(d => d.Severity >= DiagnosticSeverity.Warning));
 
-        Assert.Equal(new object[] { (byte)1, 5U, (short)2, 7UL, 3 }, Execute(compilation));
+        Assert.Equal(new object[] { (byte)1, 5U, (short)2, 7UL, 3, 0, 0 }, Execute(compilation));
     }
 
     [Fact]
@@ -453,6 +459,49 @@ public sealed class FluentGeneratorTests {
 
         // Content(...) goes through the forward on the owner too, never straight to the property.
         Assert.Equal(new object[] { "text:a", "dark", "count:3", "text:b" }, Execute(compilation));
+    }
+
+    [Fact]
+    public void DerivedPropertyMatchingAnInheritedInlinedMethodIsBuildError() {
+        const string library = """
+            using PowerForge.Fluent;
+
+            namespace Sample {
+                [Fluent]
+                public class Chart {
+                    [FluentInline]
+                    public ChartOptions Options { get; } = new();
+                }
+
+                public class ThemedChart : Chart {
+                    public string? Theme { get; set; }
+                }
+
+                public sealed class PlainChart : Chart {
+                    public string? Theme { get; set; }
+                }
+
+                public sealed class ChartOptions {
+                    public string? Theme { get; set; }
+                }
+
+                public static class Usage {
+                    public static object[] Run() {
+                        PlainChart plain = new PlainChart().Theme("dark");
+                        return new object[] { plain.Theme!, plain.Options.Theme ?? "unset" };
+                    }
+                }
+            }
+            """;
+
+        (Compilation compilation, ImmutableArray<Diagnostic> generatorDiagnostics) = Run(library);
+
+        // Chart's generic Theme(string), from the inlined options, would make ThemedChart's own generic Theme(string)
+        // ambiguous. A sealed type's non-generic method wins over the base's, so PlainChart keeps its own.
+        Diagnostic collision = Assert.Single(generatorDiagnostics);
+        Assert.Equal("PFF002", collision.Id);
+        Assert.Contains("ThemedChart", collision.GetMessage(), StringComparison.Ordinal);
+        Assert.Equal(new object[] { "dark", "unset" }, Execute(compilation));
     }
 
     [Fact]
@@ -531,12 +580,13 @@ public sealed class FluentGeneratorTests {
     }
 
     [Fact]
-    public void EnumPresetForIntegralPropertyIsBuildError() {
+    public void PresetWithoutAnImplicitConstantConversionIsBuildError() {
         const string library = """
             using PowerForge.Fluent;
 
             namespace Sample {
                 public enum Mode { One = 1 }
+                public enum Other { Zero = 0 }
 
                 [Fluent]
                 public sealed class Chart {
@@ -544,14 +594,19 @@ public sealed class FluentGeneratorTests {
                     public byte Size { get; set; }
                     [FluentPreset("Single", Mode.One)]
                     public int Count { get; set; }
+                    [FluentPreset("First", 1)]
+                    public Mode Mode { get; set; }
+                    [FluentPreset("Foreign", Other.Zero)]
+                    public Mode? Fallback { get; set; }
                 }
             }
             """;
 
         (_, ImmutableArray<Diagnostic> diagnostics) = Run(library);
 
-        // C# has no implicit conversion from an enum constant to byte or int, even when the value fits.
-        Assert.Equal(new[] { "PFF010", "PFF010" }, diagnostics.Select(d => d.Id));
+        // C# has no implicit conversion from an enum constant to byte or int, even when the value fits, and only the
+        // constant 0 converts to an enum: neither 1 nor a zero member of another enum does.
+        Assert.Equal(new[] { "PFF010", "PFF010", "PFF010", "PFF010" }, diagnostics.Select(d => d.Id));
     }
 
     [Fact]
@@ -638,6 +693,71 @@ public sealed class FluentGeneratorTests {
             new[] { MetadataReference.CreateFromImage(image.ToArray()) }, new FluentGenerator());
         Assert.Empty(diagnostics);
         Assert.Empty(compilation.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error));
+    }
+
+    [Fact]
+    public void ReferencedForwardsToInternalHelpersReachTheOwner() {
+        const string baseLibrary = """
+            using PowerForge.Fluent;
+
+            namespace Sample.Blocks {
+                [Fluent]
+                [FluentForward("Content", typeof(ContentBuilder), "Replace")]
+                public sealed class ChartOptions {
+                    public string? Content { get; set; }
+                }
+
+                // No fluent methods are generated for this type, so an owner keeps its plain Border(value).
+                [FluentForward("Border", typeof(ContentBuilder), "Frame")]
+                public sealed class FrameOptions {
+                    public string? Border { get; set; }
+                }
+
+                internal static class ContentBuilder {
+                    internal static void Replace(ChartOptions options, string text) => options.Content = "text:" + text;
+                    internal static void Frame(FrameOptions options, string border) => options.Border = "frame:" + border;
+                }
+            }
+            """;
+        (Compilation baseCompilation, ImmutableArray<Diagnostic> baseDiagnostics) = Run(baseLibrary);
+        Assert.Empty(baseDiagnostics);
+        using MemoryStream image = new MemoryStream();
+        Assert.True(baseCompilation.Emit(image).Success);
+
+        const string library = """
+            using PowerForge.Fluent;
+            using Sample.Blocks;
+
+            namespace Sample {
+                [Fluent]
+                public sealed class Card {
+                    [FluentInline]
+                    public ChartOptions Options { get; } = new();
+                    [FluentInline]
+                    public FrameOptions Frame { get; } = new();
+                }
+
+                public static class Usage {
+                    public static object[] Run() {
+                        Card card = new Card().Content("a").Border("thin");
+                        return new object[] { card.Options.Content!, card.Frame.Border! };
+                    }
+                }
+            }
+            """;
+        (Compilation compilation, ImmutableArray<Diagnostic> diagnostics) = TestCompiler.Run(library, LanguageVersion.Latest, null,
+            new[] { MetadataReference.CreateFromImage(image.ToArray()) }, new FluentGenerator());
+        Assert.Empty(diagnostics);
+
+        Assembly referenced = Assembly.Load(image.ToArray());
+        ResolveEventHandler resolve = (_, args) => args.Name == referenced.FullName ? referenced : null;
+        AppDomain.CurrentDomain.AssemblyResolve += resolve;
+        try {
+            // Content(...) calls the forward through the extension the referenced library generated.
+            Assert.Equal(new object[] { "text:a", "thin" }, Execute(compilation));
+        } finally {
+            AppDomain.CurrentDomain.AssemblyResolve -= resolve;
+        }
     }
 
     private static (Compilation Compilation, ImmutableArray<Diagnostic> Diagnostics) Run(string source, LanguageVersion version = LanguageVersion.Latest, bool prefixed = false) =>

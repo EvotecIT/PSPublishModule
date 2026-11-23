@@ -36,7 +36,7 @@ property access all edit one object.
   it).
 - `[FluentPreset("Stacked", ChartBarMode.Stacked)]` on a property generates `Stacked()`, which assigns that constant (an
   enum member, bool, number, string or null; an integer that fits also works for `byte`, `short`, `uint` and the other
-  integral types, as `byte size = 1` does). `[FluentPreset("PlainLine", typeof(LineVisualStyle), nameof(LineVisualStyle.Plain))]`
+  integral types, as `byte size = 1` does, and `0` works for an enum, as `Mode mode = 0` does). `[FluentPreset("PlainLine", typeof(LineVisualStyle), nameof(LineVisualStyle.Plain))]`
   assigns the static member instead: a parameterless static method is called, a static property or field is read.
   Repeat the attribute for several presets; `Summary` replaces the generated documentation. Presets also come through
   `[FluentInline]`.
@@ -49,9 +49,12 @@ property access all edit one object.
   it. Read-only properties are still configured in place.
 - A settings type from a referenced library works too: a property of that type gets `X(o => ...)`, and a derived type
   can inline it, so blocks in one package inherit the options of a base class in another. Such a type is configured in
-  place, even when it names a copy method, because that method is usually not visible outside its own library.
-- A delegate property without a verb (PFF001), a method that collides with an existing one or that a delegate-valued
-  member would capture (PFF002), two members that map to one method (PFF003), a forward target without a usable
+  place, even when it names a copy method, because that method is usually not visible outside its own library. A
+  forward whose helper is internal to that library goes through the fluent method the library generated for it; when the
+  library generated none, the inlining owner keeps the property's own method instead.
+- A delegate property without a verb (PFF001), a method that collides with an existing one, with one a base type that
+  can be derived from generates (including through `[FluentInline]`), or that a delegate-valued member would capture
+  (PFF002), two members that map to one method (PFF003), a forward target without a usable
   overload (PFF004), a name that is not an identifier (PFF005), a preset whose value cannot be assigned or whose property
   has no public setter (PFF010), a copy method that is missing or has the wrong shape (PFF011) and `[FluentInline]` on a
   property that is not a readable, non-nullable settings type (PFF012) are build errors. A preset named like a bool
