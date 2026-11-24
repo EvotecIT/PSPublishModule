@@ -87,7 +87,8 @@ public sealed partial class DotNetRepositoryReleaseService
         IReadOnlyList<string> includePatterns,
         bool includePreparedPublishOutput = false,
         string? packageOutputPath = null,
-        IReadOnlyList<string>? toolRuntimeIdentifiers = null)
+        IReadOnlyList<string>? toolRuntimeIdentifiers = null,
+        bool signPreparedRuntimeOutput = false)
     {
         var files = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var packProperties = CreatePackToolStagingGlobalProperties(packageOutputPath);
@@ -177,7 +178,10 @@ public sealed partial class DotNetRepositoryReleaseService
                     : Path.GetFullPath(Path.Combine(workingDirectory, normalizedPublishDirectory));
                 if (!Directory.Exists(resolvedPublishDirectory))
                     throw new DirectoryNotFoundException($"The prepared pack-tool publish output for {target} is missing: {resolvedPublishDirectory}");
-                AddMatchingAssemblyPaths(files, resolvedPublishDirectory, includePatterns, SearchOption.AllDirectories);
+                var publishPatterns = signPreparedRuntimeOutput && runtimeIdentifier is not null
+                    ? PreparedRuntimeOutputSigningPatterns
+                    : includePatterns;
+                AddMatchingAssemblyPaths(files, resolvedPublishDirectory, publishPatterns, SearchOption.AllDirectories);
             }
         }
 

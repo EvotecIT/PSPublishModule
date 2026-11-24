@@ -173,7 +173,8 @@ public sealed partial class DotNetRepositoryReleaseService
                 includePatterns,
                 spec.SignDependencyAssemblies,
                 packageOutputPath,
-                toolRuntimeIdentifiers: project.ToolPackageRuntimeIdentifiers),
+                toolRuntimeIdentifiers: project.ToolPackageRuntimeIdentifiers,
+                signPreparedRuntimeOutput: true),
             recursiveBuildOutputs: !onlyPackToolProjects.Contains(project));
         if (signingPlan.Files.Length == 0 && !spec.SignDependencyAssemblies)
         {
@@ -194,7 +195,8 @@ public sealed partial class DotNetRepositoryReleaseService
                         includePatterns,
                         includePreparedPublishOutput: false,
                         packageOutputPath,
-                        toolRuntimeIdentifiers: project.ToolPackageRuntimeIdentifiers));
+                        toolRuntimeIdentifiers: project.ToolPackageRuntimeIdentifiers,
+                        signPreparedRuntimeOutput: true));
             }
         }
         logger.Info($"{project.ProjectName}: assembly signing include pattern(s): {string.Join(", ", includePatterns)}.");

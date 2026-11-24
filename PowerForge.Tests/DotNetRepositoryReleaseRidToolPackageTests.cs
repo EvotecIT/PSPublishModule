@@ -12,13 +12,16 @@ public sealed class DotNetRepositoryReleaseRidToolPackageTests
 
     [Theory]
     [Trait("Category", "DotNetPublishPrGate")]
-    [InlineData(DotNetRepositoryPackStrategy.PerProject, false)]
-    [InlineData(DotNetRepositoryPackStrategy.MSBuild, false)]
-    [InlineData(DotNetRepositoryPackStrategy.PerProject, true)]
-    [InlineData(DotNetRepositoryPackStrategy.MSBuild, true)]
+    [InlineData(DotNetRepositoryPackStrategy.PerProject, false, false)]
+    [InlineData(DotNetRepositoryPackStrategy.MSBuild, false, false)]
+    [InlineData(DotNetRepositoryPackStrategy.PerProject, true, false)]
+    [InlineData(DotNetRepositoryPackStrategy.MSBuild, true, false)]
+    [InlineData(DotNetRepositoryPackStrategy.PerProject, true, true)]
+    [InlineData(DotNetRepositoryPackStrategy.MSBuild, true, true)]
     public void Execute_RidSpecificPackTool_PacksEveryRuntimeFromItsSignedPublishOutput(
         DotNetRepositoryPackStrategy packStrategy,
-        bool signAssemblies)
+        bool signAssemblies,
+        bool signDependencyAssemblies)
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
@@ -71,7 +74,7 @@ public sealed class DotNetRepositoryReleaseRidToolPackageTests
                     CreateReleaseZip = false,
                     CertificateThumbprint = signAssemblies ? "ABC123" : null,
                     SignAssemblies = signAssemblies,
-                    SignDependencyAssemblies = signAssemblies,
+                    SignDependencyAssemblies = signDependencyAssemblies,
                     SignPackages = false
                 },
                 request =>
@@ -96,6 +99,8 @@ public sealed class DotNetRepositoryReleaseRidToolPackageTests
             foreach (var runtimeIdentifier in new[] { "linux-x64", "any" })
             {
                 var package = project.Packages.Single(path => Path.GetFileName(path) == $"Sample.Tool.{runtimeIdentifier}.1.0.0.nupkg");
+                // The dependency is signed in the runtime output even without SignDependencyAssemblies: the package
+                // ships that copy, and ReadyToRun would have dropped any signature it had.
                 foreach (var assembly in new[] { "Sample.Tool.dll", "Sample.Dependency.dll" })
                 {
                     var payload = ReadEntry(package, $"tools/net8.0/{runtimeIdentifier}/{assembly}");

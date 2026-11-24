@@ -43,22 +43,11 @@ public sealed partial class DotNetRepositoryReleaseService
     }
 
     /// <summary>
-    /// RID-specific tool packages are packed from a separate publish per runtime, which copies every dependency
-    /// assembly and, with ReadyToRun, rewrites them. Only signing the whole publish output keeps those packages signed.
+    /// A RID-specific tool package ships its runtime's whole publish output: every dependency assembly is copied there
+    /// and, with ReadyToRun, recompiled, which drops its original signature. Signing covers all of those assemblies,
+    /// whether or not <see cref="DotNetRepositoryReleaseSpec.SignDependencyAssemblies"/> is set for build outputs.
     /// </summary>
-    private static bool TryRejectRidSpecificToolsWithoutDependencySigning(
-        IEnumerable<DotNetRepositoryProjectResult> projects,
-        DotNetRepositoryReleaseSpec spec,
-        out string error)
-    {
-        var ridSpecificTool = spec.SignDependencyAssemblies
-            ? null
-            : projects.FirstOrDefault(static project => project.ToolPackageRuntimeIdentifiers.Count > 0);
-        error = ridSpecificTool is null
-            ? string.Empty
-            : $"{ridSpecificTool.ProjectName} packs RID-specific tool packages from a per-runtime publish of all its assemblies. Enable SignDependencyAssemblies to sign them.";
-        return ridSpecificTool is null;
-    }
+    private static readonly string[] PreparedRuntimeOutputSigningPatterns = { "*.dll", "*.exe" };
 
     private static IReadOnlyDictionary<string, string> CreatePackToolRuntimeProperties(
         IReadOnlyDictionary<string, string> packProperties,

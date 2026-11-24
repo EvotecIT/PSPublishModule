@@ -233,12 +233,6 @@ public sealed partial class DotNetRepositoryReleaseService
         var shouldSignAssemblies = signAssemblies is not null && !string.IsNullOrWhiteSpace(spec.CertificateThumbprint);
         var isRidSpecificTool = project.ToolPackageRuntimeIdentifiers.Count > 0;
         var usePreparedToolPublishOutput = (shouldSignAssemblies && spec.SignDependencyAssemblies) || isRidSpecificTool;
-        if (shouldSignAssemblies && !TryRejectRidSpecificToolsWithoutDependencySigning(new[] { project }, spec, out var ridSigningError))
-        {
-            result.ErrorMessage = ridSigningError;
-            return result;
-        }
-
         var onlyPackToolProjects = new HashSet<DotNetRepositoryProjectResult>();
         if (usePreparedToolPublishOutput)
         {
@@ -273,7 +267,8 @@ public sealed partial class DotNetRepositoryReleaseService
                         includePatterns,
                         spec.SignDependencyAssemblies,
                         outputPath,
-                        toolRuntimeIdentifiers: project.ToolPackageRuntimeIdentifiers),
+                        toolRuntimeIdentifiers: project.ToolPackageRuntimeIdentifiers,
+                        signPreparedRuntimeOutput: true),
                     recursiveBuildOutputs: !onlyPackToolProjects.Contains(project));
                 if (signingPlan.Files.Length == 0 && !spec.SignDependencyAssemblies)
                 {
@@ -294,7 +289,8 @@ public sealed partial class DotNetRepositoryReleaseService
                                 includePatterns,
                                 includePreparedPublishOutput: false,
                                 outputPath,
-                                toolRuntimeIdentifiers: project.ToolPackageRuntimeIdentifiers));
+                                toolRuntimeIdentifiers: project.ToolPackageRuntimeIdentifiers,
+                                signPreparedRuntimeOutput: true));
                     }
                 }
                 resolveOutputWatch.Stop();

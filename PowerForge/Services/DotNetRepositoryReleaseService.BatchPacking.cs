@@ -109,12 +109,6 @@ public sealed partial class DotNetRepositoryReleaseService
             TimeSpan duration;
 
             var hasRidSpecificTools = projects.Any(static project => project.ToolPackageRuntimeIdentifiers.Count > 0);
-            if (shouldSignAssemblies && !TryRejectRidSpecificToolsWithoutDependencySigning(projects, spec, out var ridSigningError))
-            {
-                result.ErrorMessage = ridSigningError;
-                return result;
-            }
-
             if (shouldSignAssemblies || hasRidSpecificTools)
             {
                 exitCode = RunDotnetMsBuildTarget(
