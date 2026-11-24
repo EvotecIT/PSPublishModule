@@ -106,6 +106,14 @@ internal sealed class BuildConfigurationRequest
     public string? NETSearchClass { get; set; }
     public bool NETHandleRuntimesSpecified { get; set; }
     public bool NETHandleRuntimes { get; set; }
+    public bool NETReadyToRunSpecified { get; set; }
+    public bool NETReadyToRun { get; set; }
+    public bool NETReadyToRunFrameworkSpecified { get; set; }
+    public string? NETReadyToRunFramework { get; set; }
+    public bool NETReadyToRunRuntimeIdentifierSpecified { get; set; }
+    public string[]? NETReadyToRunRuntimeIdentifier { get; set; }
+    public bool NETReadyToRunScopeSpecified { get; set; }
+    public ModuleReadyToRunScope NETReadyToRunScope { get; set; }
     /// <summary>Whether the caller explicitly supplied Desktop dependency asset selections.</summary>
     public bool NETDesktopDependencyAssetFrameworksSpecified { get; set; }
     /// <summary>NuGet package IDs mapped to explicitly selected Desktop asset TFMs.</summary>

@@ -169,6 +169,12 @@ public sealed class ModuleBuildSpec
     /// </summary>
     public bool UseAssemblyLoadContext { get; set; }
 
+    /// <summary>
+    /// Optional ReadyToRun payloads compiled per runtime identifier for PowerShell 7. Null or disabled builds the module
+    /// exactly as before.
+    /// </summary>
+    public ModuleReadyToRunOptions? ReadyToRun { get; set; }
+
     /// <summary>Exact assembly simple names shared process-wide; empty preserves private dependency loading.</summary>
     public string[] SharedAssemblies { get; set; } = Array.Empty<string>();
 

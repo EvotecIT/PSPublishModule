@@ -4,10 +4,11 @@ using PowerForge;
 public partial class ModuleBootstrapperGeneratorTests
 {
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
     [Trait("Category", "Integration")]
-    public async Task CoreOnlyScriptHelper_PreservesDesktopFunctionsAndLoadsHelperOnCore(bool useAssemblyLoadContext)
+    public async Task CoreOnlyScriptHelper_PreservesDesktopFunctionsAndLoadsHelperOnCore(bool useAssemblyLoadContext, bool withReadyToRunPayload)
     {
         if (!OperatingSystem.IsWindows()) return;
 
@@ -22,6 +23,13 @@ public partial class ModuleBootstrapperGeneratorTests
             var helper = BuildFixtureProject(root, "Helper", "DemoModule",
                 "namespace DemoModule; public static class Initialize { public static string Read() => \"core-helper\"; }");
             File.Copy(helper, Path.Combine(libRoot, "DemoModule.dll"));
+            if (withReadyToRunPayload)
+            {
+                // A precompiled payload is PowerShell 7 only too, so Windows PowerShell must still skip the helper.
+                var readyToRunRoot = Directory.CreateDirectory(Path.Combine(moduleRoot, "Lib", ModuleBinaryPayloadLayout.GetReadyToRunFolderName("win-x64"))).FullName;
+                File.Copy(helper, Path.Combine(readyToRunRoot, "DemoModule.dll"));
+                File.WriteAllText(Path.Combine(readyToRunRoot, ModuleBinaryPayloadLayout.TargetFrameworkMarkerFileName), "net8.0");
+            }
             var nativeRoot = Directory.CreateDirectory(Path.Combine(moduleRoot, "Lib", "runtimes", "win-x64", "native")).FullName;
             File.WriteAllText(Path.Combine(nativeRoot, "example.dll"), "native asset, not a Desktop managed helper");
             File.WriteAllText(Path.Combine(publicRoot, "Get-HelperStatus.ps1"), """

@@ -11,7 +11,7 @@ Allows configuring the build process for a module.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-New-ConfigurationBuild [-Enable] [-DeleteTargetModuleBeforeBuild] [-MergeModuleOnBuild] [-MergeFunctionsFromApprovedModules] [-SignModule] [-SignIncludeInternals] [-SignIncludeBinaries] [-SignIncludeExe] [-SignCustomInclude <string[]>] [-SignExcludePaths <string[]>] [-SignOverwriteSigned] [-DotSourceClasses] [-DotSourceLibraries] [-SeparateFileLibraries] [-RefreshPSD1Only] [-UseWildcardForFunctions] [-LocalVersioning] [-SyncNETProjectVersion] [-VersionedInstallStrategy <InstallationStrategy>] [-VersionedInstallKeep <int>] [-VersionedInstallLegacyFlatHandling <LegacyFlatModuleHandling>] [-VersionedInstallPreserveVersions <string[]>] [-InstallMissingModules] [-InstallMissingModulesForce] [-InstallMissingModulesPrerelease] [-ResolveMissingModulesOnline] [-WarnIfRequiredModulesOutdated] [-InstallMissingModulesRepository <string>] [-InstallMissingModulesCredentialUserName <string>] [-InstallMissingModulesCredentialSecret <string>] [-InstallMissingModulesCredentialSecretFilePath <string>] [-SkipBuiltinReplacements] [-DoNotAttemptToFixRelativePaths] [-CertificateThumbprint <string>] [-AllowedCertificateThumbprints <string[]>] [-CertificatePFXPath <string>] [-CertificatePFXBase64 <string>] [-CertificatePFXPassword <string>] [-CertificatePFXPasswordEnvironmentVariable <string>] [-CertificatePFXBase64EnvironmentVariable <string>] [-NETProjectPath <string>] [-NETConfiguration <string>] [-NETFramework <string[]>] [-NETProjectName <string>] [-NETExcludeMainLibrary] [-NETExcludeLibraryFilter <string[]>] [-NETIgnoreLibraryOnLoad <string[]>] [-NETBinaryModule <string[]>] [-NETHandleAssemblyWithSameName] [-NETLineByLineAddType] [-NETBinaryModuleCmdletScanDisabled] [-NETMergeLibraryDebugging] [-NETResolveBinaryConflicts] [-NETResolveBinaryConflictsName <string>] [-NETBinaryModuleDocumentation] [-NETDoNotCopyLibrariesRecursively] [-NETSearchClass <string>] [-NETHandleRuntimes] [-NETDesktopDependencyAssetFrameworks <hashtable>] [-NETAssemblyLoadContext] [-NETSharedAssemblies <string[]>] [-NETPreloadSharedAssemblies <string[]>] [-NETDevelopmentBinaries] [-NETDevelopmentBinariesMode <ModuleDevelopmentBinaryMode>] [-NETDevelopmentBinariesPath <string>] [-NETDevelopmentBinariesEnvironmentVariable <string>] [-NETDevelopmentConfigurationEnvironmentVariable <string>] [-NETDevelopmentSourceBootstrapperMode <ModuleDevelopmentSourceBootstrapperMode>] [-NETAssemblyTypeAcceleratorMode <AssemblyTypeAcceleratorExportMode>] [-NETAssemblyTypeAccelerators <string[]>] [-NETAssemblyTypeAcceleratorAssemblies <string[]>] [-CompilePowerShell] [-PowerShellCompilationMode <PowerShellCompilationMode>] [-PowerShellCompilationTargetFramework <string>] [-PowerShellCompilationResourceMode <PowerShellCompilationResourceMode>] [-PowerShellCompilationIncludeResource <string[]>] [-PowerShellCompilationExcludeResource <string[]>] [-PowerShellCompilationUseBuildCache] [-PowerShellCompilationBuildCacheDirectory <string>] [-PowerShellCompilationEmitIrSnapshots] [-PowerShellCompilationExpectedPublicAbiSha256 <string>] [-PowerShellCompilationDependencyLock <PowerShellCompilationDependencyGraph>] [-PowerShellCompilationAllowUnreviewedDependencies] [-PowerShellCompilationTimeoutSeconds <int>] [-KillLockersBeforeInstall] [-KillLockersForce] [-AutoSwitchExactOnPublish] [<CommonParameters>]
+New-ConfigurationBuild [-Enable] [-DeleteTargetModuleBeforeBuild] [-MergeModuleOnBuild] [-MergeFunctionsFromApprovedModules] [-SignModule] [-SignIncludeInternals] [-SignIncludeBinaries] [-SignIncludeExe] [-SignCustomInclude <string[]>] [-SignExcludePaths <string[]>] [-SignOverwriteSigned] [-DotSourceClasses] [-DotSourceLibraries] [-SeparateFileLibraries] [-RefreshPSD1Only] [-UseWildcardForFunctions] [-LocalVersioning] [-SyncNETProjectVersion] [-VersionedInstallStrategy <InstallationStrategy>] [-VersionedInstallKeep <int>] [-VersionedInstallLegacyFlatHandling <LegacyFlatModuleHandling>] [-VersionedInstallPreserveVersions <string[]>] [-InstallMissingModules] [-InstallMissingModulesForce] [-InstallMissingModulesPrerelease] [-ResolveMissingModulesOnline] [-WarnIfRequiredModulesOutdated] [-InstallMissingModulesRepository <string>] [-InstallMissingModulesCredentialUserName <string>] [-InstallMissingModulesCredentialSecret <string>] [-InstallMissingModulesCredentialSecretFilePath <string>] [-SkipBuiltinReplacements] [-DoNotAttemptToFixRelativePaths] [-CertificateThumbprint <string>] [-AllowedCertificateThumbprints <string[]>] [-CertificatePFXPath <string>] [-CertificatePFXBase64 <string>] [-CertificatePFXPassword <string>] [-CertificatePFXPasswordEnvironmentVariable <string>] [-CertificatePFXBase64EnvironmentVariable <string>] [-NETProjectPath <string>] [-NETConfiguration <string>] [-NETFramework <string[]>] [-NETProjectName <string>] [-NETExcludeMainLibrary] [-NETExcludeLibraryFilter <string[]>] [-NETIgnoreLibraryOnLoad <string[]>] [-NETBinaryModule <string[]>] [-NETHandleAssemblyWithSameName] [-NETLineByLineAddType] [-NETBinaryModuleCmdletScanDisabled] [-NETMergeLibraryDebugging] [-NETResolveBinaryConflicts] [-NETResolveBinaryConflictsName <string>] [-NETBinaryModuleDocumentation] [-NETDoNotCopyLibrariesRecursively] [-NETSearchClass <string>] [-NETHandleRuntimes] [-NETReadyToRun] [-NETReadyToRunFramework <string>] [-NETReadyToRunRuntimeIdentifier <string[]>] [-NETReadyToRunScope <ModuleReadyToRunScope>] [-NETDesktopDependencyAssetFrameworks <hashtable>] [-NETAssemblyLoadContext] [-NETSharedAssemblies <string[]>] [-NETPreloadSharedAssemblies <string[]>] [-NETDevelopmentBinaries] [-NETDevelopmentBinariesMode <ModuleDevelopmentBinaryMode>] [-NETDevelopmentBinariesPath <string>] [-NETDevelopmentBinariesEnvironmentVariable <string>] [-NETDevelopmentConfigurationEnvironmentVariable <string>] [-NETDevelopmentSourceBootstrapperMode <ModuleDevelopmentSourceBootstrapperMode>] [-NETAssemblyTypeAcceleratorMode <AssemblyTypeAcceleratorExportMode>] [-NETAssemblyTypeAccelerators <string[]>] [-NETAssemblyTypeAcceleratorAssemblies <string[]>] [-CompilePowerShell] [-PowerShellCompilationMode <PowerShellCompilationMode>] [-PowerShellCompilationTargetFramework <string>] [-PowerShellCompilationResourceMode <PowerShellCompilationResourceMode>] [-PowerShellCompilationIncludeResource <string[]>] [-PowerShellCompilationExcludeResource <string[]>] [-PowerShellCompilationUseBuildCache] [-PowerShellCompilationBuildCacheDirectory <string>] [-PowerShellCompilationEmitIrSnapshots] [-PowerShellCompilationExpectedPublicAbiSha256 <string>] [-PowerShellCompilationDependencyLock <PowerShellCompilationDependencyGraph>] [-PowerShellCompilationAllowUnreviewedDependencies] [-PowerShellCompilationTimeoutSeconds <int>] [-KillLockersBeforeInstall] [-KillLockersForce] [-AutoSwitchExactOnPublish] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -919,6 +919,75 @@ Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -NETReadyToRun
+Adds a ReadyToRun (precompiled) PowerShell 7 payload for each runtime identifier in NETReadyToRunRuntimeIdentifier.
+PowerShell 7 on a matching platform and .NET runtime loads it instead of the portable build, which cuts the time
+of the first command calls. Windows PowerShell and other platforms keep the portable builds. The binary project
+must target NETReadyToRunFramework, and the module must still ship a portable PowerShell 7 framework such as net8.0.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -NETReadyToRunFramework
+Target framework of the ReadyToRun payloads. Defaults to net10.0, the runtime of PowerShell 7.6.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -NETReadyToRunRuntimeIdentifier
+Runtime identifiers that get a ReadyToRun payload. Defaults to win-x64 only. Each one adds a
+complete payload to the module, so list only the platforms that matter; the rest load the portable build.
+
+```yaml
+Type: String[]
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -NETReadyToRunScope
+Which assemblies the ReadyToRun payloads precompile. ModuleAssemblies (default) precompiles the module project and
+its project references and leaves NuGet package assemblies as IL; All precompiles every assembly and adds more size.
+
+```yaml
+Type: ModuleReadyToRunScope
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values: ModuleAssemblies, All
 
 Required: False
 Position: named

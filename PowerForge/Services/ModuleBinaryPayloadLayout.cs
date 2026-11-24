@@ -33,6 +33,58 @@ internal static class ModuleBinaryPayloadLayout
 {
     internal const string TargetFrameworkMarkerFileName = "PowerForge.TargetFramework.txt";
 
+    /// <summary>Lib folder prefix of the precompiled PowerShell 7 payloads; the runtime identifier follows it.</summary>
+    internal const string ReadyToRunFolderPrefix = "Core-ReadyToRun-";
+
+    internal static bool IsReadyToRunPayloadFolderName(string? folderName)
+        => folderName is not null &&
+           folderName.Length > ReadyToRunFolderPrefix.Length &&
+           folderName.StartsWith(ReadyToRunFolderPrefix, StringComparison.OrdinalIgnoreCase);
+
+    internal static string GetReadyToRunFolderName(string runtimeIdentifier)
+        => ReadyToRunFolderPrefix + runtimeIdentifier.Trim().ToLowerInvariant();
+
+    /// <summary>
+    /// Lists the ReadyToRun payloads of a staged Lib folder with the runtime identifier and the minimum .NET version
+    /// each needs, read from its target framework marker (a platform suffix such as -windows is allowed, since the
+    /// runtime identifier already selects the platform). Folders without a readable modern framework are skipped.
+    /// </summary>
+    internal static (string FolderName, string RuntimeIdentifier, Version MinimumRuntimeVersion)[] ResolveReadyToRunPayloads(string libRoot)
+    {
+        if (!Directory.Exists(libRoot))
+            return Array.Empty<(string, string, Version)>();
+
+        var payloads = new List<(string FolderName, string RuntimeIdentifier, Version MinimumRuntimeVersion)>();
+        foreach (var folder in Directory.EnumerateDirectories(libRoot).Select(Path.GetFileName).OfType<string>())
+        {
+            if (!folder.StartsWith(ReadyToRunFolderPrefix, StringComparison.OrdinalIgnoreCase))
+                continue;
+            var runtimeIdentifier = folder.Substring(ReadyToRunFolderPrefix.Length);
+            if (runtimeIdentifier.Length == 0)
+                continue;
+            try
+            {
+                var markerPath = Path.Combine(libRoot, folder, TargetFrameworkMarkerFileName);
+                if (!File.Exists(markerPath))
+                    continue;
+                var framework = File.ReadAllText(markerPath).Trim();
+                if (!TryParseModernFrameworkVersion(framework, out var version) || version.Major < 5)
+                    continue;
+                payloads.Add((folder, runtimeIdentifier, version));
+            }
+            catch (IOException)
+            {
+            }
+            catch (UnauthorizedAccessException)
+            {
+            }
+        }
+
+        return payloads
+            .OrderBy(static payload => payload.RuntimeIdentifier, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
     internal static bool IsCoreFramework(string? framework)
     {
         if (framework is null)

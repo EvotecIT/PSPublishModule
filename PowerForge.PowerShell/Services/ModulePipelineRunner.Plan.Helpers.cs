@@ -5,6 +5,48 @@ namespace PowerForge;
 /// </summary>
 public sealed partial class ModulePipelineRunner
 {
+    /// <summary>
+    /// Layers the ReadyToRun values set by configuration segments over the build spec's ReadyToRun options.
+    /// Returns null when neither sets anything, so modules that do not opt in build exactly as before.
+    /// </summary>
+    internal static ModuleReadyToRunOptions? ResolveReadyToRun(ModuleReadyToRunOptions? fromSpec, ReadyToRunSegmentValues? fromSegments)
+    {
+        if (fromSpec is null && fromSegments is null)
+            return null;
+
+        return new ModuleReadyToRunOptions
+        {
+            Enabled = fromSegments?.Enabled ?? fromSpec?.Enabled ?? false,
+            Framework = fromSegments?.Framework ?? fromSpec?.Framework ?? ModuleReadyToRunOptions.DefaultFramework,
+            RuntimeIdentifiers = fromSegments?.RuntimeIdentifiers ?? fromSpec?.RuntimeIdentifiers ??
+                                 (string[])ModuleReadyToRunOptions.DefaultRuntimeIdentifiers.Clone(),
+            Scope = fromSegments?.Scope ?? fromSpec?.Scope ?? ModuleReadyToRunScope.ModuleAssemblies
+        };
+    }
+
+    /// <summary>ReadyToRun values set by <c>BuildLibraries</c> segments; a later segment overrides only what it sets.</summary>
+    internal sealed class ReadyToRunSegmentValues
+    {
+        internal bool? Enabled { get; private set; }
+        internal string? Framework { get; private set; }
+        internal string[]? RuntimeIdentifiers { get; private set; }
+        internal ModuleReadyToRunScope? Scope { get; private set; }
+
+        internal static ReadyToRunSegmentValues? Merge(ReadyToRunSegmentValues? current, BuildLibrariesConfiguration segment)
+        {
+            if (!segment.ReadyToRun.HasValue && string.IsNullOrWhiteSpace(segment.ReadyToRunFramework) &&
+                segment.ReadyToRunRuntimeIdentifiers is not { Length: > 0 } && !segment.ReadyToRunScope.HasValue)
+                return current;
+
+            var merged = current ?? new ReadyToRunSegmentValues();
+            if (segment.ReadyToRun.HasValue) merged.Enabled = segment.ReadyToRun.Value;
+            if (!string.IsNullOrWhiteSpace(segment.ReadyToRunFramework)) merged.Framework = segment.ReadyToRunFramework!.Trim();
+            if (segment.ReadyToRunRuntimeIdentifiers is { Length: > 0 }) merged.RuntimeIdentifiers = segment.ReadyToRunRuntimeIdentifiers;
+            if (segment.ReadyToRunScope.HasValue) merged.Scope = segment.ReadyToRunScope.Value;
+            return merged;
+        }
+    }
+
     private static string[] BuildMissingCsprojReasonList(
         ModulePipelineSpec spec,
         bool syncNETProjectVersion,
@@ -19,7 +61,8 @@ public sealed partial class ModulePipelineRunner
         string? resolveBinaryConflictsProjectName,
         bool binaryModuleDocumentationRequested,
         ModuleDevelopmentBinaryMode developmentBinariesMode,
-        string? developmentBinariesPath)
+        string? developmentBinariesPath,
+        bool readyToRunRequested = false)
     {
         var reasons = new List<string>();
         var hasFrameworks = HasAnyConfiguredValues(dotnetFrameworksFromSegments)
@@ -45,7 +88,8 @@ public sealed partial class ModulePipelineRunner
             || useAssemblyLoadContextRequested
             || typeAcceleratorsRequireAlc
             || binaryModuleDocumentationRequested
-            || developmentBinariesNeedProject;
+            || developmentBinariesNeedProject
+            || readyToRunRequested;
 
         if (syncNETProjectVersion)
             reasons.Add("SyncNETProjectVersion");
@@ -82,6 +126,9 @@ public sealed partial class ModulePipelineRunner
 
         if (developmentBinariesNeedProject)
             reasons.Add("NETDevelopmentBinaries");
+
+        if (readyToRunRequested)
+            reasons.Add("NETReadyToRun");
 
         return reasons
             .Distinct(StringComparer.OrdinalIgnoreCase)

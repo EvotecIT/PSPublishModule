@@ -37294,6 +37294,63 @@ should resolve dependencies from a named private feed or alternate gallery.</mam
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
+          <maml:name>NETReadyToRun</maml:name>
+          <maml:description>
+            <maml:para>Adds a ReadyToRun (precompiled) PowerShell 7 payload for each runtime identifier in NETReadyToRunRuntimeIdentifier.&#xD;
+PowerShell 7 on a matching platform and .NET runtime loads it instead of the portable build, which cuts the time&#xD;
+of the first command calls. Windows PowerShell and other platforms keep the portable builds. The binary project&#xD;
+must target NETReadyToRunFramework, and the module must still ship a portable PowerShell 7 framework such as net8.0.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
+          <maml:name>NETReadyToRunFramework</maml:name>
+          <maml:description>
+            <maml:para>Target framework of the ReadyToRun payloads. Defaults to net10.0, the runtime of PowerShell 7.6.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="none">
+          <maml:name>NETReadyToRunRuntimeIdentifier</maml:name>
+          <maml:description>
+            <maml:para>Runtime identifiers that get a ReadyToRun payload. Defaults to win-x64 only. Each one adds a&#xD;
+complete payload to the module, so list only the platforms that matter; the rest load the portable build.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
+          <maml:name>NETReadyToRunScope</maml:name>
+          <maml:description>
+            <maml:para>Which assemblies the ReadyToRun payloads precompile. ModuleAssemblies (default) precompiles the module project and&#xD;
+its project references and leaves NuGet package assemblies as IL; All precompiles every assembly and adds more size.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">ModuleReadyToRunScope</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">ModuleAssemblies</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">All</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>ModuleReadyToRunScope</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="ResolveBinaryConflicts">
           <maml:name>NETResolveBinaryConflicts</maml:name>
           <maml:description>
@@ -38386,6 +38443,63 @@ should resolve dependencies from a named private feed or alternate gallery.</mam
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
           <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
+        <maml:name>NETReadyToRun</maml:name>
+        <maml:description>
+          <maml:para>Adds a ReadyToRun (precompiled) PowerShell 7 payload for each runtime identifier in NETReadyToRunRuntimeIdentifier.&#xD;
+PowerShell 7 on a matching platform and .NET runtime loads it instead of the portable build, which cuts the time&#xD;
+of the first command calls. Windows PowerShell and other platforms keep the portable builds. The binary project&#xD;
+must target NETReadyToRunFramework, and the module must still ship a portable PowerShell 7 framework such as net8.0.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
+        <maml:name>NETReadyToRunFramework</maml:name>
+        <maml:description>
+          <maml:para>Target framework of the ReadyToRun payloads. Defaults to net10.0, the runtime of PowerShell 7.6.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="none">
+        <maml:name>NETReadyToRunRuntimeIdentifier</maml:name>
+        <maml:description>
+          <maml:para>Runtime identifiers that get a ReadyToRun payload. Defaults to win-x64 only. Each one adds a&#xD;
+complete payload to the module, so list only the platforms that matter; the rest load the portable build.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+        <dev:type>
+          <maml:name>String[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
+        <maml:name>NETReadyToRunScope</maml:name>
+        <maml:description>
+          <maml:para>Which assemblies the ReadyToRun payloads precompile. ModuleAssemblies (default) precompiles the module project and&#xD;
+its project references and leaves NuGet package assemblies as IL; All precompiles every assembly and adds more size.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">ModuleReadyToRunScope</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">ModuleAssemblies</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">All</command:parameterValue>
+        </command:parameterValueGroup>
+        <dev:type>
+          <maml:name>ModuleReadyToRunScope</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>

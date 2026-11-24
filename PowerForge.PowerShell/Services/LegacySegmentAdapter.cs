@@ -149,7 +149,11 @@ public static class LegacySegmentAdapter
                             ?? GetStringArray(buildLibraries, "NETAssemblyTypeAcceleratorAssemblies"),
                         NETDoNotCopyLibrariesRecursively = HasKey(buildLibraries, "NETDoNotCopyLibrariesRecursively")
                             ? GetBool(buildLibraries, "NETDoNotCopyLibrariesRecursively")
-                            : null
+                            : null,
+                        ReadyToRun = GetNullableBool(buildLibraries, "ReadyToRun", "NETReadyToRun"),
+                        ReadyToRunFramework = GetString(buildLibraries, "ReadyToRunFramework", "NETReadyToRunFramework"),
+                        ReadyToRunRuntimeIdentifiers = GetStringArray(buildLibraries, "ReadyToRunRuntimeIdentifiers") ?? GetStringArray(buildLibraries, "NETReadyToRunRuntimeIdentifier"),
+                        ReadyToRunScope = TryParseReadyToRunScope(GetString(buildLibraries, "ReadyToRunScope", "NETReadyToRunScope"))
                     }
                 });
             }
@@ -242,7 +246,11 @@ public static class LegacySegmentAdapter
                         ?? GetStringArray(conf, "NETAssemblyTypeAcceleratorAssemblies"),
                     NETDoNotCopyLibrariesRecursively = HasKey(conf, "NETDoNotCopyLibrariesRecursively")
                         ? GetBool(conf, "NETDoNotCopyLibrariesRecursively")
-                        : null
+                        : null,
+                    ReadyToRun = GetNullableBool(conf, "ReadyToRun", "NETReadyToRun"),
+                    ReadyToRunFramework = GetString(conf, "ReadyToRunFramework", "NETReadyToRunFramework"),
+                    ReadyToRunRuntimeIdentifiers = GetStringArray(conf, "ReadyToRunRuntimeIdentifiers") ?? GetStringArray(conf, "NETReadyToRunRuntimeIdentifier"),
+                    ReadyToRunScope = TryParseReadyToRunScope(GetString(conf, "ReadyToRunScope", "NETReadyToRunScope"))
                 }
             });
             return;
@@ -326,6 +334,14 @@ public static class LegacySegmentAdapter
         var trimmed = value.Trim();
         if (trimmed.Length == 0) return null;
         return Enum.TryParse<ModuleDevelopmentBinaryMode>(trimmed, ignoreCase: true, out var parsed) ? parsed : null;
+    }
+
+    private static ModuleReadyToRunScope? TryParseReadyToRunScope(string? value)
+    {
+        if (value is null) return null;
+        var trimmed = value.Trim();
+        if (trimmed.Length == 0) return null;
+        return Enum.TryParse<ModuleReadyToRunScope>(trimmed, ignoreCase: true, out var parsed) ? parsed : null;
     }
 
     private static ModuleDevelopmentSourceBootstrapperMode? TryParseDevelopmentSourceBootstrapperMode(string? value)

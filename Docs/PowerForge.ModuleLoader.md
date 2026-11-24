@@ -22,8 +22,9 @@ ordinary module import instead of the patterns used by attack tooling.
 
 The build also resolves which assemblies each host loads. The `.psm1` lists the export assemblies and
 `<Module>.Libraries.ps1` the Windows PowerShell dependencies, per edition and, when the payload has
-`Core-netX.Y` folders or a Core baseline, per .NET version band, so an import does not search the `Lib`
-folder. A configured export assembly that matches more than one nested `Lib` file fails the build; use a
+`Core-netX.Y` folders or a Core baseline, per .NET version band, and, with
+[ReadyToRun payloads](PSPublishModule.ReadyToRun.md) (`Core-ReadyToRun-<rid>`), per runtime identifier,
+so an import does not search the `Lib` folder. A configured export assembly that matches more than one nested `Lib` file fails the build; use a
 path-qualified `ExportAssemblies` entry. The loader runs in its own scope, so the module keeps only the
 `$PowerForge…` state that `Remove-Module` and the Windows PowerShell failure handling need. When the caller's
 `$ErrorActionPreference` is not `Stop`, an export assembly that fails to load is reported as a warning and
