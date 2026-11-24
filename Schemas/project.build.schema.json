@@ -193,7 +193,7 @@
     },
     "SignDependencyAssemblies": {
       "type": "boolean",
-      "description": "When true, assembly signing also signs copied dependency assemblies from build output folders. Defaults to false so only the current project's assemblies are signed."
+      "description": "When true, assembly signing also signs copied dependency assemblies from build output folders. Defaults to false so only the current project's assemblies are signed. RID-specific .NET tool packages always sign every assembly in the per-runtime output they ship."
     },
     "SignPackages": {
       "type": "boolean",

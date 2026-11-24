@@ -936,61 +936,6 @@ public sealed class DotNetRepositoryReleaseServiceTests
         }
     }
 
-    [Theory]
-    [InlineData(DotNetRepositoryPackStrategy.PerProject)]
-    [InlineData(DotNetRepositoryPackStrategy.MSBuild)]
-    public void Execute_WithDependencyAssemblySigning_RejectsRidSpecificPackTool(
-        DotNetRepositoryPackStrategy packStrategy)
-    {
-        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
-        try
-        {
-            var projectDirectory = Directory.CreateDirectory(Path.Combine(root.FullName, "Sample.Tool"));
-            File.WriteAllText(Path.Combine(projectDirectory.FullName, "Sample.Tool.csproj"), """
-                <Project Sdk="Microsoft.NET.Sdk">
-                  <PropertyGroup>
-                    <OutputType>Exe</OutputType>
-                    <TargetFramework>net8.0</TargetFramework>
-                    <PackageId>Sample.Tool</PackageId>
-                    <VersionPrefix>1.0.0</VersionPrefix>
-                    <PackAsTool>true</PackAsTool>
-                    <ToolCommandName>sample-tool</ToolCommandName>
-                    <ToolPackageRuntimeIdentifiers>win-x64</ToolPackageRuntimeIdentifiers>
-                  </PropertyGroup>
-                </Project>
-                """);
-            File.WriteAllText(Path.Combine(projectDirectory.FullName, "Program.cs"), "System.Console.WriteLine(\"sample\");");
-
-            var signingCalls = 0;
-            var result = new DotNetRepositoryReleaseService(new NullLogger()).Execute(
-                new DotNetRepositoryReleaseSpec
-                {
-                    RootPath = root.FullName,
-                    Configuration = "Release",
-                    OutputPath = Path.Combine(root.FullName, "packages"),
-                    Pack = true,
-                    PackStrategy = packStrategy,
-                    Publish = false,
-                    UpdateVersions = false,
-                    CreateReleaseZip = false,
-                    CertificateThumbprint = "ABC123",
-                    SignAssemblies = true,
-                    SignDependencyAssemblies = true,
-                    SignPackages = false
-                },
-                _ => signingCalls++,
-                _ => { });
-
-            Assert.False(result.Success);
-            Assert.Contains("does not support RID-specific PackAsTool output", result.ErrorMessage, StringComparison.Ordinal);
-            Assert.Equal(0, signingCalls);
-        }
-        finally
-        {
-            try { root.Delete(recursive: true); } catch { /* best effort */ }
-        }
-    }
-
     [Fact]
     public void PackToolPathOverlapDetection_UsesActualFileSystemCaseSemantics()
     {

@@ -75,6 +75,12 @@ public sealed class DotNetRepositoryProjectResult
     /// <summary>Packages produced for this project.</summary>
     public List<string> Packages { get; set; } = new();
 
+    /// <summary>
+    /// Runtime identifiers of a RID-specific .NET tool. Each one produces its own <c>{PackageId}.{rid}</c> package
+    /// beside the <c>{PackageId}</c> package that points the .NET SDK at them. Empty for other projects.
+    /// </summary>
+    public List<string> ToolPackageRuntimeIdentifiers { get; set; } = new();
+
     /// <summary>Portable symbol packages produced for this project.</summary>
     public List<string> SymbolPackages { get; set; } = new();
 

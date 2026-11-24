@@ -62,7 +62,7 @@ public sealed partial class DotNetRepositoryReleaseService
     {
         foreach (var project in projects)
         {
-            var projectPackages = FilterPackages(packagePaths, project.PackageId, project.NewVersion!);
+            var projectPackages = FilterPackages(packagePaths, project, project.NewVersion!);
             if (!TryValidateProjectPackagePayloads(project, spec, projectPackages, logger, out error,
                     usePreparedToolPublishOutput, packageOutputPath))
                 return false;
@@ -133,7 +133,8 @@ public sealed partial class DotNetRepositoryReleaseService
             logger,
             payloadNames.ToArray(),
             usePreparedToolPublishOutput,
-            packageOutputPath);
+            packageOutputPath,
+            toolRuntimeIdentifiers: project.ToolPackageRuntimeIdentifiers);
         var outputHashes = BuildOutputHashLookup(outputDirectories, payloadNames, packToolIntermediateAssemblies);
 
         foreach (var packagePath in packagesWithPayloads)

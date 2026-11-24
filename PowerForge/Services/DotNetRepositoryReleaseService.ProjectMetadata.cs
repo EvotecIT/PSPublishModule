@@ -78,17 +78,20 @@ public sealed partial class DotNetRepositoryReleaseService
             string packageId,
             bool isPackable,
             Exception? error,
-            string? packageVersion = null)
+            string? packageVersion = null,
+            IReadOnlyList<string>? toolPackageRuntimeIdentifiers = null)
         {
             PackageId = packageId;
             IsPackable = isPackable;
             Error = error;
             PackageVersion = packageVersion;
+            ToolPackageRuntimeIdentifiers = toolPackageRuntimeIdentifiers ?? Array.Empty<string>();
         }
 
         internal string PackageId { get; }
         internal bool IsPackable { get; }
         internal Exception? Error { get; }
         internal string? PackageVersion { get; }
+        internal IReadOnlyList<string> ToolPackageRuntimeIdentifiers { get; }
     }
 }

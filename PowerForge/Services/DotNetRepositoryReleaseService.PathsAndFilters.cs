@@ -32,6 +32,28 @@ public sealed partial class DotNetRepositoryReleaseService
             ? path
             : path + Path.DirectorySeparatorChar;
 
+    /// <summary>
+    /// Returns the project's packages for <paramref name="version"/>: the RID-specific tool packages first, then the
+    /// package named after the project, so a feed never lists a tool package whose runtime packages are missing.
+    /// </summary>
+    private static List<string> FilterPackages(IEnumerable<string> packages, DotNetRepositoryProjectResult project, string version)
+    {
+        var list = new List<string>();
+        if (packages is null)
+            return list;
+
+        var materialized = packages as IReadOnlyCollection<string> ?? packages.ToArray();
+        foreach (var packageId in GetToolRuntimePackageIds(project))
+            list.AddRange(FilterPackages(materialized, packageId, version));
+        list.AddRange(FilterPackages(materialized, project.PackageId, version));
+        return list;
+    }
+
+    internal static IEnumerable<string> GetToolRuntimePackageIds(DotNetRepositoryProjectResult project)
+        => project.ToolPackageRuntimeIdentifiers
+            .Where(static runtimeIdentifier => !string.IsNullOrWhiteSpace(runtimeIdentifier))
+            .Select(runtimeIdentifier => $"{project.PackageId}.{runtimeIdentifier.Trim()}");
+
     private static List<string> FilterPackages(IEnumerable<string> packages, string projectName, string version)
     {
         var list = new List<string>();

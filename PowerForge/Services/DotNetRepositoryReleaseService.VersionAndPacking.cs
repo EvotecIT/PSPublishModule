@@ -231,22 +231,26 @@ public sealed partial class DotNetRepositoryReleaseService
         result.Duration += buildDuration;
 
         var shouldSignAssemblies = signAssemblies is not null && !string.IsNullOrWhiteSpace(spec.CertificateThumbprint);
+        var isRidSpecificTool = project.ToolPackageRuntimeIdentifiers.Count > 0;
+        var usePreparedToolPublishOutput = (shouldSignAssemblies && spec.SignDependencyAssemblies) || isRidSpecificTool;
+        var onlyPackToolProjects = new HashSet<DotNetRepositoryProjectResult>();
+        if (usePreparedToolPublishOutput)
+        {
+            // Dependency signing prepares every pack tool; otherwise only RID-specific tools need staging.
+            if (!TryPreparePackToolPublishOutputs(new[] { project }, spec, outputPath, logger, ridSpecificToolsOnly: !(shouldSignAssemblies && spec.SignDependencyAssemblies), out var preparationDuration, out var preparationError, out onlyPackToolProjects))
+            {
+                result.Duration += preparationDuration;
+                result.ErrorMessage = preparationError;
+                return result;
+            }
+
+            result.Duration += preparationDuration;
+        }
+
         if (shouldSignAssemblies)
         {
             try
             {
-                var onlyPackToolProjects = new HashSet<DotNetRepositoryProjectResult>();
-                if (spec.SignDependencyAssemblies)
-                {
-                    if (!TryPreparePackToolPublishOutputs(new[] { project }, spec, outputPath, logger, out var preparationDuration, out var preparationError, out onlyPackToolProjects))
-                    {
-                        result.Duration += preparationDuration;
-                        result.ErrorMessage = preparationError;
-                        return result;
-                    }
-
-                    result.Duration += preparationDuration;
-                }
 
                 var includePatterns = ResolveAssemblySigningIncludePatterns(project, spec, csprojDir, configuration, logger);
                 var resolveOutputWatch = Stopwatch.StartNew();
@@ -262,7 +266,9 @@ public sealed partial class DotNetRepositoryReleaseService
                         logger,
                         includePatterns,
                         spec.SignDependencyAssemblies,
-                        outputPath),
+                        outputPath,
+                        toolRuntimeIdentifiers: project.ToolPackageRuntimeIdentifiers,
+                        signPreparedRuntimeOutput: true),
                     recursiveBuildOutputs: !onlyPackToolProjects.Contains(project));
                 if (signingPlan.Files.Length == 0 && !spec.SignDependencyAssemblies)
                 {
@@ -282,7 +288,9 @@ public sealed partial class DotNetRepositoryReleaseService
                                 logger,
                                 includePatterns,
                                 includePreparedPublishOutput: false,
-                                outputPath));
+                                outputPath,
+                                toolRuntimeIdentifiers: project.ToolPackageRuntimeIdentifiers,
+                                signPreparedRuntimeOutput: true));
                     }
                 }
                 resolveOutputWatch.Stop();
@@ -317,7 +325,7 @@ public sealed partial class DotNetRepositoryReleaseService
         }
 
         var exitCode = RunDotnetPack(project.CsprojPath, csprojDir, configuration, outputPath, project.ProjectName, logger, noBuild: true, includeSymbols: spec.IncludeSymbols,
-            usePreparedToolPublishOutput: shouldSignAssemblies && spec.SignDependencyAssemblies, out var stdErr, out var stdOut, out var duration);
+            usePreparedToolPublishOutput, out var stdErr, out var stdOut, out var duration);
         result.Duration += duration;
         if (exitCode != 0)
         {

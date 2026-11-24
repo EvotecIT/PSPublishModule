@@ -157,7 +157,8 @@ public sealed partial class DotNetRepositoryReleaseService
                     ProjectName = entry.Name,
                     CsprojPath = entry.Path,
                     PackageId = projectMetadata.PackageId,
-                    IsPackable = projectMetadata.IsPackable
+                    IsPackable = projectMetadata.IsPackable,
+                    ToolPackageRuntimeIdentifiers = projectMetadata.ToolPackageRuntimeIdentifiers.ToList()
                 });
             }
 
@@ -510,7 +511,13 @@ public sealed partial class DotNetRepositoryReleaseService
                     {
                         var planned = ResolvePackagePath(spec, project, project.NewVersion!);
                         if (!string.IsNullOrWhiteSpace(planned))
+                        {
+                            // Same order as a real pack: runtime packages ahead of the package that points to them.
+                            var plannedDirectory = Path.GetDirectoryName(planned!) ?? string.Empty;
+                            foreach (var runtimePackageId in GetToolRuntimePackageIds(project))
+                                project.Packages.Add(Path.Combine(plannedDirectory, $"{runtimePackageId}.{project.NewVersion}.nupkg"));
                             project.Packages.Add(planned!);
+                        }
                         if (spec.IncludeSymbols)
                         {
                             var plannedSymbols = ResolveSymbolPackagePath(spec, project, project.NewVersion!);
@@ -548,7 +555,7 @@ public sealed partial class DotNetRepositoryReleaseService
                     }
 
                     // A successful batch result contains all produced packages; narrow it to this project/version.
-                    var filtered = FilterPackages(packResult.Packages, project.PackageId, project.NewVersion!);
+                    var filtered = FilterPackages(packResult.Packages, project, project.NewVersion!);
                     if (filtered.Count == 0)
                     {
                         project.ErrorMessage = $"No packages found for version {project.NewVersion}.";
@@ -564,7 +571,7 @@ public sealed partial class DotNetRepositoryReleaseService
 
                     if (spec.IncludeSymbols)
                     {
-                        var filteredSymbols = FilterPackages(packResult.SymbolPackages, project.PackageId, project.NewVersion!);
+                        var filteredSymbols = FilterPackages(packResult.SymbolPackages, project, project.NewVersion!);
                         foreach (var symbolPackage in filteredSymbols)
                             project.SymbolPackages.Add(symbolPackage);
 

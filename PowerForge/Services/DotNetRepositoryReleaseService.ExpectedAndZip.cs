@@ -60,7 +60,7 @@ public sealed partial class DotNetRepositoryReleaseService {
             targetFramework: null,
             runtimeIdentifier: null,
             packProperties,
-            propertyName: "PackageId,IsPackable,PackageVersion",
+            propertyName: "PackageId,IsPackable,PackageVersion," + ToolPackageRuntimeIdentifierProperties,
             fallbackProjectName,
             logger,
             out _,
@@ -79,7 +79,8 @@ public sealed partial class DotNetRepositoryReleaseService {
             string.IsNullOrWhiteSpace(packageId) ? fallbackProjectName : packageId!.Trim(),
             string.Equals(isPackable.Trim(), "true", StringComparison.OrdinalIgnoreCase),
             error: null,
-            packageVersion: ExtractMsBuildPropertyValue(stdOut, "PackageVersion"));
+            packageVersion: ExtractMsBuildPropertyValue(stdOut, "PackageVersion"),
+            toolPackageRuntimeIdentifiers: ResolveToolPackageRuntimeIdentifiers(property => ExtractMsBuildPropertyValue(stdOut, property)));
     }
 
     private static string BuildReleaseZipPath(DotNetRepositoryProjectResult project, DotNetRepositoryReleaseSpec spec) {
