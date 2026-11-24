@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Text;
 using Xunit;
 
 namespace PowerForge.Tests;
@@ -82,8 +83,10 @@ public sealed class DotNetRepositoryReleaseRidToolPackageTests
                     signedPaths = Assert.IsType<string[]>(request.FilePaths);
                     foreach (var path in signedPaths)
                     {
+                        // A signature unique to each file, so a package carrying another runtime's copy is caught.
+                        var signature = SignatureMarker.Concat(Encoding.UTF8.GetBytes(Path.GetFullPath(path))).ToArray();
                         using var stream = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.None);
-                        stream.Write(SignatureMarker, 0, SignatureMarker.Length);
+                        stream.Write(signature, 0, signature.Length);
                     }
                 },
                 _ => { });
@@ -103,15 +106,49 @@ public sealed class DotNetRepositoryReleaseRidToolPackageTests
                 // ships that copy, and ReadyToRun would have dropped any signature it had.
                 foreach (var assembly in new[] { "Sample.Tool.dll", "Sample.Dependency.dll" })
                 {
+                    var stagedPath = Path.Combine(root.FullName, "Sample.Tool", "bin", "Release", "net8.0", runtimeIdentifier, "publish", assembly);
                     var payload = ReadEntry(package, $"tools/net8.0/{runtimeIdentifier}/{assembly}");
-                    Assert.Equal(signAssemblies, payload.Skip(payload.Length - SignatureMarker.Length).SequenceEqual(SignatureMarker));
-                    if (signAssemblies)
-                        Assert.Contains(signedPaths, path => path.EndsWith(Path.Combine(runtimeIdentifier, "publish", assembly), StringComparison.OrdinalIgnoreCase));
+                    Assert.Equal(File.ReadAllBytes(stagedPath), payload);
+                    var signature = SignatureMarker.Concat(Encoding.UTF8.GetBytes(Path.GetFullPath(stagedPath))).ToArray();
+                    Assert.Equal(signAssemblies, payload.Skip(payload.Length - signature.Length).SequenceEqual(signature));
                 }
             }
 
             using var pointer = ZipFile.OpenRead(project.Packages.Last());
             Assert.DoesNotContain(pointer.Entries, entry => entry.FullName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public void PublishPreflight_RejectsRidSpecificToolMissingARuntimePackage()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var project = new DotNetRepositoryProjectResult
+            {
+                ProjectName = "Sample.Tool",
+                PackageId = "Sample.Tool",
+                NewVersion = "1.2.3",
+                ToolPackageRuntimeIdentifiers = { "linux-x64", "any" }
+            };
+            foreach (var packageName in new[] { "Sample.Tool.any.1.2.3.nupkg", "Sample.Tool.1.2.3.nupkg" })
+            {
+                var packagePath = Path.Combine(root.FullName, packageName);
+                File.WriteAllBytes(packagePath, new byte[] { 1 });
+                project.Packages.Add(packagePath);
+            }
+
+            var preflight = new DotNetRepositoryReleaseService(new NullLogger()).ValidatePublishPreflight(
+                new[] { project },
+                new DotNetRepositoryReleaseSpec { RootPath = root.FullName });
+
+            Assert.False(preflight.Success);
+            Assert.Contains("has no Sample.Tool.linux-x64 package to publish", preflight.ErrorMessage, StringComparison.Ordinal);
         }
         finally
         {

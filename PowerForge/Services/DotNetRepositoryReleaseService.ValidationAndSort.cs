@@ -59,6 +59,14 @@ public sealed partial class DotNetRepositoryReleaseService
             if (project.Packages.Count == 0)
                 return (false, $"Publish preflight failed: {project.ProjectName} has no packages to publish.");
 
+            // A RID-specific tool's main package only points at its runtime packages; publishing it without one of
+            // them leaves the tool uninstallable on that runtime.
+            var missingRuntimePackages = GetToolRuntimePackageIds(project)
+                .Where(packageId => FilterPackages(project.Packages, packageId, project.NewVersion!).Count == 0)
+                .ToArray();
+            if (missingRuntimePackages.Length > 0)
+                return (false, $"Publish preflight failed: {project.ProjectName} {project.NewVersion} has no {string.Join(", ", missingRuntimePackages)} package to publish.");
+
             foreach (var pkg in project.Packages.Concat(project.SymbolPackages))
             {
                 if (!spec.WhatIf && !File.Exists(pkg))
