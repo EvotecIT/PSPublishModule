@@ -108,7 +108,14 @@ public sealed partial class DotNetRepositoryReleaseService
             string stdOut;
             TimeSpan duration;
 
-            if (shouldSignAssemblies)
+            var hasRidSpecificTools = projects.Any(static project => project.ToolPackageRuntimeIdentifiers.Count > 0);
+            if (shouldSignAssemblies && !TryRejectRidSpecificToolsWithoutDependencySigning(projects, spec, out var ridSigningError))
+            {
+                result.ErrorMessage = ridSigningError;
+                return result;
+            }
+
+            if (shouldSignAssemblies || hasRidSpecificTools)
             {
                 exitCode = RunDotnetMsBuildTarget(
                     traversalPath,
@@ -130,26 +137,27 @@ public sealed partial class DotNetRepositoryReleaseService
                     return result;
                 }
 
-                var onlyPackToolProjects = new HashSet<DotNetRepositoryProjectResult>();
-                if (spec.SignDependencyAssemblies)
+                // Dependency signing prepares every pack tool; otherwise only RID-specific tools need staging.
+                var prepareAllPackTools = shouldSignAssemblies && spec.SignDependencyAssemblies;
+                if (!TryPreparePackToolPublishOutputs(projects, spec, outputPath, logger, ridSpecificToolsOnly: !prepareAllPackTools, out var preparationDuration, out var preparationError, out var onlyPackToolProjects))
                 {
-                    if (!TryPreparePackToolPublishOutputs(projects, spec, outputPath, logger, out var preparationDuration, out var preparationError, out onlyPackToolProjects))
-                    {
-                        result.Duration += preparationDuration;
-                        result.ErrorMessage = preparationError;
-                        return result;
-                    }
-
                     result.Duration += preparationDuration;
+                    result.ErrorMessage = preparationError;
+                    return result;
                 }
 
-                var signing = SignBatchBuildOutputs(projects, spec, outputPath, logger, signAssemblies!, onlyPackToolProjects);
-                result.Duration += signing.Duration;
-                if (!signing.Success)
+                result.Duration += preparationDuration;
+
+                if (shouldSignAssemblies)
                 {
-                    result.SigningFailed = signing.SigningFailed;
-                    result.ErrorMessage = signing.ErrorMessage;
-                    return result;
+                    var signing = SignBatchBuildOutputs(projects, spec, outputPath, logger, signAssemblies!, onlyPackToolProjects);
+                    result.Duration += signing.Duration;
+                    if (!signing.Success)
+                    {
+                        result.SigningFailed = signing.SigningFailed;
+                        result.ErrorMessage = signing.ErrorMessage;
+                        return result;
+                    }
                 }
 
                 exitCode = RunDotnetMsBuildTarget(
@@ -249,6 +257,10 @@ public sealed partial class DotNetRepositoryReleaseService
             packProperties.Add("SymbolPackageFormat=snupkg");
         }
         var joinedPackProperties = string.Join(";", packProperties);
+        // RID-specific tools always pack from their prepared per-runtime publish output. Pass that to their pack
+        // only, so restore and build keep one evaluation of every referenced project.
+        var packOnlyRidSpecificTools = !usePreparedToolPublishOutput &&
+                                       projects.Any(static project => project.ToolPackageRuntimeIdentifiers.Count > 0);
 
         // Keep this a classic MSBuild project: it only fans out to concrete SDK projects
         // and does not require Microsoft.Build.Traversal to be installed.
@@ -256,7 +268,10 @@ public sealed partial class DotNetRepositoryReleaseService
             new XElement("Project",
                 new XElement("ItemGroup",
                     projects.Select(project => new XElement("PackProject",
-                        new XAttribute("Include", Path.GetFullPath(project.CsprojPath))))),
+                        new XAttribute("Include", Path.GetFullPath(project.CsprojPath)),
+                        packOnlyRidSpecificTools && project.ToolPackageRuntimeIdentifiers.Count > 0
+                            ? new XElement(PackAdditionalPropertiesMetadata, PreparedToolPublishTargetsProperty)
+                            : null))),
                 new XElement("Target",
                     new XAttribute("Name", "RestoreSelected"),
                     new XElement("MSBuild",
@@ -292,8 +307,14 @@ public sealed partial class DotNetRepositoryReleaseService
                         new XAttribute("Properties", buildProperties))),
                 new XElement("Target",
                     new XAttribute("Name", "PackOnlySelected"),
+                    packOnlyRidSpecificTools
+                        ? new XElement("ItemGroup",
+                            new XElement("PackOnlyProject",
+                                new XAttribute("Include", "@(PackProject)"),
+                                new XAttribute("AdditionalProperties", $"%(PackProject.{PackAdditionalPropertiesMetadata})")))
+                        : null,
                     new XElement("MSBuild",
-                        new XAttribute("Projects", "@(PackProject)"),
+                        new XAttribute("Projects", packOnlyRidSpecificTools ? "@(PackOnlyProject)" : "@(PackProject)"),
                         new XAttribute("Targets", "Pack"),
                         new XAttribute("BuildInParallel", "true"),
                         new XAttribute("StopOnFirstFailure", "true"),

@@ -176,7 +176,8 @@ public sealed partial class DotNetRepositoryReleaseService
                 var document = XDocument.Load(stream);
                 var metadata = document.Descendants().FirstOrDefault(element => element.Name.LocalName.Equals("metadata", StringComparison.OrdinalIgnoreCase));
                 var declaredPackageId = metadata?.Elements().FirstOrDefault(element => element.Name.LocalName.Equals("id", StringComparison.OrdinalIgnoreCase))?.Value?.Trim();
-                if (!string.Equals(declaredPackageId, expectedPackageId, StringComparison.OrdinalIgnoreCase))
+                if (!string.Equals(declaredPackageId, expectedPackageId, StringComparison.OrdinalIgnoreCase) &&
+                    !GetToolRuntimePackageIds(project).Contains(declaredPackageId ?? string.Empty, StringComparer.OrdinalIgnoreCase))
                     throw new InvalidOperationException($"Package artifact '{packagePath}' declares id '{declaredPackageId ?? "<missing>"}', expected '{expectedPackageId}'.");
 
                 foreach (var dependency in metadata!.Descendants().Where(element => element.Name.LocalName.Equals("dependency", StringComparison.OrdinalIgnoreCase)))

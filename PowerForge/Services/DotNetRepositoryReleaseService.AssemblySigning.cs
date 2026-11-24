@@ -86,10 +86,15 @@ public sealed partial class DotNetRepositoryReleaseService
         ILogger logger,
         IReadOnlyList<string> includePatterns,
         bool includePreparedPublishOutput = false,
-        string? packageOutputPath = null)
+        string? packageOutputPath = null,
+        IReadOnlyList<string>? toolRuntimeIdentifiers = null)
     {
         var files = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var packProperties = CreatePackToolStagingGlobalProperties(packageOutputPath);
+        // RID-specific tools always pack from the per-runtime publish output prepared for them.
+        var runtimeIdentifiers = toolRuntimeIdentifiers is { Count: > 0 }
+            ? toolRuntimeIdentifiers.ToArray<string?>()
+            : new string?[] { null };
         foreach (var targetFramework in ResolveConfiguredTargetFrameworks(csproj, workingDirectory, configuration, projectName, logger))
         {
             var packAsToolExitCode = RunDotnetMsBuildGetProperty(
@@ -111,63 +116,69 @@ public sealed partial class DotNetRepositoryReleaseService
             if (packAsToolExitCode != 0 || !bool.TryParse(packAsToolValue?.Trim(), out var packAsTool) || !packAsTool)
                 continue;
 
-            var intermediateExitCode = RunDotnetMsBuildGetProperty(
-                csproj,
-                workingDirectory,
-                configuration,
-                targetFramework,
-                null,
-                packProperties,
-                "IntermediateOutputPath",
-                projectName,
-                logger,
-                out var intermediateOutputPath,
-                out var stdErr,
-                out var stdOut,
-                out var duration);
-            if (intermediateExitCode != 0 || string.IsNullOrWhiteSpace(intermediateOutputPath))
+            foreach (var runtimeIdentifier in runtimeIdentifiers)
             {
-                if (includePreparedPublishOutput)
-                    throw new InvalidOperationException($"Unable to evaluate IntermediateOutputPath for prepared assembly signing of {projectName}. {SummarizeProcessFailureOutput(stdErr, stdOut)}".Trim());
-                logger.Verbose($"{projectName}: unable to resolve the pack-tool intermediate output in {FormatDuration(duration)}. {SummarizeProcessFailureOutput(stdErr, stdOut)}");
-                continue;
+                var properties = CreatePackToolRuntimeProperties(packProperties, runtimeIdentifier);
+                var includePrepared = includePreparedPublishOutput || runtimeIdentifier is not null;
+                var target = projectName + FormatRuntimeIdentifierSuffix(runtimeIdentifier);
+                var intermediateExitCode = RunDotnetMsBuildGetProperty(
+                    csproj,
+                    workingDirectory,
+                    configuration,
+                    targetFramework,
+                    null,
+                    properties,
+                    "IntermediateOutputPath",
+                    projectName,
+                    logger,
+                    out var intermediateOutputPath,
+                    out var stdErr,
+                    out var stdOut,
+                    out var duration);
+                if (intermediateExitCode != 0 || string.IsNullOrWhiteSpace(intermediateOutputPath))
+                {
+                    if (includePrepared)
+                        throw new InvalidOperationException($"Unable to evaluate IntermediateOutputPath for prepared assembly signing of {target}. {SummarizeProcessFailureOutput(stdErr, stdOut)}".Trim());
+                    logger.Verbose($"{projectName}: unable to resolve the pack-tool intermediate output in {FormatDuration(duration)}. {SummarizeProcessFailureOutput(stdErr, stdOut)}");
+                    continue;
+                }
+
+                var normalizedIntermediateOutputPath = intermediateOutputPath!.Trim().Trim('"');
+                var resolvedDirectory = Path.IsPathRooted(normalizedIntermediateOutputPath)
+                    ? Path.GetFullPath(normalizedIntermediateOutputPath)
+                    : Path.GetFullPath(Path.Combine(workingDirectory, normalizedIntermediateOutputPath));
+                AddMatchingAssemblyPaths(files, resolvedDirectory, includePatterns, SearchOption.TopDirectoryOnly);
+
+                if (!includePrepared)
+                    continue;
+
+                var publishExitCode = RunDotnetMsBuildGetProperty(
+                    csproj,
+                    workingDirectory,
+                    configuration,
+                    targetFramework,
+                    null,
+                    properties,
+                    "PublishDir",
+                    projectName,
+                    logger,
+                    out var publishDirectory,
+                    out stdErr,
+                    out stdOut,
+                    out duration);
+                if (publishExitCode != 0 || string.IsNullOrWhiteSpace(publishDirectory))
+                {
+                    throw new InvalidOperationException($"Unable to evaluate PublishDir for prepared assembly signing of {target}. {SummarizeProcessFailureOutput(stdErr, stdOut)}".Trim());
+                }
+
+                var normalizedPublishDirectory = publishDirectory!.Trim().Trim('"');
+                var resolvedPublishDirectory = Path.IsPathRooted(normalizedPublishDirectory)
+                    ? Path.GetFullPath(normalizedPublishDirectory)
+                    : Path.GetFullPath(Path.Combine(workingDirectory, normalizedPublishDirectory));
+                if (!Directory.Exists(resolvedPublishDirectory))
+                    throw new DirectoryNotFoundException($"The prepared pack-tool publish output for {target} is missing: {resolvedPublishDirectory}");
+                AddMatchingAssemblyPaths(files, resolvedPublishDirectory, includePatterns, SearchOption.AllDirectories);
             }
-
-            var normalizedIntermediateOutputPath = intermediateOutputPath!.Trim().Trim('"');
-            var resolvedDirectory = Path.IsPathRooted(normalizedIntermediateOutputPath)
-                ? Path.GetFullPath(normalizedIntermediateOutputPath)
-                : Path.GetFullPath(Path.Combine(workingDirectory, normalizedIntermediateOutputPath));
-            AddMatchingAssemblyPaths(files, resolvedDirectory, includePatterns, SearchOption.TopDirectoryOnly);
-
-            if (!includePreparedPublishOutput)
-                continue;
-
-            var publishExitCode = RunDotnetMsBuildGetProperty(
-                csproj,
-                workingDirectory,
-                configuration,
-                targetFramework,
-                null,
-                packProperties,
-                "PublishDir",
-                projectName,
-                logger,
-                out var publishDirectory,
-                out stdErr,
-                out stdOut,
-                out duration);
-            if (publishExitCode != 0 || string.IsNullOrWhiteSpace(publishDirectory))
-            {
-                throw new InvalidOperationException($"Unable to evaluate PublishDir for prepared assembly signing of {projectName}. {SummarizeProcessFailureOutput(stdErr, stdOut)}".Trim());
-            }
-
-            var normalizedPublishDirectory = publishDirectory!.Trim().Trim('"');
-            var resolvedPublishDirectory = Path.IsPathRooted(normalizedPublishDirectory)
-                ? Path.GetFullPath(normalizedPublishDirectory)
-                : Path.GetFullPath(Path.Combine(workingDirectory, normalizedPublishDirectory));
-            if (!Directory.Exists(resolvedPublishDirectory))
-                throw new DirectoryNotFoundException($"The prepared pack-tool publish output for {projectName} is missing: {resolvedPublishDirectory}");
-            AddMatchingAssemblyPaths(files, resolvedPublishDirectory, includePatterns, SearchOption.AllDirectories);
         }
 
         return files.ToArray();

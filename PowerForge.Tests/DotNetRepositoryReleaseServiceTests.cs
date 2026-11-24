@@ -939,7 +939,7 @@ public sealed class DotNetRepositoryReleaseServiceTests
     [Theory]
     [InlineData(DotNetRepositoryPackStrategy.PerProject)]
     [InlineData(DotNetRepositoryPackStrategy.MSBuild)]
-    public void Execute_WithDependencyAssemblySigning_RejectsRidSpecificPackTool(
+    public void Execute_WithAssemblySigningButNotDependencySigning_RejectsRidSpecificPackTool(
         DotNetRepositoryPackStrategy packStrategy)
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
@@ -975,14 +975,16 @@ public sealed class DotNetRepositoryReleaseServiceTests
                     CreateReleaseZip = false,
                     CertificateThumbprint = "ABC123",
                     SignAssemblies = true,
-                    SignDependencyAssemblies = true,
+                    SignDependencyAssemblies = false,
                     SignPackages = false
                 },
                 _ => signingCalls++,
                 _ => { });
 
+            // A per-runtime publish copies every dependency assembly, so signing only the tool's own
+            // assembly would ship unsigned dependencies.
             Assert.False(result.Success);
-            Assert.Contains("does not support RID-specific PackAsTool output", result.ErrorMessage, StringComparison.Ordinal);
+            Assert.Contains("Enable SignDependencyAssemblies", result.ErrorMessage, StringComparison.Ordinal);
             Assert.Equal(0, signingCalls);
         }
         finally

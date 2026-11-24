@@ -8,11 +8,18 @@ namespace PowerForge;
 
 public sealed partial class DotNetRepositoryReleaseService
 {
+    /// <summary>
+    /// Publishes pack-tool projects into the staging folders that <c>dotnet pack</c> reads, so the packages carry
+    /// the files that are signed there. A RID-specific tool gets one build and publish per runtime identifier, because
+    /// <c>dotnet pack --no-build</c> has no per-runtime output to publish from. With <paramref name="ridSpecificToolsOnly"/>
+    /// only those tools are prepared; RID-neutral tools keep packing from their build output.
+    /// </summary>
     private static bool TryPreparePackToolPublishOutputs(
         IReadOnlyList<DotNetRepositoryProjectResult> projects,
         DotNetRepositoryReleaseSpec spec,
         string? packageOutputPath,
         ILogger logger,
+        bool ridSpecificToolsOnly,
         out TimeSpan duration,
         out string error,
         out HashSet<DotNetRepositoryProjectResult> onlyPackToolProjects)
@@ -26,6 +33,10 @@ public sealed partial class DotNetRepositoryReleaseService
 
         foreach (var project in projects)
         {
+            var runtimeIdentifiers = project.ToolPackageRuntimeIdentifiers;
+            if (ridSpecificToolsOnly && runtimeIdentifiers.Count == 0)
+                continue;
+
             var onlyPackToolFrameworks = true;
             var hasPackToolFramework = false;
             var workingDirectory = Path.GetDirectoryName(project.CsprojPath) ?? string.Empty;
@@ -57,7 +68,8 @@ public sealed partial class DotNetRepositoryReleaseService
                     continue;
                 }
 
-                if (!TryRejectRidSpecificPackTool(
+                if (runtimeIdentifiers.Count == 0 &&
+                    !TryRejectUnsupportedRidSpecificPackTool(
                         project,
                         workingDirectory,
                         configuration,
@@ -70,47 +82,54 @@ public sealed partial class DotNetRepositoryReleaseService
                     return false;
                 }
 
-                if (!TryReadPackToolProperty(
+                foreach (var runtimeIdentifier in runtimeIdentifiers.Count == 0 ? new string?[] { null } : runtimeIdentifiers.ToArray<string?>())
+                {
+                    var planProperties = CreatePackToolRuntimeProperties(packProperties, runtimeIdentifier);
+                    if (!TryReadPackToolProperty(
+                            project,
+                            workingDirectory,
+                            configuration,
+                            targetFramework,
+                            planProperties,
+                            "PublishDir",
+                            logger,
+                            ref duration,
+                            out var publishDirectory,
+                            out error))
+                    {
+                        return false;
+                    }
+
+                    if (string.IsNullOrWhiteSpace(publishDirectory))
+                    {
+                        error = $"Unable to resolve the pack-tool publish output for {project.ProjectName}{FormatRuntimeIdentifierSuffix(runtimeIdentifier)}.";
+                        return false;
+                    }
+
+                    var resolvedPublishDirectory = ResolveProjectPath(workingDirectory, publishDirectory!);
+                    if (!TryValidatePackToolPublishDirectory(
+                            project,
+                            workingDirectory,
+                            configuration,
+                            targetFramework,
+                            planProperties,
+                            resolvedPublishDirectory,
+                            logger,
+                            ref duration,
+                            out error))
+                    {
+                        return false;
+                    }
+
+                    plans.Add(new PackToolPublishPlan(
                         project,
                         workingDirectory,
-                        configuration,
                         targetFramework,
-                        packProperties,
-                        "PublishDir",
-                        logger,
-                        ref duration,
-                        out var publishDirectory,
-                        out error))
-                {
-                    return false;
-                }
-
-                if (string.IsNullOrWhiteSpace(publishDirectory))
-                {
-                    error = $"Unable to resolve the pack-tool publish output for {project.ProjectName}.";
-                    return false;
-                }
-
-                var resolvedPublishDirectory = ResolveProjectPath(workingDirectory, publishDirectory!);
-                if (!TryValidatePackToolPublishDirectory(
-                        project,
-                        workingDirectory,
-                        configuration,
-                        targetFramework,
-                        packProperties,
                         resolvedPublishDirectory,
-                        logger,
-                        ref duration,
-                        out error))
-                {
-                    return false;
+                        runtimeIdentifier,
+                        planProperties));
                 }
 
-                plans.Add(new PackToolPublishPlan(
-                    project,
-                    workingDirectory,
-                    targetFramework,
-                    resolvedPublishDirectory));
                 hasPackToolFramework = true;
             }
 
@@ -134,13 +153,41 @@ public sealed partial class DotNetRepositoryReleaseService
                 return false;
             }
 
-            var exitCode = RunDotnetPublishForPackTool(
+            var target = plan.Project.ProjectName + FormatRuntimeIdentifierSuffix(plan.RuntimeIdentifier);
+            if (plan.RuntimeIdentifier is not null)
+            {
+                // The release build is RID-neutral. Build this runtime's tool assembly without the pack-only
+                // NoBuild switch, then publish it with exactly the properties the pack evaluates.
+                var buildExitCode = RunDotnetForPackTool(
+                    "build",
+                    plan.Project.CsprojPath,
+                    plan.WorkingDirectory,
+                    configuration,
+                    plan.TargetFramework,
+                    CreatePackToolRuntimeBuildProperties(plan.RuntimeIdentifier),
+                    noBuild: false,
+                    target,
+                    logger,
+                    out var buildStdErr,
+                    out var buildStdOut,
+                    out var buildDuration);
+                duration += buildDuration;
+                if (buildExitCode != 0)
+                {
+                    error = $"dotnet build staging failed for {target} (exit {buildExitCode}). {SummarizeProcessFailureOutput(buildStdErr, buildStdOut)}".Trim();
+                    return false;
+                }
+            }
+
+            var exitCode = RunDotnetForPackTool(
+                "publish",
                 plan.Project.CsprojPath,
                 plan.WorkingDirectory,
                 configuration,
                 plan.TargetFramework,
-                packProperties,
-                plan.Project.ProjectName,
+                plan.GlobalProperties,
+                noBuild: true,
+                target,
                 logger,
                 out var stdErr,
                 out var stdOut,
@@ -148,17 +195,17 @@ public sealed partial class DotNetRepositoryReleaseService
             duration += publishDuration;
             if (exitCode != 0)
             {
-                error = $"dotnet publish staging failed for {plan.Project.ProjectName} (exit {exitCode}). {SummarizeProcessFailureOutput(stdErr, stdOut)}".Trim();
+                error = $"dotnet publish staging failed for {target} (exit {exitCode}). {SummarizeProcessFailureOutput(stdErr, stdOut)}".Trim();
                 return false;
             }
 
             if (!Directory.Exists(plan.PublishDirectory))
             {
-                error = $"The pack-tool publish output for {plan.Project.ProjectName} was not created at {plan.PublishDirectory}.";
+                error = $"The pack-tool publish output for {target} was not created at {plan.PublishDirectory}.";
                 return false;
             }
 
-            logger.Success($"{plan.Project.ProjectName}: prepared clean pack-tool publish output for assembly signing in {FormatDuration(publishDuration)}.");
+            logger.Success($"{target}: prepared clean pack-tool publish output for assembly signing in {FormatDuration(publishDuration)}.");
         }
 
         return true;
@@ -214,7 +261,7 @@ public sealed partial class DotNetRepositoryReleaseService
         return false;
     }
 
-    private static bool TryRejectRidSpecificPackTool(
+    private static bool TryRejectUnsupportedRidSpecificPackTool(
         DotNetRepositoryProjectResult project,
         string workingDirectory,
         string configuration,
@@ -247,7 +294,10 @@ public sealed partial class DotNetRepositoryReleaseService
             if (!hasRidSpecificValue)
                 continue;
 
-            error = $"Dependency assembly signing does not support RID-specific PackAsTool output for {project.ProjectName}; remove the RID-specific tool configuration or disable SignDependencyAssemblies.";
+            // RID-specific tools that list ToolPackageRuntimeIdentifiers (or RuntimeIdentifiers) are prepared per
+            // runtime. A tool fixed to one RuntimeIdentifier, or a NativeAOT tool that packs each runtime separately,
+            // has no runtime list to prepare.
+            error = $"{project.ProjectName} packs a RID-specific tool without a ToolPackageRuntimeIdentifiers or RuntimeIdentifiers list. Pack-tool staging supports RID-neutral tools and tools that list their runtimes.";
             return false;
         }
 
@@ -496,12 +546,14 @@ public sealed partial class DotNetRepositoryReleaseService
             : Path.GetFullPath(Path.Combine(workingDirectory, normalized));
     }
 
-    private static int RunDotnetPublishForPackTool(
+    private static int RunDotnetForPackTool(
+        string verb,
         string csproj,
         string workingDirectory,
         string configuration,
         string? targetFramework,
         IReadOnlyDictionary<string, string> globalProperties,
+        bool noBuild,
         string projectName,
         ILogger logger,
         out string stdErr,
@@ -521,13 +573,14 @@ public sealed partial class DotNetRepositoryReleaseService
 
         var args = new List<string>
         {
-            "publish",
+            verb,
             csproj,
             "--configuration",
             configuration,
-            "--no-build",
             "--no-restore"
         };
+        if (noBuild)
+            args.Add("--no-build");
         if (!string.IsNullOrWhiteSpace(targetFramework))
         {
             args.Add("--framework");
@@ -546,11 +599,11 @@ public sealed partial class DotNetRepositoryReleaseService
         var exitCode = RunProcessWithHeartbeat(
             psi,
             logger,
-            elapsed => $"{projectName}: dotnet publish staging still running ({FormatDuration(elapsed)} elapsed).",
+            elapsed => $"{projectName}: dotnet {verb} staging still running ({FormatDuration(elapsed)} elapsed).",
             out stdErr,
             out stdOut,
             out duration);
-        LogProcessOutput(logger, projectName, "dotnet publish staging", stdOut, stdErr);
+        LogProcessOutput(logger, projectName, $"dotnet {verb} staging", stdOut, stdErr);
         return exitCode;
     }
 
@@ -560,12 +613,16 @@ public sealed partial class DotNetRepositoryReleaseService
             DotNetRepositoryProjectResult project,
             string workingDirectory,
             string? targetFramework,
-            string publishDirectory)
+            string publishDirectory,
+            string? runtimeIdentifier,
+            IReadOnlyDictionary<string, string> globalProperties)
         {
             Project = project;
             WorkingDirectory = workingDirectory;
             TargetFramework = targetFramework;
             PublishDirectory = publishDirectory;
+            RuntimeIdentifier = runtimeIdentifier;
+            GlobalProperties = globalProperties;
         }
 
         internal DotNetRepositoryProjectResult Project { get; }
@@ -575,5 +632,9 @@ public sealed partial class DotNetRepositoryReleaseService
         internal string? TargetFramework { get; }
 
         internal string PublishDirectory { get; }
+
+        internal string? RuntimeIdentifier { get; }
+
+        internal IReadOnlyDictionary<string, string> GlobalProperties { get; }
     }
 }

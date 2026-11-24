@@ -186,6 +186,7 @@ internal sealed class ModulePackageReleaseCheckpointService
                 Packages = project.Packages
                     .Select(path => ResolvePublicationPackagePath(path, stagedBySource, requireStagedAssets))
                     .ToList(),
+                ToolPackageRuntimeIdentifiers = project.ToolPackageRuntimeIdentifiers.ToList(),
                 SymbolPackages = project.SymbolPackages
                     .Select(path => ResolvePublicationPackagePath(path, stagedBySource, requireStagedAssets))
                     .ToList(),
