@@ -1,5 +1,7 @@
 using System;
 using System.IO;
+using System.Reflection.PortableExecutable;
+using System.Runtime.InteropServices;
 using Xunit;
 
 namespace PowerForge.Tests;
@@ -140,6 +142,110 @@ public sealed class ModuleReadyToRunTests
         {
             if (Directory.Exists(root))
                 Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Generate_ScriptModuleWithCoreOnlyHelper_KeepsWindowsPowerShellOffTheReadyToRunPayload()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-readytorun-helper-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "Public"));
+        File.WriteAllText(Path.Combine(root, "Public", "Get-HelperStatus.ps1"), "function Get-HelperStatus { 'script' }");
+        foreach (var folder in new[] { "Core", ModuleBinaryPayloadLayout.GetReadyToRunFolderName("win-x64") })
+        {
+            Directory.CreateDirectory(Path.Combine(root, "Lib", folder));
+            File.Copy(typeof(ModuleReadyToRunTests).Assembly.Location, Path.Combine(root, "Lib", folder, "DemoModule.dll"), overwrite: true);
+        }
+        File.WriteAllText(Path.Combine(root, "Lib", ModuleBinaryPayloadLayout.GetReadyToRunFolderName("win-x64"), ModuleBinaryPayloadLayout.TargetFrameworkMarkerFileName), "net10.0");
+
+        try
+        {
+            ModuleBootstrapperGenerator.Generate(
+                root,
+                "DemoModule",
+                new ExportSet(new[] { "Get-HelperStatus" }, Array.Empty<string>(), Array.Empty<string>()),
+                new[] { "DemoModule.dll" },
+                handleRuntimes: false,
+                targetFrameworks: new[] { "net8.0" });
+
+            var bootstrapper = File.ReadAllText(Path.Combine(root, "DemoModule.psm1"));
+            var modulesStart = bootstrapper.IndexOf("$BinaryModules = ", StringComparison.Ordinal);
+            var modules = bootstrapper.Substring(modulesStart, bootstrapper.IndexOf("$BinaryModulePaths", modulesStart, StringComparison.Ordinal) - modulesStart);
+            var desktopModules = modules.Substring(modules.LastIndexOf("} else {", StringComparison.Ordinal));
+            // Windows PowerShell keeps the script functions and never loads the PowerShell 7 helper.
+            Assert.DoesNotContain("DemoModule.dll", desktopModules, StringComparison.Ordinal);
+            Assert.Contains("Path = 'Lib/Core-ReadyToRun-win-x64/DemoModule.dll'", bootstrapper, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void ValidateConfiguredAssemblies_ChecksReadyToRunPayloadsLikeThePortableOne()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-readytorun-surface-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "Lib", "Core"));
+        Directory.CreateDirectory(Path.Combine(root, "Lib", ModuleBinaryPayloadLayout.GetReadyToRunFolderName("win-x64")));
+        File.Copy(typeof(ModuleReadyToRunTests).Assembly.Location, Path.Combine(root, "Lib", "Core", "DemoModule.dll"), overwrite: true);
+
+        try
+        {
+            var error = Assert.Throws<InvalidOperationException>(() =>
+                ModuleBinaryExportSurfaceValidator.ValidateConfiguredAssemblies(root, "DemoModule", new[] { "DemoModule.dll" }));
+            Assert.Contains("Core-ReadyToRun-win-x64", error.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void PublishReadyToRun_PrecompilesProjectReferencesAndKeepsTheProjectsOwnTargetsHook()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "ReadyToRunPublish", Guid.NewGuid().ToString("N"));
+        var dependencyDirectory = Directory.CreateDirectory(Path.Combine(root, "Dependency")).FullName;
+        var moduleDirectory = Directory.CreateDirectory(Path.Combine(root, "Module")).FullName;
+        var runtimeIdentifier = (RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "win" :
+                                    RuntimeInformation.IsOSPlatform(OSPlatform.OSX) ? "osx" : "linux") +
+                                (RuntimeInformation.OSArchitecture == Architecture.Arm64 ? "-arm64" : "-x64");
+        try
+        {
+            File.WriteAllText(Path.Combine(dependencyDirectory, "Dependency.csproj"),
+                "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>");
+            File.WriteAllText(Path.Combine(dependencyDirectory, "Dependency.cs"),
+                "namespace Dependency; public static class Value { public static string Text => \"dependency\"; }");
+            var moduleProject = Path.Combine(moduleDirectory, "Module.csproj");
+            File.WriteAllText(moduleProject,
+                "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net10.0</TargetFramework><CustomAfterMicrosoftCommonTargets>$(MSBuildProjectDirectory)/Custom.After.targets</CustomAfterMicrosoftCommonTargets></PropertyGroup><ItemGroup><ProjectReference Include=\"../Dependency/Dependency.csproj\" /></ItemGroup></Project>");
+            File.WriteAllText(Path.Combine(moduleDirectory, "Custom.After.targets"),
+                "<Project><Target Name=\"PreserveCustomAfterHook\" AfterTargets=\"Publish\"><WriteLinesToFile File=\"$(PublishDir)custom-after-hook.txt\" Lines=\"custom hook preserved\" Overwrite=\"true\" /></Target></Project>");
+            File.WriteAllText(Path.Combine(moduleDirectory, "Module.cs"),
+                "namespace Module; public static class Value { public static string Text => Dependency.Value.Text; }");
+
+            var published = new DotnetPublisher(new NullLogger()).PublishReadyToRun(
+                moduleProject, "Release", "net10.0", new[] { runtimeIdentifier }, ModuleReadyToRunScope.ModuleAssemblies,
+                "1.2.3", Path.Combine(root, "artifacts"), restoreSources: null);
+            var publishDirectory = published[runtimeIdentifier];
+
+            Assert.Equal("custom hook preserved", File.ReadAllText(Path.Combine(publishDirectory, "custom-after-hook.txt")).Trim());
+            Assert.True(HasReadyToRunCode(Path.Combine(publishDirectory, "Module.dll")));
+            Assert.True(HasReadyToRunCode(Path.Combine(publishDirectory, "Dependency.dll")));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, recursive: true);
+        }
+
+        static bool HasReadyToRunCode(string path)
+        {
+            using var reader = new PEReader(File.OpenRead(path));
+            return reader.PEHeaders.CorHeader?.ManagedNativeHeaderDirectory.Size > 0;
         }
     }
 

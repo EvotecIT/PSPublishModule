@@ -19,6 +19,8 @@ public sealed partial class DotnetPublisher
     private const string ReadyToRunModuleScopeTargets = """
         <Project>
           <!-- Written by PowerForge: precompile the module's own assemblies and leave NuGet package assemblies as IL. -->
+          <!-- The publish passes this file as CustomAfterMicrosoftCommonTargets, so it imports the project's own value first. -->
+          <Import Project="{0}" Condition="'{0}' != '' and Exists('{0}')" />
           <Target Name="PowerForgeExcludePackageAssembliesFromReadyToRun" BeforeTargets="_PrepareForReadyToRunCompilation" Condition="'$(PublishReadyToRun)' == 'true'">
             <ItemGroup>
               <PublishReadyToRunExclude Include="@(RuntimeCopyLocalItems->'%(Filename)%(Extension)')" />
@@ -59,15 +61,17 @@ public sealed partial class DotnetPublisher
         var artifacts = Path.GetFullPath(artifactsRoot.Trim().Trim('"'));
         Directory.CreateDirectory(artifacts);
 
-        string? scopeTargetsPath = null;
-        if (scope == ModuleReadyToRunScope.ModuleAssemblies)
-        {
-            scopeTargetsPath = Path.Combine(artifacts, ReadyToRunModuleScopeTargetsFileName);
-            File.WriteAllText(scopeTargetsPath, ReadyToRunModuleScopeTargets);
-        }
+        var scopeTargetsPath = scope == ModuleReadyToRunScope.ModuleAssemblies
+            ? Path.Combine(artifacts, ReadyToRunModuleScopeTargetsFileName)
+            : null;
 
         var maxCpuCountArgument = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "/m:1" : "-m:1";
         var existingPathMap = ReadProjectGraphPathMap(projectPath, configuration, framework, artifacts);
+        if (scopeTargetsPath is not null)
+        {
+            _customAfterMicrosoftCommonTargets.TryGetValue(framework, out var projectHook);
+            File.WriteAllText(scopeTargetsPath, CreateModuleScopeTargets(projectHook));
+        }
         var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var runtimeIdentifier in runtimeIdentifiers)
         {
@@ -92,6 +96,22 @@ public sealed partial class DotnetPublisher
         }
 
         return result;
+    }
+
+    /// <summary>Creates the module-scope targets, importing the project's own <c>CustomAfterMicrosoftCommonTargets</c> first.</summary>
+    internal static string CreateModuleScopeTargets(string? projectCustomAfterTargets)
+    {
+        // MSBuild-escape the evaluated path so it is used literally, then XML-escape it for the attribute.
+        var escaped = new System.Text.StringBuilder();
+        foreach (var character in (projectCustomAfterTargets ?? string.Empty).Trim())
+        {
+            if ("%$@';?*".IndexOf(character) >= 0)
+                escaped.Append('%').Append(((int)character).ToString("X2", System.Globalization.CultureInfo.InvariantCulture));
+            else
+                escaped.Append(character);
+        }
+
+        return ReadyToRunModuleScopeTargets.Replace("{0}", System.Security.SecurityElement.Escape(escaped.ToString()) ?? string.Empty);
     }
 
     internal static IReadOnlyList<string> BuildReadyToRunPublishArguments(

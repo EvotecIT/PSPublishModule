@@ -36,6 +36,11 @@ internal static class ModuleBinaryPayloadLayout
     /// <summary>Lib folder prefix of the precompiled PowerShell 7 payloads; the runtime identifier follows it.</summary>
     internal const string ReadyToRunFolderPrefix = "Core-ReadyToRun-";
 
+    internal static bool IsReadyToRunPayloadFolderName(string? folderName)
+        => folderName is not null &&
+           folderName.Length > ReadyToRunFolderPrefix.Length &&
+           folderName.StartsWith(ReadyToRunFolderPrefix, StringComparison.OrdinalIgnoreCase);
+
     internal static string GetReadyToRunFolderName(string runtimeIdentifier)
         => ReadyToRunFolderPrefix + runtimeIdentifier.Trim().ToLowerInvariant();
 

@@ -17,6 +17,7 @@ public sealed partial class DotnetPublisher
     private const string ProjectReferenceVersionProperties = "%3BVersion%3BAssemblyVersion%3BFileVersion";
     private readonly ILogger _logger;
     private readonly Dictionary<string, string> _projectAssetsFiles = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, string> _customAfterMicrosoftCommonTargets = new(StringComparer.OrdinalIgnoreCase);
 
     internal string? GetProjectAssetsFile(string framework)
         => _projectAssetsFiles.TryGetValue(framework, out string? path) ? path : null;
@@ -244,7 +245,10 @@ public sealed partial class DotnetPublisher
                 artifacts);
             if (string.Equals(request.ProjectPath, Path.GetFullPath(projectPath), StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(request.TargetFramework, tfm, StringComparison.OrdinalIgnoreCase))
+            {
                 _projectAssetsFiles[tfm] = evaluation.ProjectAssetsFile;
+                _customAfterMicrosoftCommonTargets[tfm] = evaluation.CustomAfterMicrosoftCommonTargets;
+            }
             var pathMap = evaluation.PathMap.Trim().TrimEnd(',');
             if (!string.IsNullOrWhiteSpace(pathMap) && seenPathMaps.Add(pathMap))
                 pathMaps.Add(pathMap);
@@ -285,6 +289,7 @@ public sealed partial class DotnetPublisher
             "-getProperty:PathMap",
             "-getProperty:TargetFrameworks",
             "-getProperty:ProjectAssetsFile",
+            "-getProperty:CustomAfterMicrosoftCommonTargets",
             "-getItem:ProjectReference",
             $"-p:Configuration={configuration}",
             "-p:UseArtifactsOutput=true",
@@ -364,7 +369,10 @@ public sealed partial class DotnetPublisher
                 : string.Empty;
             if (!string.IsNullOrWhiteSpace(assetsFile) && !Path.IsPathRooted(assetsFile))
                 assetsFile = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(projectPath)!, assetsFile));
-            return new ProjectBuildContext(pathMap, projectReferences, declaredTargetFrameworks, assetsFile);
+            var customAfterTargets = root.GetProperty("Properties").TryGetProperty("CustomAfterMicrosoftCommonTargets", out JsonElement customAfter)
+                ? customAfter.GetString() ?? string.Empty
+                : string.Empty;
+            return new ProjectBuildContext(pathMap, projectReferences, declaredTargetFrameworks, assetsFile, customAfterTargets);
         }
 
         _logger.Error(
@@ -395,12 +403,14 @@ public sealed partial class DotnetPublisher
             string pathMap,
             IReadOnlyList<string> projectReferences,
             IReadOnlyList<string> targetFrameworks,
-            string projectAssetsFile)
+            string projectAssetsFile,
+            string customAfterMicrosoftCommonTargets)
         {
             PathMap = pathMap;
             ProjectReferences = projectReferences;
             TargetFrameworks = targetFrameworks;
             ProjectAssetsFile = projectAssetsFile;
+            CustomAfterMicrosoftCommonTargets = customAfterMicrosoftCommonTargets;
         }
 
         internal string PathMap { get; }
@@ -409,6 +419,7 @@ public sealed partial class DotnetPublisher
 
         internal IReadOnlyList<string> TargetFrameworks { get; }
         internal string ProjectAssetsFile { get; }
+        internal string CustomAfterMicrosoftCommonTargets { get; }
     }
 
     private void RunDotnet(string workingDirectory, IReadOnlyList<string> args, string tfm, string phase)

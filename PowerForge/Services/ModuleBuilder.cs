@@ -246,6 +246,9 @@ public sealed partial class ModuleBuilder
                 .Concat(opts.DesktopDependencyAssetFrameworks.Count > 0
                     ? new[] { "NETDesktopDependencyAssetFrameworks" }
                     : Array.Empty<string>())
+                .Concat(opts.ReadyToRun?.Enabled == true
+                    ? new[] { "NETReadyToRun" }
+                    : Array.Empty<string>())
                 .Where(static reason => !string.IsNullOrWhiteSpace(reason))
                 .Select(static reason => reason.Trim())
                 .Distinct(StringComparer.OrdinalIgnoreCase)

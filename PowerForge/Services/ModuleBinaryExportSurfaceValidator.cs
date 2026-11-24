@@ -162,7 +162,9 @@ internal static class ModuleBinaryExportSurfaceValidator
         {
             var payloadDirectories = Directory.EnumerateDirectories(libRoot)
                 .Select(path => new { Path = path, Name = Path.GetFileName(path) })
-                .Where(static item => ModuleBinaryPayloadLayout.IsSelectablePayloadFolderName(item.Name))
+                // ReadyToRun payloads replace the portable one on matching hosts, so they must export the same surface.
+                .Where(static item => ModuleBinaryPayloadLayout.IsSelectablePayloadFolderName(item.Name) ||
+                                      ModuleBinaryPayloadLayout.IsReadyToRunPayloadFolderName(item.Name))
                 .OrderBy(static item => GetPayloadFolderSortOrder(item.Name!))
                 .ThenBy(static item => item.Name, StringComparer.OrdinalIgnoreCase)
                 .ToArray();

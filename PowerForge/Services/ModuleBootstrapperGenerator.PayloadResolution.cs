@@ -10,7 +10,7 @@ namespace PowerForge;
 internal static partial class ModuleBootstrapperGenerator
 {
     private static readonly Regex NamedCorePayloadFolder = new(@"^Core-(?:net|netcoreapp)\d+\.\d+$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
-    private static readonly Regex CoreOnlyPayloadFolder = new(@"^Core(?:-(?:net|netcoreapp)\d+\.\d+)?$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    private static readonly Regex CoreOnlyPayloadFolder = new(@"^Core(?:-(?:net|netcoreapp)\d+\.\d+|-ReadyToRun-[A-Za-z0-9._-]+)?$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     /// <summary>A configured export assembly resolved for one host: a path relative to the module root, or the reason it cannot load.</summary>
     private sealed class BinaryModulePayload

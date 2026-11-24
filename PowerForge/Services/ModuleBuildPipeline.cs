@@ -240,7 +240,7 @@ public sealed class ModuleBuildPipeline
             ExcludeLibraryFilter = spec.ExcludeLibraryFilter ?? Array.Empty<string>(),
             DoNotCopyLibrariesRecursively = spec.DoNotCopyLibrariesRecursively,
             HandleRuntimes = spec.HandleRuntimes,
-            ReadyToRun = spec.ReadyToRun,
+            ReadyToRun = spec.RefreshManifestOnly || spec.SkipDotNetBuild ? null : spec.ReadyToRun,
             DesktopDependencyAssetFrameworks = spec.RefreshManifestOnly || spec.SkipDotNetBuild
                 ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
                 : new Dictionary<string, string>(spec.DesktopDependencyAssetFrameworks, StringComparer.OrdinalIgnoreCase),

@@ -56,7 +56,9 @@ The build needs the binary project to target the ReadyToRun framework (add `net1
 `TargetFrameworks`) and the module to keep a portable PowerShell 7 framework such as `net8.0`. Referenced
 libraries are built once for all runtime identifiers; only the module project is published per runtime.
 The build downloads the ReadyToRun compiler and the runtime pack for each runtime identifier from your
-NuGet sources, and can compile every listed runtime on any build machine.
+NuGet sources. Which targets a build machine can compile depends on its platform: a macOS arm64 machine
+built `win-x64`, `linux-x64` and `osx-arm64` payloads, while .NET doesn't list Windows targets as
+supported from Linux hosts. Build Windows payloads on Windows or macOS.
 
 ## Signing
 
