@@ -101,6 +101,10 @@
         "SearchClass": { "type": ["string", "null"] },
         "NETBinaryModuleDocumentation": { "type": ["boolean", "null"] },
         "HandleRuntimes": { "type": ["boolean", "null"] },
+        "ReadyToRun": { "type": ["boolean", "null"] },
+        "ReadyToRunFramework": { "type": ["string", "null"] },
+        "ReadyToRunRuntimeIdentifiers": { "type": ["array", "null"], "items": { "type": "string" } },
+        "ReadyToRunScope": { "type": ["string", "null"], "enum": ["ModuleAssemblies", "All", null] },
         "DesktopDependencyAssetFrameworks": {
           "type": ["object", "null"],
           "description": "Explicit NuGet package ID to Desktop asset TFM selections. Null preserves the previous map; an empty object clears it.",

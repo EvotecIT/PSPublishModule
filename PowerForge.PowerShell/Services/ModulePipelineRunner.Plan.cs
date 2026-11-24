@@ -71,6 +71,7 @@ public sealed partial class ModulePipelineRunner
         var ignoreLibraryOnLoadFromSegments = inputs.IgnoreLibraryOnLoadFromSegments;
         var doNotCopyLibrariesRecursivelyFromSegments = inputs.DoNotCopyLibrariesRecursivelyFromSegments;
         var handleRuntimesFromSegments = inputs.HandleRuntimesFromSegments;
+        var readyToRun = ResolveReadyToRun(spec.Build.ReadyToRun, inputs.ReadyToRunFromSegments);
         var desktopDependencyAssetFrameworks = inputs.DesktopDependencyAssetFrameworksFromSegments ?? spec.Build.DesktopDependencyAssetFrameworks;
         var useAssemblyLoadContextFromSegments = inputs.UseAssemblyLoadContextFromSegments;
         var developmentBinariesEnabledFromSegments = inputs.DevelopmentBinariesEnabledFromSegments;
@@ -285,7 +286,8 @@ public sealed partial class ModulePipelineRunner
                 resolveBinaryConflictsProjectName,
                 binaryModuleDocumentationRequested == true,
                 developmentBinariesMode,
-                developmentBinariesPath);
+                developmentBinariesPath,
+                readyToRun?.Enabled == true);
         var csprojRequiredReasons = spec.Build.SkipDotNetBuild &&
                                     configuredCsprojRequiredReasons.Length == 0 &&
                                     !string.IsNullOrWhiteSpace(configuredCsproj)
@@ -319,6 +321,7 @@ public sealed partial class ModulePipelineRunner
             ExcludeLibraryFilter = excludeLibraryFilterFromSegments ?? spec.Build.ExcludeLibraryFilter ?? Array.Empty<string>(),
             DoNotCopyLibrariesRecursively = doNotCopyLibrariesRecursivelyFromSegments ?? spec.Build.DoNotCopyLibrariesRecursively,
             HandleRuntimes = handleRuntimesFromSegments ?? spec.Build.HandleRuntimes,
+            ReadyToRun = readyToRun,
             DesktopDependencyAssetFrameworks = desktopDependencyAssetFrameworks,
             SharedAssemblies = inputs.SharedAssembliesFromSegments ?? spec.Build.SharedAssemblies,
             PreloadSharedAssemblies = inputs.PreloadSharedAssembliesFromSegments ?? spec.Build.PreloadSharedAssemblies,

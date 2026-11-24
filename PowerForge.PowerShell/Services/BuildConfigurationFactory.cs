@@ -236,6 +236,10 @@ internal sealed class BuildConfigurationFactory
         if (request.NETSearchClassSpecified) { EnsureBuildLibraries(); buildLibraries!.SearchClass = request.NETSearchClass; }
         if (request.NETBinaryModuleDocumentationSpecified) { EnsureBuildLibraries(); buildLibraries!.NETBinaryModuleDocumentation = request.NETBinaryModuleDocumentation; }
         if (request.NETHandleRuntimesSpecified) { EnsureBuildLibraries(); buildLibraries!.HandleRuntimes = request.NETHandleRuntimes; }
+        if (request.NETReadyToRunSpecified) { EnsureBuildLibraries(); buildLibraries!.ReadyToRun = request.NETReadyToRun; }
+        if (request.NETReadyToRunFrameworkSpecified) { EnsureBuildLibraries(); buildLibraries!.ReadyToRunFramework = request.NETReadyToRunFramework; }
+        if (request.NETReadyToRunRuntimeIdentifierSpecified) { EnsureBuildLibraries(); buildLibraries!.ReadyToRunRuntimeIdentifiers = request.NETReadyToRunRuntimeIdentifier; }
+        if (request.NETReadyToRunScopeSpecified) { EnsureBuildLibraries(); buildLibraries!.ReadyToRunScope = request.NETReadyToRunScope; }
         if (request.NETDesktopDependencyAssetFrameworksSpecified) { EnsureBuildLibraries(); buildLibraries!.DesktopDependencyAssetFrameworks = request.NETDesktopDependencyAssetFrameworks ?? new(StringComparer.OrdinalIgnoreCase); }
         if (request.NETAssemblyLoadContextSpecified) { EnsureBuildLibraries(); buildLibraries!.UseAssemblyLoadContext = request.NETAssemblyLoadContext; }
         if (request.NETSharedAssembliesSpecified) { EnsureBuildLibraries(); buildLibraries!.SharedAssemblies = request.NETSharedAssemblies ?? Array.Empty<string>(); }

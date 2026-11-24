@@ -139,6 +139,18 @@ public sealed class BuildLibrariesConfiguration
     /// <summary>Legacy .NET build alias for <see cref="AssemblyTypeAcceleratorAssemblies"/>.</summary>
     public string[]? NETAssemblyTypeAcceleratorAssemblies { get; set; }
 
+    /// <summary>Adds a precompiled ReadyToRun payload per runtime identifier for PowerShell 7 hosts.</summary>
+    public bool? ReadyToRun { get; set; }
+
+    /// <summary>Target framework of the ReadyToRun payloads (defaults to net10.0).</summary>
+    public string? ReadyToRunFramework { get; set; }
+
+    /// <summary>Runtime identifiers that get a ReadyToRun payload (defaults to win-x64).</summary>
+    public string[]? ReadyToRunRuntimeIdentifiers { get; set; }
+
+    /// <summary>Assemblies the ReadyToRun payloads precompile (defaults to the module's own assemblies).</summary>
+    public ModuleReadyToRunScope? ReadyToRunScope { get; set; }
+
     /// <summary>Do not copy libraries recursively (legacy).</summary>
     public bool? NETDoNotCopyLibrariesRecursively { get; set; }
 }

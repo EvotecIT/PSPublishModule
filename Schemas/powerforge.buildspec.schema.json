@@ -34,6 +34,17 @@
     "SharedAssemblies": { "type": "array", "default": [], "uniqueItems": true, "items": { "type": "string", "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]*$" } },
     "PreloadSharedAssemblies": { "type": "array", "default": [], "uniqueItems": true, "items": { "type": "string", "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]*$" } },
     "UseAssemblyLoadContext": { "type": "boolean" },
+    "ReadyToRun": {
+      "type": ["object", "null"],
+      "description": "Opt-in precompiled PowerShell 7 payloads, one per runtime identifier, loaded instead of the portable build on a matching host.",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": { "type": "boolean" },
+        "Framework": { "type": "string", "description": "Target framework of the precompiled payloads; the binary project must target it. Defaults to net10.0." },
+        "RuntimeIdentifiers": { "type": "array", "items": { "type": "string" }, "description": "Defaults to win-x64." },
+        "Scope": { "type": "string", "enum": ["ModuleAssemblies", "All"], "description": "ModuleAssemblies precompiles the module project and its project references; All also precompiles NuGet package assemblies." }
+      }
+    },
     "DesktopDependencyAssetFrameworks": {
       "type": "object",
       "description": "Explicit NuGet package ID to Desktop asset TFM selections for .NET Framework 4.7.2 or later; Core assets are unchanged.",

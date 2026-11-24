@@ -282,6 +282,29 @@ public sealed class NewConfigurationBuildCommand : PSCmdlet
     /// <summary>Handle runtimes folder when copying libraries.</summary>
     [Parameter] public SwitchParameter NETHandleRuntimes { get; set; }
 
+    /// <summary>
+    /// Adds a ReadyToRun (precompiled) PowerShell 7 payload for each runtime identifier in NETReadyToRunRuntimeIdentifier.
+    /// PowerShell 7 on a matching platform and .NET runtime loads it instead of the portable build, which cuts the time
+    /// of the first command calls. Windows PowerShell and other platforms keep the portable builds. The binary project
+    /// must target NETReadyToRunFramework, and the module must still ship a portable PowerShell 7 framework such as net8.0.
+    /// </summary>
+    [Parameter] public SwitchParameter NETReadyToRun { get; set; }
+
+    /// <summary>Target framework of the ReadyToRun payloads. Defaults to net10.0, the runtime of PowerShell 7.6.</summary>
+    [Parameter] public string? NETReadyToRunFramework { get; set; }
+
+    /// <summary>
+    /// Runtime identifiers that get a ReadyToRun payload. Defaults to win-x64 only. Each one adds a
+    /// complete payload to the module, so list only the platforms that matter; the rest load the portable build.
+    /// </summary>
+    [Parameter] public string[]? NETReadyToRunRuntimeIdentifier { get; set; }
+
+    /// <summary>
+    /// Which assemblies the ReadyToRun payloads precompile. ModuleAssemblies (default) precompiles the module project and
+    /// its project references and leaves NuGet package assemblies as IL; All precompiles every assembly and adds more size.
+    /// </summary>
+    [Parameter] public ModuleReadyToRunScope NETReadyToRunScope { get; set; } = ModuleReadyToRunScope.ModuleAssemblies;
+
     /// <summary>Maps NuGet package IDs to explicitly selected Desktop asset TFMs. Initially supports netstandard2.0 assets for .NET Framework 4.7.2 or later; Core assets are unchanged.</summary>
     [Parameter]
     public Hashtable? NETDesktopDependencyAssetFrameworks { get; set; }
@@ -529,6 +552,14 @@ public sealed class NewConfigurationBuildCommand : PSCmdlet
             NETSearchClass = NETSearchClass,
             NETHandleRuntimesSpecified = bound.ContainsKey(nameof(NETHandleRuntimes)),
             NETHandleRuntimes = NETHandleRuntimes.IsPresent,
+            NETReadyToRunSpecified = bound.ContainsKey(nameof(NETReadyToRun)),
+            NETReadyToRun = NETReadyToRun.IsPresent,
+            NETReadyToRunFrameworkSpecified = bound.ContainsKey(nameof(NETReadyToRunFramework)),
+            NETReadyToRunFramework = NETReadyToRunFramework,
+            NETReadyToRunRuntimeIdentifierSpecified = bound.ContainsKey(nameof(NETReadyToRunRuntimeIdentifier)),
+            NETReadyToRunRuntimeIdentifier = NETReadyToRunRuntimeIdentifier,
+            NETReadyToRunScopeSpecified = bound.ContainsKey(nameof(NETReadyToRunScope)),
+            NETReadyToRunScope = NETReadyToRunScope,
             NETDesktopDependencyAssetFrameworksSpecified = bound.ContainsKey(nameof(NETDesktopDependencyAssetFrameworks)),
             NETDesktopDependencyAssetFrameworks = ConvertDesktopDependencyAssetFrameworks(NETDesktopDependencyAssetFrameworks),
             NETAssemblyLoadContextSpecified = bound.ContainsKey(nameof(NETAssemblyLoadContext)),

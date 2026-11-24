@@ -30,14 +30,22 @@ internal static partial class ModuleBootstrapperGenerator
     /// <summary>What one host loads: export assemblies for the psm1 and the dependency preload list for Libraries.ps1.</summary>
     private sealed class BinaryPayloadScenario
     {
-        public BinaryPayloadScenario(Version? minimumRuntimeVersion, IReadOnlyList<BinaryModulePayload> modules, IReadOnlyList<string> libraries)
+        public BinaryPayloadScenario(
+            Version? minimumRuntimeVersion,
+            IReadOnlyList<BinaryModulePayload> modules,
+            IReadOnlyList<string> libraries,
+            string? runtimeIdentifier = null)
         {
             MinimumRuntimeVersion = minimumRuntimeVersion;
             Modules = modules;
             Libraries = libraries;
+            RuntimeIdentifier = runtimeIdentifier;
         }
 
         public Version? MinimumRuntimeVersion { get; }
+
+        /// <summary>Runtime identifier a ReadyToRun scenario is compiled for; null for portable payloads.</summary>
+        public string? RuntimeIdentifier { get; }
         public IReadOnlyList<BinaryModulePayload> Modules { get; }
         public IReadOnlyList<string> Libraries { get; }
     }
@@ -45,18 +53,25 @@ internal static partial class ModuleBootstrapperGenerator
     /// <summary>
     /// Everything the generated scripts load, resolved from the staged Lib layout. Windows PowerShell has one scenario;
     /// PowerShell 7 has one per runtime band (highest first) when named Core payloads or a Core baseline make the
-    /// selection depend on the running .NET version.
+    /// selection depend on the running .NET version, preceded by one per precompiled runtime identifier.
     /// </summary>
     private sealed class BinaryPayloadPlan
     {
-        public BinaryPayloadPlan(BinaryPayloadScenario desktop, IReadOnlyList<BinaryPayloadScenario> core)
+        public BinaryPayloadPlan(
+            BinaryPayloadScenario desktop,
+            IReadOnlyList<BinaryPayloadScenario> core,
+            IReadOnlyList<BinaryPayloadScenario>? readyToRun = null)
         {
             Desktop = desktop;
             Core = core;
+            ReadyToRun = readyToRun ?? Array.Empty<BinaryPayloadScenario>();
         }
 
         public BinaryPayloadScenario Desktop { get; }
         public IReadOnlyList<BinaryPayloadScenario> Core { get; }
+
+        /// <summary>ReadyToRun scenarios, chosen before the portable bands on a matching runtime identifier and version.</summary>
+        public IReadOnlyList<BinaryPayloadScenario> ReadyToRun { get; }
     }
 
     private static BinaryPayloadPlan ResolveBinaryPayloadPlan(
@@ -87,7 +102,15 @@ internal static partial class ModuleBootstrapperGenerator
         var fallback = ResolveBinaryPayloadScenario(moduleRoot, libRoot, libraryReferences, librariesByFolder, isCore: true, runtimeVersion: new Version(0, 0), failOnAmbiguity: true);
         core.Add(new BinaryPayloadScenario(null, fallback.Modules, fallback.Libraries));
 
-        return new BinaryPayloadPlan(desktop, core);
+        var readyToRun = new List<BinaryPayloadScenario>();
+        foreach (var payload in ModuleBinaryPayloadLayout.ResolveReadyToRunPayloads(libRoot))
+        {
+            var scenario = ResolveBinaryPayloadScenario(moduleRoot, libRoot, libraryReferences, librariesByFolder, isCore: true,
+                runtimeVersion: payload.MinimumRuntimeVersion, failOnAmbiguity: true, payloadFolder: payload.FolderName);
+            readyToRun.Add(new BinaryPayloadScenario(payload.MinimumRuntimeVersion, scenario.Modules, scenario.Libraries, payload.RuntimeIdentifier));
+        }
+
+        return new BinaryPayloadPlan(desktop, core, readyToRun);
     }
 
     private static BinaryPayloadScenario ResolveBinaryPayloadScenario(
@@ -97,9 +120,12 @@ internal static partial class ModuleBootstrapperGenerator
         IReadOnlyDictionary<string, List<string>> librariesByFolder,
         bool isCore,
         Version? runtimeVersion,
-        bool failOnAmbiguity)
+        bool failOnAmbiguity,
+        string? payloadFolder = null)
     {
-        var selectedFolder = ModuleBinaryPayloadLayout.ResolveRuntimePayloadFolder(libRoot, isCore ? "Core" : "Desktop", runtimeVersion);
+        // A ReadyToRun payload is a complete publish for its runtime identifier, so it replaces the selection outright.
+        var selectedFolder = payloadFolder ??
+                             ModuleBinaryPayloadLayout.ResolveRuntimePayloadFolder(libRoot, isCore ? "Core" : "Desktop", runtimeVersion);
         var topLevelFolders = Directory.Exists(libRoot)
             ? Directory.EnumerateDirectories(libRoot).Select(Path.GetFileName).OfType<string>().ToArray()
             : Array.Empty<string>();
@@ -291,23 +317,34 @@ internal static partial class ModuleBootstrapperGenerator
                 bands.Add((scenario.MinimumRuntimeVersion, value));
         }
 
-        if (bands.Count == 1 && string.Equals(bands[0].Value, desktop, StringComparison.Ordinal))
+        // ReadyToRun branches come first: each needs both its runtime identifier and at least its .NET version.
+        var branches = plan.ReadyToRun
+            .Select(scenario => ((string?)("[Environment]::Version -ge [version]'" + scenario.MinimumRuntimeVersion + "' -and " +
+                                           "[System.Runtime.InteropServices.RuntimeInformation]::RuntimeIdentifier -eq '" +
+                                           EscapePsSingleQuoted(scenario.RuntimeIdentifier ?? string.Empty) + "'"),
+                                  render(scenario)))
+            .Concat(bands.Select(static band => (band.Minimum is null
+                ? null
+                : "[Environment]::Version -ge [version]'" + band.Minimum + "'", band.Value)))
+            .ToList();
+
+        if (branches.Count == 1 && string.Equals(branches[0].Item2, desktop, StringComparison.Ordinal))
             return desktop;
 
         string core;
-        if (bands.Count == 1)
+        if (branches.Count == 1)
         {
-            core = bands[0].Value;
+            core = branches[0].Item2;
         }
         else
         {
             var builder = new StringBuilder();
-            for (var index = 0; index < bands.Count; index++)
+            for (var index = 0; index < branches.Count; index++)
             {
-                var (minimum, value) = bands[index];
-                builder.Append(index == 0 ? "if " : minimum is null ? " else " : " elseif ");
-                if (minimum is not null)
-                    builder.Append("([Environment]::Version -ge [version]'").Append(minimum.ToString()).Append("') ");
+                var (condition, value) = branches[index];
+                builder.Append(index == 0 ? "if " : condition is null ? " else " : " elseif ");
+                if (condition is not null)
+                    builder.Append('(').Append(condition).Append(") ");
                 builder.Append("{\r\n").Append(IndentPowerShell(value, 4)).Append("\r\n}");
             }
 

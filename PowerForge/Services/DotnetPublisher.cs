@@ -11,7 +11,7 @@ namespace PowerForge;
 /// <summary>
 /// Runs 'dotnet publish' for given frameworks and returns publish directories.
 /// </summary>
-public sealed class DotnetPublisher
+public sealed partial class DotnetPublisher
 {
     // Microsoft.Common targets append this list to RemoveProperties for every project-reference traversal.
     private const string ProjectReferenceVersionProperties = "%3BVersion%3BAssemblyVersion%3BFileVersion";

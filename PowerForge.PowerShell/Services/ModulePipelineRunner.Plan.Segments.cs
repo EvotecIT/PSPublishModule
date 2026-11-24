@@ -59,6 +59,7 @@ public sealed partial class ModulePipelineRunner
         string[]? ignoreLibraryOnLoadFromSegments = null;
         bool? doNotCopyLibrariesRecursivelyFromSegments = null;
         bool? handleRuntimesFromSegments = null;
+        ReadyToRunSegmentValues? readyToRunFromSegments = null;
         Dictionary<string, string>? desktopDependencyAssetFrameworksFromSegments = null;
         string[]? sharedAssembliesFromSegments = null;
         string[]? preloadSharedAssembliesFromSegments = null;
@@ -252,6 +253,7 @@ public sealed partial class ModulePipelineRunner
                     if (bl.IgnoreLibraryOnLoad is { Length: > 0 }) ignoreLibraryOnLoadFromSegments = bl.IgnoreLibraryOnLoad;
                     if (bl.NETDoNotCopyLibrariesRecursively.HasValue) doNotCopyLibrariesRecursivelyFromSegments = bl.NETDoNotCopyLibrariesRecursively.Value;
                     if (bl.HandleRuntimes.HasValue) handleRuntimesFromSegments = bl.HandleRuntimes.Value;
+                    readyToRunFromSegments = ReadyToRunSegmentValues.Merge(readyToRunFromSegments, bl);
                     if (bl.DesktopDependencyAssetFrameworks is not null)
                         desktopDependencyAssetFrameworksFromSegments = new(bl.DesktopDependencyAssetFrameworks, StringComparer.OrdinalIgnoreCase);
                     if (bl.SharedAssemblies is not null) sharedAssembliesFromSegments = bl.SharedAssemblies;
@@ -636,6 +638,7 @@ public sealed partial class ModulePipelineRunner
             IgnoreLibraryOnLoadFromSegments = ignoreLibraryOnLoadFromSegments,
             DoNotCopyLibrariesRecursivelyFromSegments = doNotCopyLibrariesRecursivelyFromSegments,
             HandleRuntimesFromSegments = handleRuntimesFromSegments,
+            ReadyToRunFromSegments = readyToRunFromSegments,
             DesktopDependencyAssetFrameworksFromSegments = desktopDependencyAssetFrameworksFromSegments,
             SharedAssembliesFromSegments = sharedAssembliesFromSegments,
             PreloadSharedAssembliesFromSegments = preloadSharedAssembliesFromSegments,
@@ -735,6 +738,7 @@ public sealed partial class ModulePipelineRunner
         internal string[]? IgnoreLibraryOnLoadFromSegments { get; init; } = default!;
         internal bool? DoNotCopyLibrariesRecursivelyFromSegments { get; init; } = default!;
         internal bool? HandleRuntimesFromSegments { get; init; } = default!;
+        internal ReadyToRunSegmentValues? ReadyToRunFromSegments { get; init; }
         internal Dictionary<string, string>? DesktopDependencyAssetFrameworksFromSegments { get; init; }
         internal string[]? SharedAssembliesFromSegments { get; init; }
         internal string[]? PreloadSharedAssembliesFromSegments { get; init; }
