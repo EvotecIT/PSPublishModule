@@ -511,7 +511,13 @@ public sealed partial class DotNetRepositoryReleaseService
                     {
                         var planned = ResolvePackagePath(spec, project, project.NewVersion!);
                         if (!string.IsNullOrWhiteSpace(planned))
+                        {
+                            // Same order as a real pack: runtime packages ahead of the package that points to them.
+                            var plannedDirectory = Path.GetDirectoryName(planned!) ?? string.Empty;
+                            foreach (var runtimePackageId in GetToolRuntimePackageIds(project))
+                                project.Packages.Add(Path.Combine(plannedDirectory, $"{runtimePackageId}.{project.NewVersion}.nupkg"));
                             project.Packages.Add(planned!);
+                        }
                         if (spec.IncludeSymbols)
                         {
                             var plannedSymbols = ResolveSymbolPackagePath(spec, project, project.NewVersion!);
