@@ -107,7 +107,7 @@ public sealed partial class BenchmarkRevisionComparisonService
                 // Read right before building, so the report describes the source that is built.
                 candidate.Commit = await ResolveCommitAsync(repositoryRoot, "HEAD", cancellationToken).ConfigureAwait(false);
                 candidate.Dirty = (await GitAsync(repositoryRoot, cancellationToken,
-                    await StatusArgumentsAsync(repositoryRoot, new[] { workRoot, spec.LockPath }, cancellationToken).ConfigureAwait(false))
+                    await StatusArgumentsAsync(repositoryRoot, OwnedPaths(workRoot, spec.LockPath), cancellationToken).ConfigureAwait(false))
                     .ConfigureAwait(false)).Length > 0;
             }
 
@@ -269,24 +269,40 @@ public sealed partial class BenchmarkRevisionComparisonService
     }
 
     /// <summary>
-    /// Status arguments that list tracked changes and untracked files, leaving out the comparison's own scratch
-    /// folder and lock when they sit inside the repository. Git computes their repository-relative paths, so a path
-    /// reached through a symbolic link (macOS temp folders, for example) is still recognised.
+    /// Paths the comparison itself creates: its scratch folder, the lock and the lock's reclaim file.
     /// </summary>
-    private async Task<string[]> StatusArgumentsAsync(string repositoryRoot, IEnumerable<string?> ownedPaths, CancellationToken cancellationToken)
+    private static IEnumerable<string> OwnedPaths(string workRoot, string? lockPath)
+    {
+        yield return workRoot;
+        if (string.IsNullOrWhiteSpace(lockPath)) yield break;
+        string fullLock = Path.GetFullPath(lockPath!).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        yield return fullLock;
+        yield return BenchmarkLockDirectory.ReclaimPath(fullLock);
+    }
+
+    /// <summary>
+    /// Status arguments that list tracked changes and untracked files, leaving out the paths the comparison owns
+    /// when they sit inside the repository. Git computes the repository-relative path of each one's parent folder,
+    /// so a path reached through a symbolic link (macOS temp folders, for example) is still recognised.
+    /// </summary>
+    private async Task<string[]> StatusArgumentsAsync(string repositoryRoot, IEnumerable<string> ownedPaths, CancellationToken cancellationToken)
     {
         var arguments = new List<string> { "status", "--porcelain", "--untracked-files=normal", "--", "." };
-        foreach (string? owned in ownedPaths)
+        // A GIT_DIR or GIT_WORK_TREE inherited from a hook would point the probe at the wrong repository.
+        var environment = new Dictionary<string, string?> { ["GIT_DIR"] = null, ["GIT_WORK_TREE"] = null };
+        foreach (string owned in ownedPaths)
         {
-            if (string.IsNullOrWhiteSpace(owned) || !Directory.Exists(owned)) continue;
+            string full = Path.GetFullPath(owned).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            string? parent = Path.GetDirectoryName(full);
+            if (parent is null || !Directory.Exists(parent)) continue;
             var location = await _processRunner.RunAsync(
-                new ProcessRunRequest("git", Path.GetFullPath(owned!), new[] { "rev-parse", "--show-toplevel", "--show-prefix" }, TimeSpan.FromMinutes(1)),
+                new ProcessRunRequest("git", parent, new[] { "rev-parse", "--show-toplevel", "--show-prefix" }, TimeSpan.FromMinutes(1), environment),
                 cancellationToken).ConfigureAwait(false);
             string[] lines = location.StdOut.Replace("\r", string.Empty).Split('\n');
-            if (location.ExitCode != 0 || lines.Length < 2 || lines[1].Trim().Length == 0 ||
+            if (location.ExitCode != 0 || lines.Length < 2 ||
                 !string.Equals(Path.GetFullPath(lines[0].Trim()), repositoryRoot, StringComparison.OrdinalIgnoreCase))
                 continue;
-            arguments.Add(":(top,exclude)" + lines[1].Trim());
+            arguments.Add(":(top,literal,exclude)" + lines[1].Trim() + Path.GetFileName(full));
         }
         return arguments.ToArray();
     }

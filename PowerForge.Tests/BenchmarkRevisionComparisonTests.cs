@@ -195,6 +195,8 @@ public sealed class BenchmarkRevisionComparisonTests
     {
         using var repository = TestRepository.Create();
         string scratch = Path.Combine(repository.Root, "bench-scratch");
+        // A reclaim file left by an earlier stale-lock takeover belongs to the comparison too.
+        File.WriteAllText(Path.Combine(repository.Root, ".bench[1].lock.reclaim"), string.Empty);
         var service = new BenchmarkRevisionComparisonService(new FakeDotNet(1000, 1000), new NullLogger(), _ => Task.FromResult<double?>(null), TimeSpan.FromMilliseconds(10));
 
         var result = await service.RunAsync(new BenchmarkRevisionComparisonSpec
@@ -206,7 +208,7 @@ public sealed class BenchmarkRevisionComparisonTests
             Framework = "net10.0",
             Rounds = 1,
             ScratchRoot = scratch,
-            LockPath = Path.Combine(repository.Root, "bench.lock")
+            LockPath = Path.Combine(repository.Root, "bench[1].lock")
         });
 
         Assert.False(result.Candidate.Dirty);

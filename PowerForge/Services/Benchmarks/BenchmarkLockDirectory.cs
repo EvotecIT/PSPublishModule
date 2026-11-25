@@ -207,7 +207,7 @@ internal sealed class BenchmarkLockDirectory : IDisposable
         // Two runners can find the same stale lock. Reclaiming runs under an exclusive file lock, released by the
         // operating system if the process dies, and re-reads the owner inside it, so a runner never deletes a lock
         // that another runner has taken since it looked.
-        string reclaimPath = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(fullPath)!, "." + System.IO.Path.GetFileName(fullPath) + ".reclaim");
+        string reclaimPath = ReclaimPath(fullPath);
         try
         {
             using var reclaim = new FileStream(reclaimPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
@@ -219,6 +219,10 @@ internal sealed class BenchmarkLockDirectory : IDisposable
         catch (IOException) { return false; }
         catch (UnauthorizedAccessException) { return false; }
     }
+
+    /// <summary>The file that serialises stale-lock reclaiming, next to the lock.</summary>
+    internal static string ReclaimPath(string fullPath)
+        => System.IO.Path.Combine(System.IO.Path.GetDirectoryName(fullPath)!, "." + System.IO.Path.GetFileName(fullPath) + ".reclaim");
 
     private static string? Field(string owner, string name)
         => owner.Split('\n')
