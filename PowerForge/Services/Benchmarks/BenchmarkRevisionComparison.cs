@@ -79,13 +79,15 @@ internal static class BenchmarkRevisionComparison
         IReadOnlyList<BenchmarkRunResult?> baselineRounds,
         IReadOnlyList<BenchmarkRunResult?> candidateRounds)
     {
-        // Several jobs of one benchmark share its full name; the job then becomes part of the key. The names are
-        // collected from every run of both sides, so a job added or removed on one side still lines up.
+        // Several jobs of one benchmark share its full name; the job then becomes part of the key. A name counts as
+        // ambiguous when it appears with more than one job anywhere in either side, so a job added, removed or
+        // swapped on one side never lines up with a different job. BenchmarkDotNet derives a job's id from its
+        // settings, so the same job has the same id on both sides.
         var jobQualified = new HashSet<string>(baselineRounds.Concat(candidateRounds)
-            .SelectMany(round => (round?.Summary ?? Array.Empty<BenchmarkSummaryRow>())
-                .GroupBy(Key, StringComparer.Ordinal)
-                .Where(group => group.Count() > 1)
-                .Select(group => group.Key)), StringComparer.Ordinal);
+            .SelectMany(round => round?.Summary ?? Array.Empty<BenchmarkSummaryRow>())
+            .GroupBy(Key, StringComparer.Ordinal)
+            .Where(group => group.Select(row => row.Engine).Distinct(StringComparer.Ordinal).Count() > 1)
+            .Select(group => group.Key), StringComparer.Ordinal);
         var baseline = Index(baselineRounds, jobQualified);
         var candidate = Index(candidateRounds, jobQualified);
         var keys = baseline.Keys.Concat(candidate.Keys)

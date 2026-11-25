@@ -234,6 +234,13 @@ public sealed class BenchmarkRevisionComparisonTests
             Assert.Equal(4, rows.Length);
             Assert.Equal(2, rows.Count(row => row.Ratio is not null));
             Assert.All(rows.Where(row => row.Ratio is not null), row => Assert.EndsWith("[job " + kept + "]", row.Benchmark));
+
+            // Reports that each ran a different single job never compare one job with the other.
+            string other = report.Summary.First(row => row.Engine != kept).Engine;
+            var otherJob = new BenchmarkRunResult { Summary = report.Summary.Where(row => row.Engine == other).ToArray() };
+            rows = BenchmarkRevisionComparison.Aggregate(new[] { oneJob }, new[] { otherJob });
+            Assert.Equal(4, rows.Length);
+            Assert.All(rows, row => Assert.Null(row.Ratio));
         }
         finally
         {

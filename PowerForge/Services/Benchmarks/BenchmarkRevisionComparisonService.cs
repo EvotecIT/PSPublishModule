@@ -234,6 +234,8 @@ public sealed partial class BenchmarkRevisionComparisonService
         string full = Path.IsPathRooted(project) ? Path.GetFullPath(project) : Path.GetFullPath(Path.Combine(repositoryRoot, project));
         string root = repositoryRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
         var comparison = Path.DirectorySeparatorChar == '\\' ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        if (string.Equals(full.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar), root.TrimEnd(Path.DirectorySeparatorChar), comparison))
+            return ".";
         if (!full.StartsWith(root, comparison))
             throw new ArgumentException($"The benchmark project must be inside the repository {repositoryRoot}: {project}");
         return full.Substring(root.Length);
@@ -253,7 +255,7 @@ public sealed partial class BenchmarkRevisionComparisonService
                 : Array.Empty<string>();
             if (projects.Length != 1)
                 throw new ArgumentException($"Expected one project file in {project} of the baseline revision, found {projects.Length}.");
-            relative = Path.Combine(project, Path.GetFileName(projects[0]));
+            relative = project == "." ? Path.GetFileName(projects[0]) : Path.Combine(project, Path.GetFileName(projects[0]));
         }
 
         foreach (var (name, root) in new[] { (BenchmarkRevisionComparison.BaselineName, baselineRoot), (BenchmarkRevisionComparison.CandidateName, candidateRoot) })
