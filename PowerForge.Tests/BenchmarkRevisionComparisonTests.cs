@@ -191,6 +191,28 @@ public sealed class BenchmarkRevisionComparisonTests
     }
 
     [Fact]
+    public async Task Compare_DoesNotCountItsOwnScratchAndLockInsideTheRepositoryAsChanges()
+    {
+        using var repository = TestRepository.Create();
+        string scratch = Path.Combine(repository.Root, "bench-scratch");
+        var service = new BenchmarkRevisionComparisonService(new FakeDotNet(1000, 1000), new NullLogger(), _ => Task.FromResult<double?>(null), TimeSpan.FromMilliseconds(10));
+
+        var result = await service.RunAsync(new BenchmarkRevisionComparisonSpec
+        {
+            RepositoryPath = repository.Root,
+            Baseline = "main",
+            Project = "Bench",
+            Filter = "*",
+            Framework = "net10.0",
+            Rounds = 1,
+            ScratchRoot = scratch,
+            LockPath = Path.Combine(repository.Root, "bench.lock")
+        });
+
+        Assert.False(result.Candidate.Dirty);
+    }
+
+    [Fact]
     public async Task Compare_FailsWhenNoRunProducesAReport()
     {
         using var repository = TestRepository.Create();
@@ -382,7 +404,11 @@ public sealed class BenchmarkRevisionComparisonTests
         public void Dispose()
         {
             string baseDirectory = Path.GetDirectoryName(Root)!;
-            if (Directory.Exists(baseDirectory)) Directory.Delete(baseDirectory, recursive: true);
+            if (!Directory.Exists(baseDirectory)) return;
+            // Git for Windows writes object files read-only, which a recursive delete does not remove.
+            foreach (string file in Directory.GetFiles(baseDirectory, "*", SearchOption.AllDirectories))
+                File.SetAttributes(file, FileAttributes.Normal);
+            Directory.Delete(baseDirectory, recursive: true);
         }
     }
 

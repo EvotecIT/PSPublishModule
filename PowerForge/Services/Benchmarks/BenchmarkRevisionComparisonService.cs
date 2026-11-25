@@ -106,7 +106,9 @@ public sealed partial class BenchmarkRevisionComparisonService
             {
                 // Read right before building, so the report describes the source that is built.
                 candidate.Commit = await ResolveCommitAsync(repositoryRoot, "HEAD", cancellationToken).ConfigureAwait(false);
-                candidate.Dirty = (await GitAsync(repositoryRoot, cancellationToken, "status", "--porcelain", "--untracked-files=normal").ConfigureAwait(false)).Length > 0;
+                candidate.Dirty = (await GitAsync(repositoryRoot, cancellationToken,
+                    await StatusArgumentsAsync(repositoryRoot, new[] { workRoot, spec.LockPath }, cancellationToken).ConfigureAwait(false))
+                    .ConfigureAwait(false)).Length > 0;
             }
 
             foreach (var side in new[] { baseline.Name, candidate.Name })
@@ -264,6 +266,29 @@ public sealed partial class BenchmarkRevisionComparisonService
                 throw new FileNotFoundException($"The {name} revision has no benchmark project at {relative}.", Path.Combine(root, relative));
         }
         return relative;
+    }
+
+    /// <summary>
+    /// Status arguments that list tracked changes and untracked files, leaving out the comparison's own scratch
+    /// folder and lock when they sit inside the repository. Git computes their repository-relative paths, so a path
+    /// reached through a symbolic link (macOS temp folders, for example) is still recognised.
+    /// </summary>
+    private async Task<string[]> StatusArgumentsAsync(string repositoryRoot, IEnumerable<string?> ownedPaths, CancellationToken cancellationToken)
+    {
+        var arguments = new List<string> { "status", "--porcelain", "--untracked-files=normal", "--", "." };
+        foreach (string? owned in ownedPaths)
+        {
+            if (string.IsNullOrWhiteSpace(owned) || !Directory.Exists(owned)) continue;
+            var location = await _processRunner.RunAsync(
+                new ProcessRunRequest("git", Path.GetFullPath(owned!), new[] { "rev-parse", "--show-toplevel", "--show-prefix" }, TimeSpan.FromMinutes(1)),
+                cancellationToken).ConfigureAwait(false);
+            string[] lines = location.StdOut.Replace("\r", string.Empty).Split('\n');
+            if (location.ExitCode != 0 || lines.Length < 2 || lines[1].Trim().Length == 0 ||
+                !string.Equals(Path.GetFullPath(lines[0].Trim()), repositoryRoot, StringComparison.OrdinalIgnoreCase))
+                continue;
+            arguments.Add(":(top,exclude)" + lines[1].Trim());
+        }
+        return arguments.ToArray();
     }
 
     private static void TryDeleteDirectory(string path)
