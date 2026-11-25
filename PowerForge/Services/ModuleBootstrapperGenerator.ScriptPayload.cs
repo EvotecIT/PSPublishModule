@@ -325,11 +325,16 @@ internal static partial class ModuleBootstrapperGenerator
         builder.AppendLine("} finally {");
         builder.AppendLine("    $PowerForgeMergedScriptVariablesToRemove = @('PowerForgeMergedScriptAbsoluteUsingPath', 'PowerForgeMergedScriptAssertRequirements', 'PowerForgeMergedScriptAst', 'PowerForgeMergedScriptBuilder', 'PowerForgeMergedScriptContentStart', 'PowerForgeMergedScriptCursor', 'PowerForgeMergedScriptError', 'PowerForgeMergedScriptErrors', 'PowerForgeMergedScriptFirstSource', 'PowerForgeMergedScriptIsRelativeUsingPath', 'PowerForgeMergedScriptModuleSpecificationEntry', 'PowerForgeMergedScriptModuleSpecificationValue', 'PowerForgeMergedScriptMyCommandReference', 'PowerForgeMergedScriptPathReference', 'PowerForgeMergedScriptPathReferences', 'PowerForgeMergedScriptPathReplacement', 'PowerForgeMergedScriptPayload', 'PowerForgeMergedScriptPayloadBase64', 'PowerForgeMergedScriptRelativeUsingPath', 'PowerForgeMergedScriptRequiredModule', 'PowerForgeMergedScriptSegment', 'PowerForgeMergedScriptSegmentAbsoluteUsingPath', 'PowerForgeMergedScriptSegmentAst', 'PowerForgeMergedScriptSegmentBlock', 'PowerForgeMergedScriptSegmentBuilder', 'PowerForgeMergedScriptSegmentModuleSpecificationEntry', 'PowerForgeMergedScriptSegmentModuleSpecificationValue', 'PowerForgeMergedScriptSegmentRelativeUsingPath', 'PowerForgeMergedScriptSegments', 'PowerForgeMergedScriptSegmentTreatBareUsingNameAsPath', 'PowerForgeMergedScriptSegmentUsingPathReference', 'PowerForgeMergedScriptSegmentUsingPathReferences', 'PowerForgeMergedScriptSegmentUsingPathReplacement', 'PowerForgeMergedScriptSegmentUsingStatement', 'PowerForgeMergedScriptSegmentUsingStatements', 'PowerForgeMergedScriptSourceEnd', 'PowerForgeMergedScriptSourceEndMarker', 'PowerForgeMergedScriptSourcePreamble', 'PowerForgeMergedScriptSourcePreambleBase64', 'PowerForgeMergedScriptSourcePreambleEnd', 'PowerForgeMergedScriptSourcePreambleMarker', 'PowerForgeMergedScriptSourceStart', 'PowerForgeMergedScriptSourceStartMarker', 'PowerForgeMergedScriptTreatBareUsingNameAsPath', 'PowerForgeMergedScriptUsingPathReference', 'PowerForgeMergedScriptUsingPathReferences', 'PowerForgeMergedScriptUsingPathReplacement', 'PowerForgeMergedScriptUsingStatement', 'PowerForgeMergedScriptUsingStatements')");
         builder.AppendLine("    foreach ($PowerForgeMergedScriptVariableToRemove in $PowerForgeMergedScriptVariablesToRemove) {");
-        builder.AppendLine("        if ($null -ne $ExecutionContext.SessionState.PSVariable.Get($PowerForgeMergedScriptVariableToRemove)) {");
-        builder.AppendLine("            Remove-Variable -Name $PowerForgeMergedScriptVariableToRemove -Force");
+        // The variable API avoids importing Microsoft.PowerShell.Utility. The Remove-Variable fallback also keeps
+        // PowerShell from optimizing these variables into locals that the API cannot remove.
+        builder.AppendLine("        try {");
+        builder.AppendLine("            $ExecutionContext.SessionState.PSVariable.Remove($PowerForgeMergedScriptVariableToRemove)");
+        builder.AppendLine("        } catch {");
+        builder.AppendLine("            Remove-Variable -Name $PowerForgeMergedScriptVariableToRemove -Force -ErrorAction SilentlyContinue");
         builder.AppendLine("        }");
         builder.AppendLine("    }");
-        builder.AppendLine("    Remove-Variable -Name PowerForgeMergedScriptVariableToRemove, PowerForgeMergedScriptVariablesToRemove -Force");
+        builder.AppendLine("    $ExecutionContext.SessionState.PSVariable.Remove('PowerForgeMergedScriptVariableToRemove')");
+        builder.AppendLine("    $ExecutionContext.SessionState.PSVariable.Remove('PowerForgeMergedScriptVariablesToRemove')");
         builder.Append('}');
         return builder.ToString();
     }

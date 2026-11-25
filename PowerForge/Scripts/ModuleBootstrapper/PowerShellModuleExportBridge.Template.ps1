@@ -14,7 +14,7 @@ if ($null -ne $PowerForgeOuterModule -and
             # Inspect existing names without requiring write access; ambiguity fails closed.
             try {
                 $PowerForgeProbeDirectory = [IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($PowerForgeProbePath))
-                $PowerForgeNames = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
+                $PowerForgeNames = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
                 foreach ($PowerForgeEntry in [IO.Directory]::EnumerateFileSystemEntries($PowerForgeProbeDirectory)) {
                     [void] $PowerForgeNames.Add([IO.Path]::GetFileName($PowerForgeEntry))
                 }
@@ -54,4 +54,6 @@ if (-not $PowerForgeIsModuleWrapper) {
     # that caller's export table. The imported inner module's commands remain available to this script.
 } else {
     Export-ModuleMember -Cmdlet ([string[]]@({{InnerModuleExpression}}.ExportedCmdlets.Keys)) -Alias ([string[]]@({{InnerModuleExpression}}.ExportedAliases.Keys))
+    # Aliases the loader collected are defined at the module scope later; export them there too.
+    $script:PowerForgeExportImportedAliases = $true
 }

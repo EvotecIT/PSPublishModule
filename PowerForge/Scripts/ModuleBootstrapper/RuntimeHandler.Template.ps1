@@ -15,8 +15,8 @@ if ([System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Ru
         }
     )
     [array] $NativePaths = foreach ($NativeLibraryDirectory in $NativeLibraryDirectories) {
-        $NativeCandidate = Join-Path -Path $NativeLibraryDirectory -ChildPath ("runtimes\{0}\native" -f $ArchFolder)
-        if (Test-Path -LiteralPath $NativeCandidate) {
+        $NativeCandidate = [IO.Path]::Combine($NativeLibraryDirectory, 'runtimes', $ArchFolder, 'native')
+        if ([IO.Directory]::Exists($NativeCandidate)) {
             $NativeCandidate
         }
     }

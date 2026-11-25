@@ -12,9 +12,16 @@ $BinaryModulePaths = [string[]]@(foreach ($BinaryModule in $BinaryModules) {
         }
     }
 })
-$BinaryModuleDirectories = [string[]]@($BinaryModulePaths | ForEach-Object { [IO.Path]::GetDirectoryName($_) } | Select-Object -Unique)
+# Import avoids cmdlets from Microsoft.PowerShell.Utility and .Management; loading either module costs more than the loader.
+$BinaryModuleDirectorySet = [System.Collections.Generic.HashSet[string]]::new()
+$BinaryModuleDirectories = [string[]]@(foreach ($BinaryModulePath in $BinaryModulePaths) {
+    $BinaryModuleDirectory = [IO.Path]::GetDirectoryName($BinaryModulePath)
+    if ($BinaryModuleDirectorySet.Add($BinaryModuleDirectory)) {
+        $BinaryModuleDirectory
+    }
+})
 {{SharedAssembliesBlock}}{{DesktopAssemblyResolverBlock}}{{RuntimeHandlerBlock}}$LibrariesScript = [IO.Path]::Combine($PowerForgeModuleRoot, '{{ModuleName}}.Libraries.ps1')
-if ($PSEdition -ne 'Core' -and (Test-Path -LiteralPath $LibrariesScript)) {
+if ($PSEdition -ne 'Core' -and [IO.File]::Exists($LibrariesScript)) {
     # Windows PowerShell loads the dependencies before the module assemblies that need them.
     . $LibrariesScript
 }

@@ -341,10 +341,15 @@ internal static partial class ModuleBootstrapperGenerator
                 : string.Empty,
             ["BinaryLoaderBlock"] = string.IsNullOrWhiteSpace(binaryLoaderBlock)
                 ? string.Empty
-                : "    # The loader runs in its own scope, so its working variables do not stay in the module." + Environment.NewLine +
+                : "    $script:PowerForgeImportedAliases = [System.Collections.Generic.List[System.Management.Automation.AliasInfo]]::new()" + Environment.NewLine +
+                  "    # The loader runs in its own scope, so its working variables do not stay in the module." + Environment.NewLine +
                   "    & {" + Environment.NewLine +
                   IndentPowerShell(binaryLoaderBlock.TrimEnd(), 8) + Environment.NewLine +
-                  "    }",
+                  "    }" + Environment.NewLine +
+                  IndentPowerShell(RenderModuleBootstrapperTemplate(
+                      "ImportedAliasesDefinition",
+                      "Scripts/ModuleBootstrapper/ImportedAliasesDefinition.Template.ps1",
+                      new Dictionary<string, string>()).TrimEnd(), 4),
             ["FailedImportCleanupBlock"] = assemblyTypeAcceleratorMode == AssemblyTypeAcceleratorExportMode.None || string.IsNullOrWhiteSpace(binaryLoaderBlock)
                 ? string.Empty
                 : RenderModuleBootstrapperTemplate("TypeAcceleratorFailedImportCleanup",
@@ -417,7 +422,7 @@ internal static partial class ModuleBootstrapperGenerator
                 // Without an AssemblyLoadContext, PowerShell 7 loads the remaining dependencies after the module.
                 ["LateLibrariesBlock"] = useAssemblyLoadContext
                     ? string.Empty
-                    : "if ($PSEdition -eq 'Core' -and (Test-Path -LiteralPath $LibrariesScript)) {" + Environment.NewLine +
+                    : "if ($PSEdition -eq 'Core' -and [IO.File]::Exists($LibrariesScript)) {" + Environment.NewLine +
                       "    . $LibrariesScript" + Environment.NewLine +
                       "}" + Environment.NewLine,
                 ["DesktopTypeAcceleratorBlock"] = string.IsNullOrWhiteSpace(desktopTypeAcceleratorBlock)
