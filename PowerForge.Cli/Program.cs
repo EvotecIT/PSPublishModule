@@ -104,6 +104,8 @@ internal static partial class Program
             return CommandWorkspace(filteredArgs, cli, logger);
         case "test-dotnet":
             return CommandDotNetTest(filteredArgs, logger);
+        case "benchmark":
+            return CommandBenchmark(filteredArgs, cli, logger);
         case "powershell":
         case "ps":
             return CommandPowerShell(filteredArgs, cli, logger);

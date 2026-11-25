@@ -13,6 +13,7 @@ namespace PowerForge.Cli;
 [JsonSerializable(typeof(RunnerMaintenanceSpec))]
 [JsonSerializable(typeof(RunnerMaintenanceResult))]
 [JsonSerializable(typeof(string))]
+[JsonSerializable(typeof(BenchmarkRevisionComparisonResult))]
 [JsonSerializable(typeof(MarkdownCodeSyncSpec))]
 [JsonSerializable(typeof(MarkdownCodeSyncResult))]
 [JsonSerializable(typeof(AppleSimulatorSessionReceipt))]
