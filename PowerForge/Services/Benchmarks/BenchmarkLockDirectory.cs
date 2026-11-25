@@ -119,11 +119,18 @@ internal sealed class BenchmarkLockDirectory : IDisposable
         }
         catch (IOException)
         {
-            // Another runner's owner file is already there (the move never overwrites it): the lock is theirs.
             try { File.Delete(staging); }
             catch (IOException) { }
             catch (UnauthorizedAccessException) { }
-            return false;
+            // Another runner's owner file is already there (the move never overwrites it): the lock is theirs.
+            if (File.Exists(System.IO.Path.Combine(fullPath, OwnerFileName)))
+                return false;
+            // The owner file could not be written (a full disk, for example). Nothing could ever reclaim an ownerless
+            // lock, so remove the directory created above (only while it is still empty) and report the error.
+            try { Directory.Delete(fullPath, recursive: false); }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+            throw;
         }
     }
 

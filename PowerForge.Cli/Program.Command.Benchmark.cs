@@ -116,7 +116,11 @@ internal static partial class Program
                     : throw new ArgumentException($"{name} must be a positive number.")
                 : null;
         TimeSpan Minutes(string name, TimeSpan fallback)
-            => Number(name) is double minutes ? TimeSpan.FromMinutes(minutes) : fallback;
+            => Number(name) is double minutes
+                ? minutes < TimeSpan.MaxValue.TotalMinutes
+                    ? TimeSpan.FromMinutes(minutes)
+                    : throw new ArgumentException($"{name} is too large.")
+                : fallback;
 
         var spec = new BenchmarkRevisionComparisonSpec
         {
