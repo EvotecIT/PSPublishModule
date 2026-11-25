@@ -9,7 +9,7 @@ public sealed class BenchmarkRevisionComparisonTests
     public async Task Compare_RunsSidesAlternatelyFromATemporaryWorktreeAndRemovesIt()
     {
         using var repository = TestRepository.Create();
-        File.WriteAllText(Path.Combine(repository.Root, "Bench", "Bench.cs"), "// uncommitted candidate change");
+        File.WriteAllText(Path.Combine(repository.Root, "Bench", "NewBenchmark.cs"), "// untracked candidate file");
         var dotnet = new FakeDotNet(baselineNanoseconds: 1000, candidateNanoseconds: 1500);
         string lockPath = Path.Combine(repository.Scratch, "bench.lock");
         var service = new BenchmarkRevisionComparisonService(dotnet, new NullLogger(), _ => Task.FromResult<double?>(1.0), TimeSpan.FromMilliseconds(10));
@@ -179,7 +179,7 @@ public sealed class BenchmarkRevisionComparisonTests
     }
 
     [Fact]
-    public void Aggregate_KeepsEveryJobOfABenchmarkApart()
+    public void Aggregate_KeepsEveryJobOfABenchmarkApartOnBothSides()
     {
         // BenchmarkDotNet 0.15.8 report with two jobs of the same two benchmark cases (four rows sharing two full names).
         using var stream = typeof(BenchmarkRevisionComparisonTests).Assembly.GetManifestResourceStream(
@@ -194,6 +194,14 @@ public sealed class BenchmarkRevisionComparisonTests
             Assert.Equal(4, rows.Length);
             Assert.Equal(4, rows.Select(row => row.Benchmark).Distinct(StringComparer.Ordinal).Count());
             Assert.All(rows, row => Assert.Equal(1.0, row.Ratio!.Value, 6));
+
+            // A candidate that keeps only one of the jobs still lines up with the baseline's rows of that job.
+            string kept = report.Summary[0].Engine;
+            var oneJob = new BenchmarkRunResult { Summary = report.Summary.Where(row => row.Engine == kept).ToArray() };
+            rows = BenchmarkRevisionComparison.Aggregate(new[] { report }, new[] { oneJob });
+            Assert.Equal(4, rows.Length);
+            Assert.Equal(2, rows.Count(row => row.Ratio is not null));
+            Assert.All(rows.Where(row => row.Ratio is not null), row => Assert.EndsWith("[job " + kept + "]", row.Benchmark));
         }
         finally
         {

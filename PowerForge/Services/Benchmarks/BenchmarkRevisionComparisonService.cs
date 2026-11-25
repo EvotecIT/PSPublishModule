@@ -74,7 +74,7 @@ public sealed partial class BenchmarkRevisionComparisonService
         };
         if (candidateIsWorkingTree)
         {
-            string status = await GitAsync(repositoryRoot, cancellationToken, "status", "--porcelain", "--untracked-files=no").ConfigureAwait(false);
+            string status = await GitAsync(repositoryRoot, cancellationToken, "status", "--porcelain").ConfigureAwait(false);
             candidate.Dirty = status.Length > 0;
         }
 

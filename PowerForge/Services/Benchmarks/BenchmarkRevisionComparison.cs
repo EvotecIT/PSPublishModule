@@ -71,8 +71,15 @@ internal static class BenchmarkRevisionComparison
         IReadOnlyList<BenchmarkRunResult?> baselineRounds,
         IReadOnlyList<BenchmarkRunResult?> candidateRounds)
     {
-        var baseline = Index(baselineRounds);
-        var candidate = Index(candidateRounds);
+        // Several jobs of one benchmark share its full name; the job then becomes part of the key. The names are
+        // collected from every run of both sides, so a job added or removed on one side still lines up.
+        var jobQualified = new HashSet<string>(baselineRounds.Concat(candidateRounds)
+            .SelectMany(round => (round?.Summary ?? Array.Empty<BenchmarkSummaryRow>())
+                .GroupBy(Key, StringComparer.Ordinal)
+                .Where(group => group.Count() > 1)
+                .Select(group => group.Key)), StringComparer.Ordinal);
+        var baseline = Index(baselineRounds, jobQualified);
+        var candidate = Index(candidateRounds, jobQualified);
         var keys = baseline.Keys.Concat(candidate.Keys)
             .Distinct(StringComparer.Ordinal)
             .OrderBy(key => key, StringComparer.Ordinal)
@@ -217,21 +224,17 @@ internal static class BenchmarkRevisionComparison
         };
     }
 
-    private static Dictionary<string, Dictionary<int, BenchmarkSummaryRow>> Index(IReadOnlyList<BenchmarkRunResult?> rounds)
+    private static Dictionary<string, Dictionary<int, BenchmarkSummaryRow>> Index(
+        IReadOnlyList<BenchmarkRunResult?> rounds,
+        HashSet<string> jobQualified)
     {
         var index = new Dictionary<string, Dictionary<int, BenchmarkSummaryRow>>(StringComparer.Ordinal);
         for (int round = 0; round < rounds.Count; round++)
         {
-            var rows = rounds[round]?.Summary ?? Array.Empty<BenchmarkSummaryRow>();
-            // Several jobs of one benchmark share its full name; the job then becomes part of the key.
-            var sharedNames = new HashSet<string>(rows
-                .GroupBy(Key, StringComparer.Ordinal)
-                .Where(group => group.Count() > 1)
-                .Select(group => group.Key), StringComparer.Ordinal);
-            foreach (var row in rows)
+            foreach (var row in rounds[round]?.Summary ?? Array.Empty<BenchmarkSummaryRow>())
             {
                 string key = Key(row);
-                if (sharedNames.Contains(key))
+                if (jobQualified.Contains(key))
                     key += " [job " + row.Engine + "]";
                 if (index.TryGetValue(key, out var existing) && existing.ContainsKey(round))
                     throw new InvalidOperationException($"BenchmarkDotNet reported {key} more than once in one run.");
