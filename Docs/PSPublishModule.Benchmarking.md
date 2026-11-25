@@ -41,8 +41,8 @@ powerforge benchmark compare \
   --project OfficeIMO.Markdown.Benchmarks/OfficeIMO.Markdown.Benchmarks.csproj \
   --filter '*MarkdownHtmlBenchmarks.OfficeIMO_ToHtml_CommonMark' \
   --framework net10.0 \
-  --lock ~/Developer/Scratch/officeimo-bench.lock --max-load 6 \
-  --scratch ~/Developer/Scratch/my-task
+  --lock ~/bench.lock --max-load 6 \
+  --scratch ~/scratch/markdown-perf
 ```
 
 - `--baseline` defaults to the repository's default branch (`origin/HEAD`, then
@@ -81,16 +81,28 @@ between rounds ((max - min) / median). Below it are the ratio (candidate / basel
 the lowest and highest per-round ratio, and the allocation ratio:
 
 ```text
-OfficeIMO.Markdown.Benchmarks.MarkdownHtmlBenchmarks.OfficeIMO_ToHtml_CommonMark(CorpusName: "readme")
-Side       Median     Allocated  Rounds                Spread
+OfficeIMO.Markdown.Benchmarks.MarkdownHtmlBenchmarks.OfficeIMO_ToHtml_CommonMark(CorpusName: "LargeTable")
+Side         Median  Allocated              Rounds  Spread
+---------  --------  ---------  ------------------  ------
+baseline   1.179 ms    2.35 MB  1.189 ms, 1.168 ms    1.7%
+candidate  1.178 ms    2.35 MB  1.203 ms, 1.153 ms    4.3%
+Ratio 1.000 (rounds 0.987-1.012), allocation ratio 1.000
+
+OfficeIMO.Markdown.Benchmarks.MarkdownHtmlBenchmarks.OfficeIMO_ToHtml_CommonMark(CorpusName: "PortableReadme")
+Side          Median  Allocated                Rounds  Spread
 ---------  ---------  ---------  --------------------  ------
-baseline   41.212 us  98.41 KB   41.020 us, 41.404 us    0.9%
-candidate  41.388 us  98.41 KB   41.551 us, 41.225 us    0.8%
-Ratio 1.004 (rounds 0.996-1.013), allocation ratio 1.000
+baseline   46.469 us  150.56 KB  46.872 us, 46.066 us    1.7%
+candidate  45.268 us  150.56 KB  45.481 us, 45.055 us    0.9%
+Ratio 0.974 (rounds 0.970-0.978), allocation ratio 1.000
 ```
 
-A ratio whose per-round range crosses 1.0, or a spread of the same size as the
-difference, is noise, not a result. Run more rounds or wait for a quieter machine
+Both tables above come from comparing `master` with itself on a busy machine, so
+every difference in them is noise. `PortableReadme` shows that noise can look
+consistent across rounds: a 2.6% "improvement" with no code change. Run the same
+comparison of the baseline against itself (`--candidate <baseline>`) to learn the
+noise floor of a benchmark on a machine before trusting a small ratio. A ratio
+whose per-round range crosses 1.0, or a spread of the same size as the difference,
+is noise, not a result. Run more rounds or wait for a quieter machine
 before claiming it. The comparison follows the [benchmark standard](PowerForge.BenchmarkStandard.md):
 one statistic (`median`) and the runner block (`benchmarkdotnet`, warmups,
 iterations, `alternating` order) are recorded in the JSON result.
