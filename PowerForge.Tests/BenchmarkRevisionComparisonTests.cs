@@ -108,6 +108,15 @@ public sealed class BenchmarkRevisionComparisonTests
             // A lock left by a process of this host that has exited is taken over.
             File.WriteAllText(Path.Combine(lockPath, "owner"),
                 "pid=" + ExitedProcessId().ToString(CultureInfo.InvariantCulture) + "\nhost=" + Environment.MachineName + "\n");
+
+            // While another runner is reclaiming it, the stale lock is left to that runner.
+            using (new FileStream(Path.Combine(root, ".bench.lock.reclaim"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None))
+            {
+                await Assert.ThrowsAsync<TimeoutException>(() => BenchmarkLockDirectory.AcquireAsync(
+                    lockPath, "second", TimeSpan.FromMilliseconds(50), TimeSpan.FromMilliseconds(10), null, CancellationToken.None));
+                Assert.DoesNotContain("command=", File.ReadAllText(Path.Combine(lockPath, "owner")));
+            }
+
             using (await BenchmarkLockDirectory.AcquireAsync(lockPath, "third", TimeSpan.FromSeconds(5), TimeSpan.FromMilliseconds(10), null, CancellationToken.None))
                 Assert.Contains("command=third", File.ReadAllText(Path.Combine(lockPath, "owner")));
             Assert.False(Directory.Exists(lockPath));
@@ -115,6 +124,80 @@ public sealed class BenchmarkRevisionComparisonTests
         finally
         {
             if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Compare_UsesTheRemoteDefaultBranchWhenThereIsNoLocalOne()
+    {
+        using var repository = TestRepository.Create();
+        string clone = Path.Combine(Path.GetDirectoryName(repository.Root)!, "clone");
+        repository.Git("clone", "--quiet", repository.Root, clone);
+        repository.Git("-C", clone, "checkout", "--quiet", "--detach");
+        repository.Git("-C", clone, "branch", "--quiet", "-D", "main");
+        var dotnet = new FakeDotNet(1000, 1000);
+        var service = new BenchmarkRevisionComparisonService(dotnet, new NullLogger(), _ => Task.FromResult<double?>(null), TimeSpan.FromMilliseconds(10));
+
+        var result = await service.RunAsync(new BenchmarkRevisionComparisonSpec
+        {
+            RepositoryPath = clone,
+            Project = "Bench/Bench.csproj",
+            Filter = "*",
+            Framework = "net10.0",
+            Rounds = 1,
+            ScratchRoot = repository.Scratch
+        });
+
+        Assert.Equal("origin/main", result.Baseline.Revision);
+        Assert.Equal(repository.MainCommit, result.Baseline.Commit);
+    }
+
+    [Fact]
+    public async Task Compare_RemovesAWorktreeWhoseCheckoutFailed()
+    {
+        using var repository = TestRepository.Create();
+        string hook = Path.Combine(repository.Root, ".git", "hooks", "post-checkout");
+        File.WriteAllText(hook, "#!/bin/sh\nexit 1\n");
+        if (!OperatingSystem.IsWindows())
+            File.SetUnixFileMode(hook, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        var service = new BenchmarkRevisionComparisonService(new FakeDotNet(1000, 1000), new NullLogger(), _ => Task.FromResult<double?>(null), TimeSpan.FromMilliseconds(10));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.RunAsync(new BenchmarkRevisionComparisonSpec
+        {
+            RepositoryPath = repository.Root,
+            Baseline = "main",
+            Project = "Bench/Bench.csproj",
+            Filter = "*",
+            Framework = "net10.0",
+            ScratchRoot = repository.Scratch,
+            KeepArtifacts = true
+        }));
+
+        File.Delete(hook);
+        Assert.Single(repository.Git("worktree", "list", "--porcelain").Split('\n'), line => line.StartsWith("worktree ", StringComparison.Ordinal));
+        Assert.All(Directory.GetDirectories(repository.Scratch), work => Assert.False(Directory.Exists(Path.Combine(work, "baseline"))));
+    }
+
+    [Fact]
+    public void Aggregate_KeepsEveryJobOfABenchmarkApart()
+    {
+        // BenchmarkDotNet 0.15.8 report with two jobs of the same two benchmark cases (four rows sharing two full names).
+        using var stream = typeof(BenchmarkRevisionComparisonTests).Assembly.GetManifestResourceStream(
+            "PowerForge.Tests.Fixtures.Benchmarks.BenchmarkDotNet-0.15.8-jobs.json")!;
+        string path = Path.Combine(Path.GetTempPath(), "pf-bench-jobs-" + Guid.NewGuid().ToString("N") + "-report-full.json");
+        using (var file = File.Create(path)) stream.CopyTo(file);
+        try
+        {
+            var report = new BenchmarkResultImporter().Import(path);
+            var rows = BenchmarkRevisionComparison.Aggregate(new[] { report }, new[] { report });
+
+            Assert.Equal(4, rows.Length);
+            Assert.Equal(4, rows.Select(row => row.Benchmark).Distinct(StringComparer.Ordinal).Count());
+            Assert.All(rows, row => Assert.Equal(1.0, row.Ratio!.Value, 6));
+        }
+        finally
+        {
+            File.Delete(path);
         }
     }
 

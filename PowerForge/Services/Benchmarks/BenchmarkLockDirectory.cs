@@ -141,8 +141,13 @@ internal sealed class BenchmarkLockDirectory : IDisposable
             return false;
         }
 
+        // Two runners can find the same stale lock. Reclaiming runs under an exclusive file lock, released by the
+        // operating system if the process dies, and re-reads the owner inside it, so a runner never deletes a lock
+        // that another runner has taken since it looked.
+        string reclaimPath = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(fullPath)!, "." + System.IO.Path.GetFileName(fullPath) + ".reclaim");
         try
         {
+            using var reclaim = new FileStream(reclaimPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
             if (!string.Equals(ReadOwner(fullPath), owner, StringComparison.Ordinal))
                 return false;
             Directory.Delete(fullPath, recursive: true);

@@ -222,9 +222,19 @@ internal static class BenchmarkRevisionComparison
         var index = new Dictionary<string, Dictionary<int, BenchmarkSummaryRow>>(StringComparer.Ordinal);
         for (int round = 0; round < rounds.Count; round++)
         {
-            foreach (var row in rounds[round]?.Summary ?? Array.Empty<BenchmarkSummaryRow>())
+            var rows = rounds[round]?.Summary ?? Array.Empty<BenchmarkSummaryRow>();
+            // Several jobs of one benchmark share its full name; the job then becomes part of the key.
+            var sharedNames = new HashSet<string>(rows
+                .GroupBy(Key, StringComparer.Ordinal)
+                .Where(group => group.Count() > 1)
+                .Select(group => group.Key), StringComparer.Ordinal);
+            foreach (var row in rows)
             {
                 string key = Key(row);
+                if (sharedNames.Contains(key))
+                    key += " [job " + row.Engine + "]";
+                if (index.TryGetValue(key, out var existing) && existing.ContainsKey(round))
+                    throw new InvalidOperationException($"BenchmarkDotNet reported {key} more than once in one run.");
                 if (!index.TryGetValue(key, out var byRound))
                     index[key] = byRound = new Dictionary<int, BenchmarkSummaryRow>();
                 byRound[round] = row;

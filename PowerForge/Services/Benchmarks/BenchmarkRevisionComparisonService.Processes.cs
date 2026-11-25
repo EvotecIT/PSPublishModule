@@ -21,7 +21,14 @@ public sealed partial class BenchmarkRevisionComparisonService
             cancellationToken).ConfigureAwait(false);
         string head = remoteHead.StdOut.Trim();
         if (remoteHead.ExitCode == 0 && head.Length > 0)
-            return head.StartsWith("origin/", StringComparison.Ordinal) ? head.Substring("origin/".Length) : head;
+        {
+            // Prefer the local branch of the same name; without one, the remote branch is the baseline.
+            string local = head.StartsWith("origin/", StringComparison.Ordinal) ? head.Substring("origin/".Length) : head;
+            var localExists = await _processRunner.RunAsync(
+                new ProcessRunRequest("git", repositoryRoot, new[] { "rev-parse", "--verify", "--quiet", "refs/heads/" + local }, TimeSpan.FromMinutes(1)),
+                cancellationToken).ConfigureAwait(false);
+            return localExists.ExitCode == 0 ? local : head;
+        }
 
         foreach (string candidate in new[] { "main", "master" })
         {
@@ -47,8 +54,9 @@ public sealed partial class BenchmarkRevisionComparisonService
         List<string> worktrees,
         CancellationToken cancellationToken)
     {
-        await GitAsync(repositoryRoot, cancellationToken, "worktree", "add", "--detach", path, commit).ConfigureAwait(false);
+        // Registered first: a failed checkout (a hook, for example) can still leave the worktree behind.
         worktrees.Add(path);
+        await GitAsync(repositoryRoot, cancellationToken, "worktree", "add", "--detach", path, commit).ConfigureAwait(false);
         return path;
     }
 
