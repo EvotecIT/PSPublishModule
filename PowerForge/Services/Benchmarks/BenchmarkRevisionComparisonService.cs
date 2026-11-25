@@ -106,7 +106,7 @@ public sealed partial class BenchmarkRevisionComparisonService
             {
                 // Read right before building, so the report describes the source that is built.
                 candidate.Commit = await ResolveCommitAsync(repositoryRoot, "HEAD", cancellationToken).ConfigureAwait(false);
-                candidate.Dirty = (await GitAsync(repositoryRoot, cancellationToken, "status", "--porcelain").ConfigureAwait(false)).Length > 0;
+                candidate.Dirty = (await GitAsync(repositoryRoot, cancellationToken, "status", "--porcelain", "--untracked-files=normal").ConfigureAwait(false)).Length > 0;
             }
 
             foreach (var side in new[] { baseline.Name, candidate.Name })

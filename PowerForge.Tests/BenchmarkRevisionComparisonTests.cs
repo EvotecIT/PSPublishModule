@@ -10,6 +10,7 @@ public sealed class BenchmarkRevisionComparisonTests
     {
         using var repository = TestRepository.Create();
         File.WriteAllText(Path.Combine(repository.Root, "Bench", "NewBenchmark.cs"), "// untracked candidate file");
+        repository.Git("config", "status.showUntrackedFiles", "no");
         var dotnet = new FakeDotNet(baselineNanoseconds: 1000, candidateNanoseconds: 1500);
         string lockPath = Path.Combine(repository.Scratch, "bench.lock");
         var service = new BenchmarkRevisionComparisonService(dotnet, new NullLogger(), _ => Task.FromResult<double?>(1.0), TimeSpan.FromMilliseconds(10));
