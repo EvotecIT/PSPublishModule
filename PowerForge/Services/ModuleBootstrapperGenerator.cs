@@ -342,6 +342,7 @@ internal static partial class ModuleBootstrapperGenerator
             ["BinaryLoaderBlock"] = string.IsNullOrWhiteSpace(binaryLoaderBlock)
                 ? string.Empty
                 : "    $script:PowerForgeImportedAliases = [System.Collections.Generic.List[System.Management.Automation.AliasInfo]]::new()" + Environment.NewLine +
+                  "    $script:PowerForgeExportImportedAliases = $false" + Environment.NewLine +
                   "    # The loader runs in its own scope, so its working variables do not stay in the module." + Environment.NewLine +
                   "    & {" + Environment.NewLine +
                   IndentPowerShell(binaryLoaderBlock.TrimEnd(), 8) + Environment.NewLine +
