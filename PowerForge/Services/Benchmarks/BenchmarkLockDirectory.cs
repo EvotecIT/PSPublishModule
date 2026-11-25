@@ -117,6 +117,14 @@ internal sealed class BenchmarkLockDirectory : IDisposable
             // Someone removed the directory before the owner file was written: the lock was lost, so start over.
             return false;
         }
+        catch (IOException)
+        {
+            // Another runner's owner file is already there (the move never overwrites it): the lock is theirs.
+            try { File.Delete(staging); }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+            return false;
+        }
     }
 
     private static bool TryTakeByMove(string fullPath, string parent, string owner, string token)
