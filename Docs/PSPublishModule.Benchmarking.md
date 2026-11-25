@@ -27,6 +27,85 @@ classes for every library.
 | `Update-BenchmarkDocument` | Replaces one marker-delimited Markdown block from a normalized summary or comparison file. |
 | `Test-BenchmarkGate` | Verifies benchmark summary metrics against a JSON baseline with tolerance rules. |
 | `Test-BenchmarkHistory` | Calibrates and verifies duration limits from accepted independent runs on the same runner environment. |
+| `powerforge benchmark compare` | Runs one BenchmarkDotNet benchmark on two git revisions of the same repository, interleaved, and reports the ratio between them. |
+
+## Comparing Two Revisions
+
+A performance change needs evidence that the new code is faster than the code it
+replaces, measured on the same machine in the same conditions. `powerforge benchmark
+compare` runs a BenchmarkDotNet benchmark on a baseline revision and a candidate,
+alternating which side runs first, and prints one table per benchmark case:
+
+```bash
+powerforge benchmark compare \
+  --project OfficeIMO.Markdown.Benchmarks/OfficeIMO.Markdown.Benchmarks.csproj \
+  --filter '*MarkdownHtmlBenchmarks.OfficeIMO_ToHtml_CommonMark' \
+  --framework net10.0 \
+  --lock ~/bench.lock --max-load 6 \
+  --scratch ~/scratch/markdown-perf
+```
+
+- `--baseline` defaults to the repository's default branch (`origin/HEAD`, then
+  `main` or `master`). It is checked out with `git worktree add --detach` under
+  `--scratch` (default: the system temp folder) and removed afterwards, also when
+  the run fails or is cancelled.
+- `--candidate` defaults to the current working tree, uncommitted changes included;
+  the report says when it has any. Pass a revision to measure a commit instead.
+- `--rounds` (default 2) runs each side once per round: baseline first on odd
+  rounds, candidate first on even rounds, so drift during the run does not favour
+  one side.
+- Both sides are built once before the first round (`dotnet build -c Release -f
+  <framework>`); each run uses `dotnet run --no-build`.
+- BenchmarkDotNet runs with `--launchCount 1 --warmupCount 5 --iterationCount 15
+  --outliers DontRemove --memory --exporters json`. Arguments after `--` replace the
+  default option of the same name or are added to it (`-- --iterationCount 30 --job
+  short`). The JSON exporter is always kept, and `--filter` and `--artifacts` belong
+  to the command.
+- `--lock <folder>` holds a machine-wide lock while building and measuring, so
+  several people or agents on one machine never measure at the same time. The lock
+  is a directory with an `owner` file (`pid`, `host`, `started`, `command`), taken
+  the same way a shell script takes it with `mkdir`, and released on exit or
+  cancel. A lock whose recorded process on this host has exited is taken over;
+  a lock in any other format is waited for (`--lock-timeout`, default 120 minutes).
+- `--max-load <n>` waits until the 15-minute load average is below `n`, once before
+  taking the lock (so a busy machine never keeps others waiting on it) and again
+  before each run (Linux and macOS; `--load-timeout`, default 60 minutes). Windows has no load
+  average, so the gate is skipped there with a warning.
+- `--out <file>` writes the full result as JSON; `--output json` prints it instead
+  of the tables. `--keep-artifacts` keeps the BenchmarkDotNet reports and the build
+  and run logs.
+
+Each table shows, for both sides, the median of the per-round BenchmarkDotNet
+medians, the median allocation per operation, every round's median and the spread
+between rounds ((max - min) / median). Below it are the ratio (candidate / baseline),
+the lowest and highest per-round ratio, and the allocation ratio:
+
+```text
+OfficeIMO.Markdown.Benchmarks.MarkdownHtmlBenchmarks.OfficeIMO_ToHtml_CommonMark(CorpusName: "LargeTable")
+Side         Median  Allocated              Rounds  Spread
+---------  --------  ---------  ------------------  ------
+baseline   1.179 ms    2.35 MB  1.189 ms, 1.168 ms    1.7%
+candidate  1.178 ms    2.35 MB  1.203 ms, 1.153 ms    4.3%
+Ratio 1.000 (rounds 0.987-1.012), allocation ratio 1.000
+
+OfficeIMO.Markdown.Benchmarks.MarkdownHtmlBenchmarks.OfficeIMO_ToHtml_CommonMark(CorpusName: "PortableReadme")
+Side          Median  Allocated                Rounds  Spread
+---------  ---------  ---------  --------------------  ------
+baseline   46.469 us  150.56 KB  46.872 us, 46.066 us    1.7%
+candidate  45.268 us  150.56 KB  45.481 us, 45.055 us    0.9%
+Ratio 0.974 (rounds 0.970-0.978), allocation ratio 1.000
+```
+
+Both tables above come from comparing `master` with itself on a busy machine, so
+every difference in them is noise. `PortableReadme` shows that noise can look
+consistent across rounds: a 2.6% "improvement" with no code change. Run the same
+comparison of the baseline against itself (`--candidate <baseline>`) to learn the
+noise floor of a benchmark on a machine before trusting a small ratio. A ratio
+whose per-round range crosses 1.0, or a spread of the same size as the difference,
+is noise, not a result. Run more rounds or wait for a quieter machine
+before claiming it. The comparison follows the [benchmark standard](PowerForge.BenchmarkStandard.md):
+one statistic (`median`) and the runner block (`benchmarkdotnet`, warmups,
+iterations, `alternating` order) are recorded in the JSON result.
 
 ## Runner-Specific Timing History
 

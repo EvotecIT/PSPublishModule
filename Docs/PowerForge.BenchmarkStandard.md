@@ -123,6 +123,10 @@ loses; they stay in the matrix and in the published evidence.
 - Interleave or rotate the order of libraries and cases so drift (thermal, power,
   background work) does not favour whoever runs first.
 - Warm up every cell (at least the policy's warmup count) before measuring.
+- A change to the subject itself is measured against its previous revision on the same
+  machine with `powerforge benchmark compare`, which alternates the two revisions
+  between rounds and reports the spread between rounds next to the ratio
+  ([comparing two revisions](PSPublishModule.Benchmarking.md#comparing-two-revisions)).
 - Use affinity and priority only as a lane parameter applied to every library alike,
   and record it (`runner.affinity`, `runner.priority`). An affinity run is a separate
   lane of the same comparison, never a different comparison id.
