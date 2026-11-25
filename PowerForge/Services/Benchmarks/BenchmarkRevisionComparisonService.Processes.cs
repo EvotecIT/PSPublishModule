@@ -14,7 +14,10 @@ public sealed partial class BenchmarkRevisionComparisonService
         return result.StdOut.Trim();
     }
 
-    private async Task<string> DefaultBranchAsync(string repositoryRoot, CancellationToken cancellationToken)
+    /// <summary>
+    /// Returns the default branch's display name and the full ref that resolves it, so a tag of the same name never wins.
+    /// </summary>
+    private async Task<(string Name, string Ref)> DefaultBranchAsync(string repositoryRoot, CancellationToken cancellationToken)
     {
         var remoteHead = await _processRunner.RunAsync(
             new ProcessRunRequest("git", repositoryRoot, new[] { "symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD" }, TimeSpan.FromMinutes(1)),
@@ -27,7 +30,7 @@ public sealed partial class BenchmarkRevisionComparisonService
             var localExists = await _processRunner.RunAsync(
                 new ProcessRunRequest("git", repositoryRoot, new[] { "rev-parse", "--verify", "--quiet", "refs/heads/" + local }, TimeSpan.FromMinutes(1)),
                 cancellationToken).ConfigureAwait(false);
-            return localExists.ExitCode == 0 ? local : head;
+            return localExists.ExitCode == 0 ? (local, "refs/heads/" + local) : (head, "refs/remotes/" + head);
         }
 
         foreach (string candidate in new[] { "main", "master" })
@@ -35,7 +38,7 @@ public sealed partial class BenchmarkRevisionComparisonService
             var exists = await _processRunner.RunAsync(
                 new ProcessRunRequest("git", repositoryRoot, new[] { "rev-parse", "--verify", "--quiet", "refs/heads/" + candidate }, TimeSpan.FromMinutes(1)),
                 cancellationToken).ConfigureAwait(false);
-            if (exists.ExitCode == 0) return candidate;
+            if (exists.ExitCode == 0) return (candidate, "refs/heads/" + candidate);
         }
         throw new InvalidOperationException("Could not find the repository's default branch. Pass the baseline revision explicitly.");
     }
@@ -69,12 +72,16 @@ public sealed partial class BenchmarkRevisionComparisonService
                 CancellationToken.None).ConfigureAwait(false);
             if (removed.ExitCode == 0 && !Directory.Exists(path)) return;
 
+            // Only this worktree is ours, so no repository-wide 'git worktree prune' here.
             TryDeleteDirectory(path);
-            await _processRunner.RunAsync(
-                new ProcessRunRequest("git", repositoryRoot, new[] { "worktree", "prune" }, TimeSpan.FromMinutes(5)),
+            var list = await _processRunner.RunAsync(
+                new ProcessRunRequest("git", repositoryRoot, new[] { "worktree", "list", "--porcelain" }, TimeSpan.FromMinutes(1)),
                 CancellationToken.None).ConfigureAwait(false);
-            if (Directory.Exists(path))
-                _logger.Warn($"Could not remove the temporary worktree {path}. Remove it with 'git worktree remove --force'.");
+            bool registered = list.StdOut.Split('\n').Any(line =>
+                line.StartsWith("worktree ", StringComparison.Ordinal) &&
+                string.Equals(Path.GetFullPath(line.Substring("worktree ".Length).Trim()), Path.GetFullPath(path), StringComparison.Ordinal));
+            if (Directory.Exists(path) || registered)
+                _logger.Warn($"Could not remove the temporary worktree {path}. Remove it with 'git worktree remove --force {path}'.");
         }
         catch (Exception exception) when (exception is IOException or InvalidOperationException or UnauthorizedAccessException)
         {

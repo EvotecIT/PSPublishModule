@@ -78,13 +78,15 @@ internal static partial class Program
         {
             return 130;
         }
-        catch (Exception exception) when (exception is ArgumentException or InvalidOperationException or IOException or TimeoutException or FormatException)
+        catch (Exception exception) when (exception is ArgumentException or InvalidOperationException or IOException or TimeoutException or FormatException or UnauthorizedAccessException)
         {
+            // 2 for invalid arguments, 1 for a comparison that could not run; the same code in JSON and to the shell.
+            int exitCode = exception is ArgumentException or FormatException ? 2 : 1;
             if (json)
-                WriteJson(new CliJsonEnvelope { SchemaVersion = OutputSchemaVersion, Command = "benchmark.compare", Success = false, ExitCode = 2, Error = exception.Message });
+                WriteJson(new CliJsonEnvelope { SchemaVersion = OutputSchemaVersion, Command = "benchmark.compare", Success = false, ExitCode = exitCode, Error = exception.Message });
             else
                 logger.Error(exception.Message);
-            return exception is ArgumentException or FormatException ? 2 : 1;
+            return exitCode;
         }
         finally
         {

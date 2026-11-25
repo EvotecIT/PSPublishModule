@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Globalization;
+using System.Runtime.InteropServices;
 
 namespace PowerForge;
 
@@ -79,24 +80,52 @@ internal sealed class BenchmarkLockDirectory : IDisposable
         catch (UnauthorizedAccessException) { }
     }
 
+    /// <summary>
+    /// Takes the lock without ever replacing a directory someone else created. On Linux and macOS this is the same
+    /// <c>mkdir</c> a shell script uses, followed by the owner file. On Windows the directory is prepared next to the
+    /// lock and moved into place, which fails when the lock already exists.
+    /// </summary>
     private static bool TryTake(string fullPath, string parent, string description, string token)
     {
         if (Directory.Exists(fullPath) || File.Exists(fullPath))
             return false;
+        string owner = OwnerText(description, token);
+        return RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+            ? TryTakeByMove(fullPath, parent, owner, token)
+            : TryTakeByMkdir(fullPath, owner, token);
+    }
 
+    private static bool TryTakeByMkdir(string fullPath, string owner, string token)
+    {
+        if (UnixMkdir(fullPath, Convert.ToUInt32("755", 8)) != 0)
+        {
+            int error = Marshal.GetLastWin32Error();
+            if (error == UnixErrorExists) return false;
+            throw new IOException($"Could not create benchmark lock {fullPath} (errno {error}).");
+        }
+
+        // The owner file appears in one step, so a reader never sees half of it.
+        string staging = System.IO.Path.Combine(fullPath, "." + OwnerFileName + "." + token);
+        try
+        {
+            File.WriteAllText(staging, owner);
+            File.Move(staging, System.IO.Path.Combine(fullPath, OwnerFileName));
+            return true;
+        }
+        catch (DirectoryNotFoundException)
+        {
+            // Someone removed the directory before the owner file was written: the lock was lost, so start over.
+            return false;
+        }
+    }
+
+    private static bool TryTakeByMove(string fullPath, string parent, string owner, string token)
+    {
         string staging = System.IO.Path.Combine(parent, "." + System.IO.Path.GetFileName(fullPath) + "." + token + ".tmp");
         Directory.CreateDirectory(staging);
         try
         {
-            using var process = Process.GetCurrentProcess();
-            File.WriteAllText(System.IO.Path.Combine(staging, OwnerFileName), string.Join("\n", new[]
-            {
-                "pid=" + process.Id.ToString(CultureInfo.InvariantCulture),
-                "host=" + System.Environment.MachineName,
-                "started=" + DateTimeOffset.UtcNow.ToString("o", CultureInfo.InvariantCulture),
-                "command=" + description,
-                "token=" + token
-            }) + "\n");
+            File.WriteAllText(System.IO.Path.Combine(staging, OwnerFileName), owner);
             Directory.Move(staging, fullPath);
             return true;
         }
@@ -113,6 +142,25 @@ internal sealed class BenchmarkLockDirectory : IDisposable
             }
         }
     }
+
+    private static string OwnerText(string description, string token)
+    {
+        using var process = Process.GetCurrentProcess();
+        return string.Join("\n", new[]
+        {
+            "pid=" + process.Id.ToString(CultureInfo.InvariantCulture),
+            "host=" + System.Environment.MachineName,
+            "started=" + DateTimeOffset.UtcNow.ToString("o", CultureInfo.InvariantCulture),
+            "command=" + description,
+            "token=" + token
+        }) + "\n";
+    }
+
+    // EEXIST is 17 on Linux and macOS.
+    private const int UnixErrorExists = 17;
+
+    [DllImport("libc", EntryPoint = "mkdir", SetLastError = true, CharSet = CharSet.Ansi, BestFitMapping = false, ThrowOnUnmappableChar = true)]
+    private static extern int UnixMkdir(string path, uint mode);
 
     private static string ReadOwner(string fullPath)
     {

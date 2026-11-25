@@ -56,13 +56,22 @@ public sealed class BenchmarkRevisionComparisonTests
         Assert.Single(repository.Git("worktree", "list", "--porcelain").Split('\n'), line => line.StartsWith("worktree ", StringComparison.Ordinal));
     }
 
-    [Fact]
-    public async Task Compare_RemovesTheWorktreeAndReleasesTheLockWhenTheLoadNeverDrops()
+    [Theory]
+    [InlineData(0)] // busy before the lock is taken
+    [InlineData(1)] // quiet when the lock is taken, busy before the first run
+    public async Task Compare_RemovesTheWorktreeAndReleasesTheLockWhenTheLoadNeverDrops(int quietReadings)
     {
         using var repository = TestRepository.Create();
         string lockPath = Path.Combine(repository.Scratch, "bench.lock");
         var dotnet = new FakeDotNet(1000, 1000);
-        var service = new BenchmarkRevisionComparisonService(dotnet, new NullLogger(), _ => Task.FromResult<double?>(12.0), TimeSpan.FromMilliseconds(10));
+        int readings = 0;
+        bool lockHeldWhileWaiting = false;
+        var service = new BenchmarkRevisionComparisonService(dotnet, new NullLogger(), _ =>
+        {
+            if (readings++ < quietReadings) return Task.FromResult<double?>(1.0);
+            lockHeldWhileWaiting |= Directory.Exists(lockPath);
+            return Task.FromResult<double?>(12.0);
+        }, TimeSpan.FromMilliseconds(10));
 
         await Assert.ThrowsAsync<TimeoutException>(() => service.RunAsync(new BenchmarkRevisionComparisonSpec
         {
@@ -79,6 +88,7 @@ public sealed class BenchmarkRevisionComparisonTests
         }));
 
         Assert.Empty(dotnet.RunSides);
+        Assert.Equal(quietReadings > 0, lockHeldWhileWaiting);
         Assert.False(Directory.Exists(lockPath));
         Assert.Empty(Directory.GetFileSystemEntries(repository.Scratch));
         Assert.Single(repository.Git("worktree", "list", "--porcelain").Split('\n'), line => line.StartsWith("worktree ", StringComparison.Ordinal));
@@ -158,6 +168,7 @@ public sealed class BenchmarkRevisionComparisonTests
         using var repository = TestRepository.Create();
         string hook = Path.Combine(repository.Root, ".git", "hooks", "post-checkout");
         File.WriteAllText(hook, "#!/bin/sh\nexit 1\n");
+        repository.Git("config", "core.hooksPath", Path.GetDirectoryName(hook)!);
         if (!OperatingSystem.IsWindows())
             File.SetUnixFileMode(hook, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         var service = new BenchmarkRevisionComparisonService(new FakeDotNet(1000, 1000), new NullLogger(), _ => Task.FromResult<double?>(null), TimeSpan.FromMilliseconds(10));
@@ -176,6 +187,27 @@ public sealed class BenchmarkRevisionComparisonTests
         File.Delete(hook);
         Assert.Single(repository.Git("worktree", "list", "--porcelain").Split('\n'), line => line.StartsWith("worktree ", StringComparison.Ordinal));
         Assert.All(Directory.GetDirectories(repository.Scratch), work => Assert.False(Directory.Exists(Path.Combine(work, "baseline"))));
+    }
+
+    [Fact]
+    public async Task Compare_FailsWhenNoRunProducesAReport()
+    {
+        using var repository = TestRepository.Create();
+        var dotnet = new FakeDotNet(1000, 1000) { WriteReports = false };
+        var service = new BenchmarkRevisionComparisonService(dotnet, new NullLogger(), _ => Task.FromResult<double?>(null), TimeSpan.FromMilliseconds(10));
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => service.RunAsync(new BenchmarkRevisionComparisonSpec
+        {
+            RepositoryPath = repository.Root,
+            Baseline = "main",
+            Project = "Bench",
+            Filter = "*",
+            Framework = "net10.0",
+            ScratchRoot = repository.Scratch
+        }));
+
+        Assert.Contains("No run produced a BenchmarkDotNet report", error.Message);
+        Assert.Equal(4, dotnet.RunSides.Count);
     }
 
     [Fact]
@@ -218,8 +250,10 @@ public sealed class BenchmarkRevisionComparisonTests
     [Theory]
     [InlineData("--filter")]
     [InlineData("-a")]
-    public void BenchmarkArguments_RejectOptionsTheComparisonOwns(string option)
-        => Assert.Throws<ArgumentException>(() => BenchmarkRevisionComparison.MergeBenchmarkArguments(new[] { option, "x" }));
+    [InlineData("--FILTER")]
+    [InlineData("--strategy", "@settings.rsp")]
+    public void BenchmarkArguments_RejectOptionsTheComparisonOwnsAndResponseFiles(string option, string value = "x")
+        => Assert.Throws<ArgumentException>(() => BenchmarkRevisionComparison.MergeBenchmarkArguments(new[] { option, value }));
 
     [Fact]
     public void LoadAverage_ReadsTheFifteenMinuteValue()
@@ -247,6 +281,7 @@ public sealed class BenchmarkRevisionComparisonTests
             _candidateNanoseconds = candidateNanoseconds;
         }
 
+        internal bool WriteReports { get; set; } = true;
         internal List<string> RunSides { get; } = new();
         internal List<List<string>> RunArguments { get; } = new();
 
@@ -263,6 +298,8 @@ public sealed class BenchmarkRevisionComparisonTests
                 RunSides.Add(side);
                 RunArguments.Add(arguments);
                 int nanoseconds = side == "baseline" ? _baselineNanoseconds : _candidateNanoseconds;
+                if (!WriteReports)
+                    return Task.FromResult(new ProcessRunResult(1, string.Empty, "crashed", "dotnet", TimeSpan.Zero, timedOut: false));
                 string results = Path.Combine(arguments[arguments.IndexOf("--artifacts") + 1], "results");
                 Directory.CreateDirectory(results);
                 File.WriteAllText(Path.Combine(results, "Bench.ParseBenchmarks-report-full.json"), Report(nanoseconds, allocated: side == "baseline" ? 100 : 200));

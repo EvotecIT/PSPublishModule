@@ -23,6 +23,7 @@ internal static class BenchmarkRevisionComparison
 
     private static readonly Dictionary<string, string> Aliases = new(StringComparer.Ordinal)
     {
+        ["-i"] = "--inProcess",
         ["-m"] = "--memory",
         ["-e"] = "--exporters",
         ["-f"] = "--filter",
@@ -39,7 +40,8 @@ internal static class BenchmarkRevisionComparison
         var options = ParseOptions(DefaultBenchmarkArguments);
         foreach (var option in ParseOptions(overrides ?? Array.Empty<string>()))
         {
-            if (option.Name is "--filter" or "--artifacts")
+            if (string.Equals(option.Name, "--filter", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(option.Name, "--artifacts", StringComparison.OrdinalIgnoreCase))
                 throw new ArgumentException($"BenchmarkDotNet option {option.Name} is set by the comparison and cannot be passed through.");
             int existing = options.FindIndex(item => string.Equals(item.Name, option.Name, StringComparison.OrdinalIgnoreCase));
             if (existing >= 0) options[existing] = option;
@@ -54,6 +56,12 @@ internal static class BenchmarkRevisionComparison
 
         return options.SelectMany(option => new[] { option.Name }.Concat(option.Values)).ToArray();
     }
+
+    /// <summary>
+    /// True when the merged arguments select BenchmarkDotNet's in-process toolchain.
+    /// </summary>
+    internal static bool RunsInProcess(IReadOnlyList<string> mergedArguments)
+        => mergedArguments.Any(argument => string.Equals(argument, "--inProcess", StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
     /// Returns the sides of one round in run order. Odd rounds (1, 3, …) run the baseline first, even rounds the candidate.
@@ -281,6 +289,9 @@ internal static class BenchmarkRevisionComparison
         var options = new List<BenchmarkOption>();
         foreach (string argument in arguments)
         {
+            // BenchmarkDotNet expands '@file' in each project's folder, so the two sides could read different files.
+            if (argument.StartsWith("@", StringComparison.Ordinal))
+                throw new ArgumentException($"Response files ('{argument}') are not supported; pass the BenchmarkDotNet arguments directly.");
             if (IsOptionName(argument))
             {
                 string name = Aliases.TryGetValue(argument, out string? alias) ? alias : argument;
