@@ -21,14 +21,19 @@ if ($PowerForgeDevelopmentEnabled) {
     }
     $PowerForgeDevelopmentConfigurations += 'Debug'
     $PowerForgeDevelopmentConfigurations += 'Release'
-    $PowerForgeDevelopmentConfigurations = @($PowerForgeDevelopmentConfigurations | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique)
+    $PowerForgeDevelopmentConfigurationSet = [System.Collections.Generic.HashSet[string]]::new()
+    $PowerForgeDevelopmentConfigurations = @(foreach ($PowerForgeDevelopmentConfiguration in $PowerForgeDevelopmentConfigurations) {
+        if (-not [string]::IsNullOrWhiteSpace($PowerForgeDevelopmentConfiguration) -and $PowerForgeDevelopmentConfigurationSet.Add($PowerForgeDevelopmentConfiguration)) {
+            $PowerForgeDevelopmentConfiguration
+        }
+    })
 
     $PowerForgeDevelopmentFrameworks = if ($PSEdition -eq 'Core') { $PowerForgeDevelopmentCoreFrameworks } else { $PowerForgeDevelopmentDesktopFrameworks }
     $PowerForgeDevelopmentBinaryPath = $null
     foreach ($PowerForgeDevelopmentConfiguration in $PowerForgeDevelopmentConfigurations) {
         foreach ($PowerForgeDevelopmentFramework in $PowerForgeDevelopmentFrameworks) {
             $PowerForgeDevelopmentCandidate = [IO.Path]::Combine($PowerForgeDevelopmentBinaryRoot, $PowerForgeDevelopmentConfiguration, $PowerForgeDevelopmentFramework, '{{LibraryFileName}}')
-            if (Test-Path -LiteralPath $PowerForgeDevelopmentCandidate) {
+            if ([IO.File]::Exists($PowerForgeDevelopmentCandidate)) {
                 $PowerForgeDevelopmentBinaryPath = $PowerForgeDevelopmentCandidate
                 break
             }

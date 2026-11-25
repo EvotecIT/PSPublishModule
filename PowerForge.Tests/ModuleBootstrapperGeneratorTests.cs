@@ -189,7 +189,7 @@ public partial class ModuleBootstrapperGeneratorTests
             Assert.Contains("$NativeLibraryDirectories = @(", bootstrapper);
             Assert.Contains("foreach ($NativeRuntimeRoot in @('Lib/Core'))", bootstrapper);
             Assert.Contains("foreach ($NativeLibraryDirectory in $NativeLibraryDirectories)", bootstrapper);
-            Assert.Contains("Join-Path -Path $NativeLibraryDirectory -ChildPath (\"runtimes\\{0}\\native\" -f $ArchFolder)", bootstrapper);
+            Assert.Contains("[IO.Path]::Combine($NativeLibraryDirectory, 'runtimes', $ArchFolder, 'native')", bootstrapper);
             Assert.Contains("[array] $NativePaths = foreach", bootstrapper);
             Assert.Contains("$PathEntries = if ([string]::IsNullOrWhiteSpace($env:PATH)) { @() } else { @($env:PATH -split [IO.Path]::PathSeparator) }", bootstrapper);
             Assert.Contains("[array] $RemainingPathEntries = foreach ($PathEntry in $PathEntries)", bootstrapper);

@@ -23,12 +23,16 @@ public sealed partial class ModuleBootstrapperGeneratorWindowsPowerShellTests
             var script = Path.Combine(root, "Test-Reimport.ps1");
             File.WriteAllText(script, """
 $ErrorActionPreference = 'Stop'
-$manifest = Join-Path $PSScriptRoot 'AliasModule/AliasModule.psd1'
+$manifest = [IO.Path]::Combine($PSScriptRoot, 'AliasModule', 'AliasModule.psd1')
 Import-Module $manifest
+# Loading either cmdlet module on first use costs more than the rest of the import.
+$cmdletModules = @(Get-Module Microsoft.PowerShell.Utility, Microsoft.PowerShell.Management)
+if ($cmdletModules) { throw "Import loaded $($cmdletModules.Name -join ', ')." }
+if ((Get-Module AliasModule).ExportedAliases.Keys -notcontains 'gaf') { throw 'The first import did not export the binary alias.' }
 Remove-Module AliasModule
 Import-Module $manifest
 if ((gaf) -ne 'alias-fixture') { throw 'Commands are missing after Remove-Module and import.' }
-$leaked = & (Get-Module AliasModule) { Get-Variable -Scope Script -Name Default, Core, Framework, Library, LibRoot, LibFolder, ImportModule, ModuleAssembly, InnerModule, BinaryModules -ErrorAction SilentlyContinue }
+$leaked = & (Get-Module AliasModule) { Get-Variable -Scope Script -Name Default, Core, Framework, Library, LibRoot, LibFolder, ImportModule, ModuleAssembly, InnerModule, BinaryModules, PowerForgeImportedAlias, PowerForgeImportedAliases, PowerForgeExportImportedAliases, PowerForgeLoaderModule -ErrorAction SilentlyContinue }
 if ($leaked) { throw "Loader variables stayed in the module: $($leaked.Name -join ', ')" }
 $context = [System.Runtime.Loader.AssemblyLoadContext]::GetLoadContext((Get-Command Get-AliasFixture).ImplementingType.Assembly)
 if ($context -eq [System.Runtime.Loader.AssemblyLoadContext]::Default) { throw 'The repeat import left the module context.' }
