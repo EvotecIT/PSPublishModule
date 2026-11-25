@@ -98,6 +98,8 @@ public sealed partial class BenchmarkRevisionComparisonService
                     throw new FileNotFoundException($"The {side.Key} revision has no benchmark project at {project}.", Path.Combine(side.Value, project));
             }
 
+            // Wait for a quiet machine before taking the lock too, so a busy machine never keeps others waiting on it.
+            double? loadLimit = await WaitForLoadAsync(spec.MaxLoadAverage, spec.LoadWaitTimeout, cancellationToken).ConfigureAwait(false);
             using var benchmarkLock = string.IsNullOrWhiteSpace(spec.LockPath)
                 ? null
                 : await AcquireLockAsync(spec, baseline, candidate, cancellationToken).ConfigureAwait(false);
@@ -111,7 +113,6 @@ public sealed partial class BenchmarkRevisionComparisonService
                 [candidate.Name] = new()
             };
             var order = new List<string>();
-            double? loadLimit = spec.MaxLoadAverage;
             BenchmarkEnvironmentInfo? environment = null;
             BenchmarkRunnerInfo? reportedRunner = null;
             for (int round = 1; round <= spec.Rounds; round++)

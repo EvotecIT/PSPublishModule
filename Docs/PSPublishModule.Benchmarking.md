@@ -67,8 +67,9 @@ powerforge benchmark compare \
   the same way a shell script takes it with `mkdir`, and released on exit or
   cancel. A lock whose recorded process on this host has exited is taken over;
   a lock in any other format is waited for (`--lock-timeout`, default 120 minutes).
-- `--max-load <n>` waits before each run until the 15-minute load average is below
-  `n` (Linux and macOS; `--load-timeout`, default 60 minutes). Windows has no load
+- `--max-load <n>` waits until the 15-minute load average is below `n`, once before
+  taking the lock (so a busy machine never keeps others waiting on it) and again
+  before each run (Linux and macOS; `--load-timeout`, default 60 minutes). Windows has no load
   average, so the gate is skipped there with a warning.
 - `--out <file>` writes the full result as JSON; `--output json` prints it instead
   of the tables. `--keep-artifacts` keeps the BenchmarkDotNet reports and the build
