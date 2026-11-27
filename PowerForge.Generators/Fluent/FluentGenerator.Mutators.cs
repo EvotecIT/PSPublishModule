@@ -185,11 +185,13 @@ namespace PowerForge.Generators.Fluent {
                     string summary = DocText(method, "summary", null) ?? "Sets " + new XText(name) + ".";
                     doc.Append("        /// <summary>").Append(summary).Append("</summary>\n")
                         .Append("        /// <param name=\"").Append(_receiver.TrimStart('@')).Append("\">The instance.</param>\n");
+                    // A params array that must not answer name() is an array here, plus an overload taking at least one item below.
+                    bool splitParams = !argless && method.Parameters.Length == 1 && method.Parameters[0].IsParams;
                     foreach (IParameterSymbol parameter in method.Parameters) {
                         bool required = !argless && parameter.Ordinal == 0;
                         string? fallback = required ? null : switchLike ? "true" : Emitter.DefaultLiteral(parameter);
                         string optional = !required && BareOptional(parameter) ? "[global::System.Runtime.InteropServices.Optional] " : string.Empty;
-                        parameters.Add(optional + (parameter.IsParams ? "params " : string.Empty) + ParameterType(parameter, fallback) + " " + Escape(parameter.Name)
+                        parameters.Add(optional + (parameter.IsParams && !splitParams ? "params " : string.Empty) + ParameterType(parameter, fallback) + " " + Escape(parameter.Name)
                             + (fallback == null || parameter.IsParams ? string.Empty : " = " + fallback));
                         string text = DocText(method, "param", parameter.Name) ?? "The value.";
                         doc.Append("        /// <param name=\"").Append(parameter.Name).Append("\">").Append(text).Append(switchLike ? " True when omitted." : string.Empty).Append("</param>\n");
@@ -205,6 +207,19 @@ namespace PowerForge.Generators.Fluent {
                     string arguments = string.Join(", ", method.Parameters.Select(p => (p.Type.TypeKind == TypeKind.Dynamic ? "(object)" : string.Empty) + Escape(p.Name)));
                     AppendMethod(doc.ToString(), name, string.Concat(parameters.Select(p => ", " + p)),
                         "            " + target + "." + Escape(method.Name) + "(" + arguments + ");\n");
+                    if (splitParams && method.Parameters[0].Type is IArrayTypeSymbol array && Claim(location, member, name, array.ElementType, array)) {
+                        string element = array.ElementType.ToDisplayString(TypeFormat);
+                        string items = "            " + element + "[] value = new " + element + "[(items == null ? 0 : items.Length) + 1];\n"
+                            + "            value[0] = item;\n"
+                            + "            if (items != null) { global::System.Array.Copy(items, 0, value, 1, items.Length); }\n";
+                        string itemsDoc = "        /// <summary>" + summary + "</summary>\n"
+                            + "        /// <param name=\"" + _receiver.TrimStart('@') + "\">The instance.</param>\n"
+                            + "        /// <param name=\"item\">The first item.</param>\n"
+                            + "        /// <param name=\"items\">The other items.</param>\n"
+                            + "        /// <returns>The same instance.</returns>\n";
+                        AppendMethod(itemsDoc, name, ", " + element + " item, params " + element + "[] items",
+                            items + "            " + target + "." + Escape(method.Name) + "(value);\n");
+                    }
                 }
 
                 // A reference type defaulting to null is annotated nullable where the generated file enables nullable context, so

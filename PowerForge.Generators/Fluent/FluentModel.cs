@@ -194,13 +194,30 @@ namespace PowerForge.Generators.Fluent {
         }
 
         /// <summary>
-        /// The key a generated method's value parameters are compared by: C# signatures ignore nullable annotations, and
-        /// <c>dynamic</c> is <c>object</c> to overload resolution.
+        /// The key a generated method's value parameters are compared by, equal for identity-convertible types: C# signatures
+        /// ignore nullable annotations and tuple element names, and <c>dynamic</c> is <c>object</c> to overload resolution.
         /// </summary>
         internal static string SignatureKey(string name, IEnumerable<ITypeSymbol> parameters) =>
-            name + "(" + string.Join(", ", parameters.Select(parameter => DynamicName.Replace(parameter.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat), "object"))) + ")";
+            name + "(" + string.Join(", ", parameters.Select(TypeKey)) + ")";
 
-        // dynamic as a type of its own, not a namespace-qualified type that happens to be called dynamic.
-        private static readonly System.Text.RegularExpressions.Regex DynamicName = new System.Text.RegularExpressions.Regex(@"(?<![\w.:@])dynamic(?!\w)");
+        private static readonly SymbolDisplayFormat QualifiedName = new SymbolDisplayFormat(
+            globalNamespaceStyle: SymbolDisplayGlobalNamespaceStyle.Included,
+            typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypesAndNamespaces,
+            genericsOptions: SymbolDisplayGenericsOptions.None,
+            miscellaneousOptions: SymbolDisplayMiscellaneousOptions.UseSpecialTypes | SymbolDisplayMiscellaneousOptions.EscapeKeywordIdentifiers);
+
+        private static string TypeKey(ITypeSymbol type) {
+            switch (type) {
+                case IArrayTypeSymbol array:
+                    return TypeKey(array.ElementType) + "[" + new string(',', array.Rank - 1) + "]";
+                case INamedTypeSymbol { IsTupleType: true } tuple:
+                    return "(" + string.Join(", ", tuple.TupleElements.Select(element => TypeKey(element.Type))) + ")";
+                case INamedTypeSymbol named:
+                    string qualified = named.ContainingType != null ? TypeKey(named.ContainingType) + "." + Escape(named.Name) : named.ToDisplayString(QualifiedName);
+                    return named.TypeArguments.Length == 0 ? qualified : qualified + "<" + string.Join(", ", named.TypeArguments.Select(TypeKey)) + ">";
+                default:
+                    return type.TypeKind == TypeKind.Dynamic ? "object" : type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            }
+        }
     }
 }

@@ -315,10 +315,6 @@ namespace PowerForge.Generators.Fluent {
                     TypeFormat = emitter.Format;
                     string typeName = type.ToDisplayString(TypeFormat);
                     bool open = !type.IsSealed;
-                    // A type that can be derived from gets generic methods (TSelf : Type), so a chain keeps the derived type.
-                    _self = open ? "TSelf" : typeName;
-                    _generic = open ? "<TSelf>" : type.TypeParameters.Length == 0 ? string.Empty : "<" + string.Join(", ", type.TypeParameters.Select(parameter => parameter.Name)) + ">";
-                    _constraint = open ? " where TSelf : " + typeName : Constraints(type);
                     string receiver = Camel(type.Name);
                     string stem = receiver.TrimStart('@');
                     // Forwards of an inlined settings type are emitted on this type too, with their own value parameter names.
@@ -333,6 +329,15 @@ namespace PowerForge.Generators.Fluent {
                         receiver = stem + "Instance" + (attempt == 0 ? string.Empty : attempt.ToString(System.Globalization.CultureInfo.InvariantCulture));
                     }
                     _receiver = receiver;
+                    // A type that can be derived from gets generic methods (TSelf : Type), so a chain keeps the derived type. A
+                    // value parameter can't share the type parameter's name, so TSelf steps aside for one that is called that.
+                    string self = "TSelf";
+                    for (int attempt = 1; parameters.Contains(self); attempt++) {
+                        self = "TSelf" + attempt.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                    }
+                    _self = open ? self : typeName;
+                    _generic = open ? "<" + self + ">" : type.TypeParameters.Length == 0 ? string.Empty : "<" + string.Join(", ", type.TypeParameters.Select(parameter => parameter.Name)) + ">";
+                    _constraint = open ? " where " + self + " : " + typeName : Constraints(type);
                     // Prefixed naming keeps ConsoleMonster's one partial class per namespace. The convention uses one class
                     // per type, so two derivable types with the same property never emit the same generic signature twice.
                     // Handwritten helpers can live in that partial class beside the generated ones.

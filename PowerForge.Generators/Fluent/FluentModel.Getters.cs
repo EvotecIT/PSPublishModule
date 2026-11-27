@@ -19,6 +19,10 @@ namespace PowerForge.Generators.Fluent {
         /// auto-properties, fields and cached values (<c>_x ??= new X()</c>) are kept objects.
         /// </summary>
         internal static string? FreshGetterReason(IPropertySymbol property, Compilation compilation) {
+            // A derived type can override the getter, so this body proves nothing about what it hands out.
+            if (Overridable(property)) {
+                return null;
+            }
             foreach (SyntaxReference reference in property.DeclaringSyntaxReferences) {
                 if (reference.GetSyntax() is not PropertyDeclarationSyntax declaration) {
                     continue;
@@ -134,6 +138,12 @@ namespace PowerForge.Generators.Fluent {
             return false;
         }
 
+        // Whether a derived type can replace the member's body: virtual, abstract or an unsealed override in a type that isn't
+        // sealed, or an interface member.
+        private static bool Overridable(ISymbol member) =>
+            member.ContainingType.TypeKind == TypeKind.Interface
+            || (member.IsVirtual || member.IsAbstract || member.IsOverride && !member.IsSealed) && !member.ContainingType.IsSealed;
+
         // A copy or materializing call, or a method of this compilation whose own returns are new objects (one level deep).
         private static string? FreshCall(InvocationExpressionSyntax invocation, SemanticModel model, int depth) {
             if (model.GetSymbolInfo(invocation).Symbol is not IMethodSymbol method) {
@@ -143,7 +153,7 @@ namespace PowerForge.Generators.Fluent {
                 return FreshMethods.Contains(method.Name, StringComparer.Ordinal) ? "its getter returns the result of " + method.Name + "(), a new object on every read" : null;
             }
             // A derived type can override what an overridable method returns, so its body here proves nothing.
-            if (depth > 0 || method.IsVirtual || method.IsAbstract || method.IsOverride && !method.IsSealed || method.ContainingType.TypeKind == TypeKind.Interface) {
+            if (depth > 0 || Overridable(method)) {
                 return null;
             }
             foreach (SyntaxReference reference in method.DeclaringSyntaxReferences) {

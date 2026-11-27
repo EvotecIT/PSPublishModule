@@ -516,12 +516,45 @@ public sealed class FluentGeneratorMutatorTests {
                     public string Title { get; set; } = "";
                 }
 
+                // Tags() belongs to the handwritten extension; the mutator still takes one or more items, or an array.
+                [Fluent]
+                public sealed class Tagger {
+                    public string Log = "";
+
+                    [FluentMutator]
+                    internal void SetTags(params string[] values) { Log += string.Join(",", values) + ";"; }
+                }
+
+                public static class TaggerExtensions {
+                    public static Tagger Tags(this Tagger target, params int[] values) { target.Log += "ints;"; return target; }
+                }
+
+                // A parameter named like the generic methods' type parameter; named arguments keep working.
+                [Fluent]
+                public class Box {
+                    public int Width;
+
+                    [FluentMutator]
+                    internal void SetSize(int TSelf) { Width = TSelf; }
+                }
+
+                // Tuple element names don't make the mutator a second method beside the property's.
+                [Fluent]
+                public sealed class Spot {
+                    public (int X, int Y) At { get; set; }
+
+                    [FluentMutator]
+                    internal void SetAt((int Left, int Top) at) { At = (at.Left * 10, at.Top); }
+                }
+
                 public static class Usage {
                     public static object[] Run() {
                         Circle circle = new Circle().Mode(1).SelectMode(2);
                         Switch light = new Switch().Enabled().Enabled(true);
                         Report report = new Report().Title("x");
-                        return new object[] { circle.Log, light.Level, light.On, new Cell().Data("x").Log, report.Layout.Title, report.Title };
+                        Tagger tagger = new Tagger().Tags().Tags("a").Tags("b", "c").Tags(new[] { "d" });
+                        return new object[] { circle.Log, light.Level, light.On, new Cell().Data("x").Log, report.Layout.Title, report.Title,
+                            tagger.Log, new Box().Size(TSelf: 3).Width, new Spot().At((1, 2)).At.X };
                     }
                 }
             }
@@ -530,7 +563,7 @@ public sealed class FluentGeneratorMutatorTests {
         (Compilation compilation, ImmutableArray<Diagnostic> diagnostics) = Run(library);
         Assert.Empty(diagnostics);
 
-        Assert.Equal(new object[] { "circle1;circle2;", 1, true, "dynamic;", "layout:x", "" }, Execute(compilation));
+        Assert.Equal(new object[] { "circle1;circle2;", 1, true, "dynamic;", "layout:x", "", "ints;a;b,c;d;", 3, 10 }, Execute(compilation));
     }
 
     [Fact]
@@ -561,10 +594,22 @@ public sealed class FluentGeneratorMutatorTests {
                     protected override List<string> ReadTags() => _tags;
                 }
 
+                // A virtual getter: the override hands out its kept list.
+                [Fluent]
+                public class Shelf {
+                    public virtual List<string> Books => new List<string>();
+                }
+
+                public sealed class Library : Shelf {
+                    private readonly List<string> _books = new List<string>();
+
+                    public override List<string> Books => _books;
+                }
+
                 public static class Usage {
                     public static object[] Run() {
                         Pinboard board = new Pinboard().Item("a").Tag("b");
-                        return new object[] { board.Count, board.Tags.Count };
+                        return new object[] { board.Count, board.Tags.Count, new Library().Book("x").Books.Count };
                     }
                 }
             }
@@ -573,7 +618,7 @@ public sealed class FluentGeneratorMutatorTests {
         (Compilation compilation, ImmutableArray<Diagnostic> diagnostics) = Run(library);
         Assert.Empty(diagnostics);
 
-        Assert.Equal(new object[] { 1, 1 }, Execute(compilation));
+        Assert.Equal(new object[] { 1, 1, 1 }, Execute(compilation));
     }
 
     [Fact]
