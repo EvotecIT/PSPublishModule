@@ -209,7 +209,14 @@ namespace PowerForge.Generators.Fluent {
                         "            " + target + "." + Escape(method.Name) + "(" + arguments + ");\n");
                     if (splitParams && method.Parameters[0].Type is IArrayTypeSymbol array && Claim(location, member, name, array.ElementType, array)) {
                         string element = array.ElementType.ToDisplayString(TypeFormat);
-                        string items = "            " + element + "[] value = new " + element + "[(items == null ? 0 : items.Length) + 1];\n"
+                        // new int[n][] for jagged items: the length goes before the element type's own ranks.
+                        string ranks = string.Empty;
+                        ITypeSymbol innermost = array.ElementType;
+                        while (innermost is IArrayTypeSymbol nested) {
+                            ranks += "[" + new string(',', nested.Rank - 1) + "]";
+                            innermost = nested.ElementType;
+                        }
+                        string items = "            " + element + "[] value = new " + innermost.ToDisplayString(TypeFormat) + "[(items == null ? 0 : items.Length) + 1]" + ranks + ";\n"
                             + "            value[0] = item;\n"
                             + "            if (items != null) { global::System.Array.Copy(items, 0, value, 1, items.Length); }\n";
                         string itemsDoc = "        /// <summary>" + summary + "</summary>\n"

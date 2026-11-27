@@ -125,7 +125,9 @@ namespace PowerForge.Generators.Fluent {
             }
             foreach (IdentifierNameSyntax use in body.DescendantNodes().OfType<IdentifierNameSyntax>().Where(n => n.Identifier.ValueText == local.Name)) {
                 SyntaxNode parent = use.Parent!;
-                while (parent is ParenthesizedExpressionSyntax or CastExpressionSyntax && parent.Parent != null) {
+                // Through parentheses, casts, ! and either branch of a conditional or ??: _items = keep ? list : _items stores it.
+                while (parent.Parent != null && (parent is ParenthesizedExpressionSyntax or CastExpressionSyntax or ConditionalExpressionSyntax
+                    || parent.IsKind(SyntaxKind.CoalesceExpression) || parent.IsKind(SyntaxKind.SuppressNullableWarningExpression))) {
                     parent = parent.Parent;
                 }
                 // An alias (var alias = value;) may be stored in turn, so it counts as stored too.

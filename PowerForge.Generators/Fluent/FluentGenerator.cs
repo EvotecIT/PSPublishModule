@@ -648,7 +648,9 @@ namespace PowerForge.Generators.Fluent {
                     if (!m.IsExtensionMethod && m.TypeParameters.Any(type => !m.Parameters.Any(parameter => Mentions(parameter.Type, type)))) { return false; }
                     int offset = m.IsExtensionMethod ? 1 : 0;
                     if (m.IsExtensionMethod && m.Parameters.Length > 0 && !Receives(m.Parameters[0].Type, _type)) { return false; }
-                    if (parameters.Length == 0 && m.Name == name && (m.IsExtensionMethod || !m.IsStatic && !m.IsGenericMethod)
+                    // A generic extension only answers name() when the receiver alone infers its type arguments.
+                    if (parameters.Length == 0 && m.Name == name
+                        && (m.IsExtensionMethod && m.TypeParameters.All(type => m.Parameters.Length > 0 && Mentions(m.Parameters[0].Type, type)) || !m.IsExtensionMethod && !m.IsStatic && !m.IsGenericMethod)
                         && m.Parameters.Skip(offset).All(parameter => parameter.IsOptional || parameter.IsParams)) { return true; }
                     return m.Name == name && m.Parameters.Length == parameters.Length + offset
                         && parameters.Select((parameter, index) => SymbolEqualityComparer.Default.Equals(parameter, m.Parameters[index + offset].Type)).All(equal => equal);

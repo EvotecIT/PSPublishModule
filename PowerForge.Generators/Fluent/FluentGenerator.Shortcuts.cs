@@ -155,10 +155,11 @@ namespace PowerForge.Generators.Fluent {
                         && CollectionItem(property.Type) == null && _emitter.IsSettingsType(option) ? option : null;
 
                 // The mutators inlined properties bring are the canonical write path whatever the declaration order, so their
-                // signatures are reserved before any property setter can take them.
+                // signatures are reserved before any property setter can take them. That includes a property a generated base
+                // covers: its methods come from the base, and this type's setter must not win over them.
                 private void ReserveInlineMutators(IEnumerable<IPropertySymbol> properties) {
                     foreach (IPropertySymbol property in properties) {
-                        if (Attribute(property, FluentAttributes.Inline) == null || CoveredByBase(property) || InlineType(property) is not INamedTypeSymbol option
+                        if (Attribute(property, FluentAttributes.Inline) == null || InlineType(property) is not INamedTypeSymbol option
                             || !Forced(property) && FreshGetterReason(property, Compilation) != null) {
                             continue;
                         }

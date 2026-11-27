@@ -538,6 +538,44 @@ public sealed class FluentGeneratorMutatorTests {
                     internal void SetSize(int TSelf) { Width = TSelf; }
                 }
 
+                // Same through a generated base that inlines Layout: Memo's own Title setter doesn't win over the base's method.
+                [Fluent]
+                public class Sheet {
+                    [FluentInline]
+                    public Layout Layout { get; } = new Layout();
+                }
+
+                [Fluent]
+                public sealed class Memo : Sheet {
+                    public string Title { get; set; } = "";
+                }
+
+                // Jagged items: the overload taking at least one row allocates int[n][].
+                [Fluent]
+                public sealed class Grid {
+                    public string Log = "";
+
+                    [FluentMutator]
+                    internal void SetRows(params int[][] rows) { Log += rows.Length + ";"; }
+                }
+
+                public static class GridExtensions {
+                    public static Grid Rows(this Grid target, params string[] values) { target.Log += "ext;"; return target; }
+                }
+
+                // A generic extension the receiver can't infer never answers Lit(), so the switch form stays.
+                [Fluent]
+                public sealed class Lamp {
+                    public bool On;
+
+                    [FluentMutator]
+                    internal void SetLit(bool value) { On = value; }
+                }
+
+                public static class LampExtensions {
+                    public static Lamp Lit<T>(this Lamp target, int level = 0) => target;
+                }
+
                 // Tuple element names don't make the mutator a second method beside the property's.
                 [Fluent]
                 public sealed class Spot {
@@ -554,7 +592,8 @@ public sealed class FluentGeneratorMutatorTests {
                         Report report = new Report().Title("x");
                         Tagger tagger = new Tagger().Tags().Tags("a").Tags("b", "c").Tags(new[] { "d" });
                         return new object[] { circle.Log, light.Level, light.On, new Cell().Data("x").Log, report.Layout.Title, report.Title,
-                            tagger.Log, new Box().Size(TSelf: 3).Width, new Spot().At((1, 2)).At.X };
+                            tagger.Log, new Box().Size(TSelf: 3).Width, new Spot().At((1, 2)).At.X,
+                            new Memo().Title("y").Layout.Title, new Grid().Rows().Rows(new[] { 1 }, new[] { 2 }).Log, new Lamp().Lit().On };
                     }
                 }
             }
@@ -563,7 +602,7 @@ public sealed class FluentGeneratorMutatorTests {
         (Compilation compilation, ImmutableArray<Diagnostic> diagnostics) = Run(library);
         Assert.Empty(diagnostics);
 
-        Assert.Equal(new object[] { "circle1;circle2;", 1, true, "dynamic;", "layout:x", "", "ints;a;b,c;d;", 3, 10 }, Execute(compilation));
+        Assert.Equal(new object[] { "circle1;circle2;", 1, true, "dynamic;", "layout:x", "", "ints;a;b,c;d;", 3, 10, "layout:y", "ext;2;", true }, Execute(compilation));
     }
 
     [Fact]
@@ -586,6 +625,12 @@ public sealed class FluentGeneratorMutatorTests {
                     protected virtual List<string> ReadTags() => new List<string>();
 
                     public int Count => _items.Count;
+
+                    // Stored on one branch of a conditional.
+                    public bool Keep = true;
+                    private List<string> _notes = new List<string>();
+                    public List<string> Notes { get { var list = new List<string>(); _notes = Keep ? list : _notes; return list; } }
+                    public int NoteCount => _notes.Count;
                 }
 
                 public sealed class Pinboard : Board {
@@ -608,8 +653,8 @@ public sealed class FluentGeneratorMutatorTests {
 
                 public static class Usage {
                     public static object[] Run() {
-                        Pinboard board = new Pinboard().Item("a").Tag("b");
-                        return new object[] { board.Count, board.Tags.Count, new Library().Book("x").Books.Count };
+                        Pinboard board = new Pinboard().Item("a").Tag("b").Note("n");
+                        return new object[] { board.Count, board.Tags.Count, new Library().Book("x").Books.Count, board.NoteCount };
                     }
                 }
             }
@@ -618,7 +663,7 @@ public sealed class FluentGeneratorMutatorTests {
         (Compilation compilation, ImmutableArray<Diagnostic> diagnostics) = Run(library);
         Assert.Empty(diagnostics);
 
-        Assert.Equal(new object[] { 1, 1, 1 }, Execute(compilation));
+        Assert.Equal(new object[] { 1, 1, 1, 1 }, Execute(compilation));
     }
 
     [Fact]
