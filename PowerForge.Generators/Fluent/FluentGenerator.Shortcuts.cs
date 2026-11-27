@@ -100,7 +100,7 @@ namespace PowerForge.Generators.Fluent {
                 foreach (IMethodSymbol method in methods) {
                     List<IParameterSymbol> values = method.Parameters.Skip(1).ToList();
                     result ??= new HashSet<string>(StringComparer.Ordinal);
-                    result.Add(method.Name + "(" + string.Join(", ", values.Select(parameter => parameter.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat))) + ")");
+                    result.Add(SignatureKey(method.Name, values.Select(parameter => parameter.Type)));
                     if (values.Count > 0 && values.All(parameter => parameter.IsOptional)) {
                         result.Add(method.Name + "()");
                     }
@@ -120,8 +120,8 @@ namespace PowerForge.Generators.Fluent {
                 // [FluentInline]: the owner gets every method the property's type gets, applied to the property.
                 private void AppendInline(IPropertySymbol property) {
                     if (Prefixed) { return; }
-                    if (!IsReadable(property) || property.Type is not INamedTypeSymbol option || property.Type.NullableAnnotation == NullableAnnotation.Annotated
-                        || CollectionItem(property.Type) != null || !_emitter.IsSettingsType(option)) {
+                    INamedTypeSymbol? option = InlineType(property);
+                    if (option == null) {
                         Report(FluentDiagnostics.InvalidInline, property, _type.Name, property.Name);
                         return;
                     }
@@ -146,6 +146,25 @@ namespace PowerForge.Generators.Fluent {
                         }
                     } finally {
                         _via = null;
+                    }
+                }
+
+                // The settings type a [FluentInline] property expands, or null when it can't be inlined.
+                private INamedTypeSymbol? InlineType(IPropertySymbol property) =>
+                    IsReadable(property) && property.Type is INamedTypeSymbol option && property.Type.NullableAnnotation != NullableAnnotation.Annotated
+                        && CollectionItem(property.Type) == null && _emitter.IsSettingsType(option) ? option : null;
+
+                // The mutators inlined properties bring are the canonical write path whatever the declaration order, so their
+                // signatures are reserved before any property setter can take them.
+                private void ReserveInlineMutators(IEnumerable<IPropertySymbol> properties) {
+                    foreach (IPropertySymbol property in properties) {
+                        if (Attribute(property, FluentAttributes.Inline) == null || CoveredByBase(property) || InlineType(property) is not INamedTypeSymbol option
+                            || !Forced(property) && FreshGetterReason(property, Compilation) != null) {
+                            continue;
+                        }
+                        foreach ((IMethodSymbol method, string name) in _emitter.Mutators(option)) {
+                            _mutated.Add(SignatureKey(name, method.Parameters.Select(p => p.Type)));
+                        }
                     }
                 }
 

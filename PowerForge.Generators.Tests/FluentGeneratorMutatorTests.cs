@@ -320,11 +320,14 @@ public sealed class FluentGeneratorMutatorTests {
     [Fact]
     public void UnusableMutatorsAndNestedTypesAreBuildErrors() {
         const string library = """
+            using System.Runtime.InteropServices;
             using PowerForge.Fluent;
 
             namespace Sample {
                 [Fluent]
                 public sealed class Model {
+                    [FluentMutator]
+                    internal void SetHost([Optional, MarshalAs(UnmanagedType.IUnknown)] object host) { }
                     [FluentMutator]
                     internal static void SetStatic(Model model) { }
                     [FluentMutator]
@@ -368,9 +371,9 @@ public sealed class FluentGeneratorMutatorTests {
 
         (_, ImmutableArray<Diagnostic> diagnostics) = Run(library);
 
-        // Static, generic, by-ref, private, badly named, pointer and internal-typed mutators; Size collides with the instance
-        // method; two nested types whose containers rule out extension methods.
-        Assert.Equal(new[] { "PFF002", "PFF013", "PFF013", "PFF013", "PFF013", "PFF013", "PFF013", "PFF013", "PFF014", "PFF014" }, diagnostics.Select(d => d.Id).OrderBy(id => id, StringComparer.Ordinal));
+        // Optional COM interface, static, generic, by-ref, private, badly named, pointer and internal-typed mutators; Size
+        // collides with the instance method; two nested types whose containers rule out extension methods.
+        Assert.Equal(new[] { "PFF002", "PFF013", "PFF013", "PFF013", "PFF013", "PFF013", "PFF013", "PFF013", "PFF013", "PFF014", "PFF014" }, diagnostics.Select(d => d.Id).OrderBy(id => id, StringComparer.Ordinal));
         Assert.All(diagnostics, d => Assert.Equal(DiagnosticSeverity.Error, d.Severity));
     }
 
@@ -451,6 +454,129 @@ public sealed class FluentGeneratorMutatorTests {
     }
 
     [Fact]
+    public void MutatorsTakePrecedenceAndBindTheMarkedOverload() {
+        const string library = """
+            using PowerForge.Fluent;
+
+            namespace Sample {
+                [Fluent]
+                public class Shape {
+                    public string Log = "";
+
+                    [FluentMutator]
+                    internal virtual void SetMode(int mode) { Log += "base" + mode + ";"; }
+                }
+
+                // An override naming its own method gets it; the base's Mode still dispatches to the override.
+                public class Circle : Shape {
+                    [FluentMutator("SelectMode")]
+                    internal override void SetMode(int mode) { Log += "circle" + mode + ";"; }
+                }
+
+                // A handwritten extension already answers Enabled(), so the mutator's argument stays required.
+                [Fluent]
+                public sealed class Switch {
+                    public bool On;
+                    public int Level;
+
+                    [FluentMutator]
+                    internal void SetEnabled(bool value) { On = value; }
+                }
+
+                public static class SwitchExtensions {
+                    public static Switch Enabled(this Switch target, int level = 0) { target.Level = level + 1; return target; }
+                }
+
+                // The dynamic mutator replaces the object property's method and is called, not the string overload.
+                [Fluent]
+                public sealed class Cell {
+                    public string Log = "";
+                    public object Data { get; set; } = "";
+
+                    [FluentMutator]
+                    internal void SetData(dynamic data) { Log += "dynamic;"; }
+                    internal void SetData(string data) { Log += "string;"; }
+                }
+
+                // A mutator an inherited [FluentInline] property brings wins over the derived type's own Title property.
+                public class Layout {
+                    public string Title = "";
+
+                    [FluentMutator]
+                    internal void SetTitle(string title) { Title = "layout:" + title; }
+                }
+
+                public class Page {
+                    [FluentInline]
+                    public Layout Layout { get; } = new Layout();
+                }
+
+                [Fluent]
+                public sealed class Report : Page {
+                    public string Title { get; set; } = "";
+                }
+
+                public static class Usage {
+                    public static object[] Run() {
+                        Circle circle = new Circle().Mode(1).SelectMode(2);
+                        Switch light = new Switch().Enabled().Enabled(true);
+                        Report report = new Report().Title("x");
+                        return new object[] { circle.Log, light.Level, light.On, new Cell().Data("x").Log, report.Layout.Title, report.Title };
+                    }
+                }
+            }
+            """;
+
+        (Compilation compilation, ImmutableArray<Diagnostic> diagnostics) = Run(library);
+        Assert.Empty(diagnostics);
+
+        Assert.Equal(new object[] { "circle1;circle2;", 1, true, "dynamic;", "layout:x", "" }, Execute(compilation));
+    }
+
+    [Fact]
+    public void GettersThatMayHandOutTheKeptObjectKeepTheirMethods() {
+        const string library = """
+            using System.Collections.Generic;
+            using PowerForge.Fluent;
+
+            namespace Sample {
+                [Fluent]
+                public class Board {
+                    private List<string> _items = new List<string>();
+
+                    // Stored through extra parentheses before it is returned.
+                    public List<string> Items { get { var list = new List<string>(); _items = ((list)); return list; } }
+
+                    // An overridable helper: a derived type can return its kept list.
+                    public List<string> Tags => ReadTags();
+
+                    protected virtual List<string> ReadTags() => new List<string>();
+
+                    public int Count => _items.Count;
+                }
+
+                public sealed class Pinboard : Board {
+                    private readonly List<string> _tags = new List<string>();
+
+                    protected override List<string> ReadTags() => _tags;
+                }
+
+                public static class Usage {
+                    public static object[] Run() {
+                        Pinboard board = new Pinboard().Item("a").Tag("b");
+                        return new object[] { board.Count, board.Tags.Count };
+                    }
+                }
+            }
+            """;
+
+        (Compilation compilation, ImmutableArray<Diagnostic> diagnostics) = Run(library);
+        Assert.Empty(diagnostics);
+
+        Assert.Equal(new object[] { 1, 1 }, Execute(compilation));
+    }
+
+    [Fact]
     public void NullDefaultsCompileWithoutWarningsWhenTheProjectDisablesNullable() {
         const string library = """
             using System.Runtime.InteropServices;
@@ -466,7 +592,8 @@ public sealed class FluentGeneratorMutatorTests {
                 }
 
                 public static class Usage {
-                    public static object[] Run() => new object[] { new Note().Text().Text, new Note().Text(1, "a").Text };
+                    // An omitted [Optional] object is Type.Missing, as in a direct SetText() call; an explicit null stays null.
+                    public static object[] Run() => new object[] { new Note().Text().Text, new Note().Text(null).Text, new Note().Text(1, "a").Text };
                 }
             }
             """;
@@ -477,7 +604,7 @@ public sealed class FluentGeneratorMutatorTests {
 
         // Projects building with TreatWarningsAsErrors must not get CS8625 from `string text = null` in the generated file.
         Assert.Empty(compilation.GetDiagnostics().Where(d => d.Severity >= DiagnosticSeverity.Warning));
-        Assert.Equal(new object[] { "none", "a+tag" }, Execute(compilation));
+        Assert.Equal(new object[] { "none+tag", "none", "a+tag" }, Execute(compilation));
     }
 
     [Fact]

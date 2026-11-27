@@ -192,5 +192,15 @@ namespace PowerForge.Generators.Fluent {
             }
             return name.Substring(0, name.Length - 1);
         }
+
+        /// <summary>
+        /// The key a generated method's value parameters are compared by: C# signatures ignore nullable annotations, and
+        /// <c>dynamic</c> is <c>object</c> to overload resolution.
+        /// </summary>
+        internal static string SignatureKey(string name, IEnumerable<ITypeSymbol> parameters) =>
+            name + "(" + string.Join(", ", parameters.Select(parameter => DynamicName.Replace(parameter.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat), "object"))) + ")";
+
+        // dynamic as a type of its own, not a namespace-qualified type that happens to be called dynamic.
+        private static readonly System.Text.RegularExpressions.Regex DynamicName = new System.Text.RegularExpressions.Regex(@"(?<![\w.:@])dynamic(?!\w)");
     }
 }

@@ -350,6 +350,19 @@ namespace PowerForge.Generators.Fluent {
 
                 private bool Prefixed => _emitter._settings.Prefixed;
 
+                // A property first declared by a generated base that can be derived from (overrides included) is covered by the
+                // base's generic methods; generating it again would make calls ambiguous. That base may be in a referenced library
+                // that generated its own methods. An abstract base's methods still get non-generic copies on sealed types, which
+                // win overload resolution.
+                private bool CoveredByBase(IPropertySymbol property) {
+                    IPropertySymbol origin = property;
+                    while (origin.OverriddenProperty != null) { origin = origin.OverriddenProperty; }
+                    INamedTypeSymbol owner = origin.ContainingType;
+                    return !SymbolEqualityComparer.Default.Equals(owner, _type) && !owner.IsSealed
+                        && (_types.Contains(owner.OriginalDefinition, SymbolEqualityComparer.Default) || _emitter.GeneratedSignatures(owner.OriginalDefinition) != null)
+                        && (IsCandidate(owner) || IsNestedFluent(owner) || !_type.IsSealed);
+                }
+
                 internal HashSet<string> Generated => _generated;
 
                 private Compilation Compilation => _emitter._compilation;
@@ -366,18 +379,13 @@ namespace PowerForge.Generators.Fluent {
                     }
                     // A struct is a value: setting a property on the receiver would change a copy, so a struct handle gets only
                     // its mutator (and forward) methods, which write through the handle.
-                    foreach (IPropertySymbol property in _type.TypeKind == TypeKind.Struct ? Enumerable.Empty<IPropertySymbol>() : Properties(_type)) {
-                        if (_forwards.Any(forward => forward.Name == property.Name)) { continue; }
-                        // A property first declared by a generated base that can be derived from (overrides included) is covered
-                        // by the base's generic methods; generating it again would make calls ambiguous. That base may be in a
-                        // referenced library that generated its own methods. An abstract base's methods still get non-generic
-                        // copies on sealed types, which win overload resolution.
-                        IPropertySymbol origin = property;
-                        while (origin.OverriddenProperty != null) { origin = origin.OverriddenProperty; }
-                        INamedTypeSymbol owner = origin.ContainingType;
-                        if (!SymbolEqualityComparer.Default.Equals(owner, _type) && !owner.IsSealed
-                            && (_types.Contains(owner.OriginalDefinition, SymbolEqualityComparer.Default) || _emitter.GeneratedSignatures(owner.OriginalDefinition) != null)
-                            && (IsCandidate(owner) || IsNestedFluent(owner) || !_type.IsSealed)) {
+                    IEnumerable<IPropertySymbol> properties = _type.TypeKind == TypeKind.Struct ? Enumerable.Empty<IPropertySymbol>()
+                        : Properties(_type).Where(property => !_forwards.Any(forward => forward.Name == property.Name)).ToList();
+                    if (!Prefixed) {
+                        ReserveInlineMutators(properties);
+                    }
+                    foreach (IPropertySymbol property in properties) {
+                        if (CoveredByBase(property)) {
                             continue;
                         }
                         if (Prefixed) {
@@ -600,7 +608,7 @@ namespace PowerForge.Generators.Fluent {
                     bool captured = BaseTypes(_type).SelectMany(t => t.GetMembers(name)).Any(m => m.DeclaredAccessibility != Accessibility.Private
                         && (m is IPropertySymbol { Type.TypeKind: TypeKind.Delegate } || m is IFieldSymbol { Type.TypeKind: TypeKind.Delegate } || m is IEventSymbol));
                     // Nullable annotations do not distinguish C# signatures.
-                    string signature = name + "(" + string.Join(", ", parameters.Select(parameter => parameter.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat))) + ")";
+                    string signature = SignatureKey(name, parameters);
                     // A generic method a base generated (its own or an inlined property's) and this type's generic method with the
                     // same value parameters both apply to this type and its derived types, so calls would be ambiguous. A sealed
                     // type's non-generic method wins over the base's.
@@ -626,7 +634,7 @@ namespace PowerForge.Generators.Fluent {
 
                 // Compares complete value-parameter signatures. A handwritten extension for another receiver leaves the name free.
                 // An instance method callable without arguments (only optional or params parameters) takes name() too: C#
-                // binds the call to it before looking at extensions. A generic instance method whose type arguments its
+                // binds the call to it before looking at extensions. So does such an extension, which would make name() ambiguous. A generic instance method whose type arguments its
                 // parameters cannot infer (Reset<T>()) never takes a call written without type arguments.
                 private bool Taken(string name, params ITypeSymbol[] parameters) => _existing.Where(m => m.Name == name).Concat(_emitter.Extensions[name]).Any(m => {
                     // Internal members of a referenced library can't capture a call made from this one.
@@ -635,8 +643,8 @@ namespace PowerForge.Generators.Fluent {
                     if (!m.IsExtensionMethod && m.TypeParameters.Any(type => !m.Parameters.Any(parameter => Mentions(parameter.Type, type)))) { return false; }
                     int offset = m.IsExtensionMethod ? 1 : 0;
                     if (m.IsExtensionMethod && m.Parameters.Length > 0 && !Receives(m.Parameters[0].Type, _type)) { return false; }
-                    if (parameters.Length == 0 && !m.IsExtensionMethod && !m.IsStatic && !m.IsGenericMethod && m.Name == name
-                        && m.Parameters.All(parameter => parameter.IsOptional || parameter.IsParams)) { return true; }
+                    if (parameters.Length == 0 && m.Name == name && (m.IsExtensionMethod || !m.IsStatic && !m.IsGenericMethod)
+                        && m.Parameters.Skip(offset).All(parameter => parameter.IsOptional || parameter.IsParams)) { return true; }
                     return m.Name == name && m.Parameters.Length == parameters.Length + offset
                         && parameters.Select((parameter, index) => SymbolEqualityComparer.Default.Equals(parameter, m.Parameters[index + offset].Type)).All(equal => equal);
                 });

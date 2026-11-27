@@ -120,7 +120,10 @@ namespace PowerForge.Generators.Fluent {
                 return false;
             }
             foreach (IdentifierNameSyntax use in body.DescendantNodes().OfType<IdentifierNameSyntax>().Where(n => n.Identifier.ValueText == local.Name)) {
-                SyntaxNode parent = use.Parent is ParenthesizedExpressionSyntax or CastExpressionSyntax ? use.Parent.Parent! : use.Parent!;
+                SyntaxNode parent = use.Parent!;
+                while (parent is ParenthesizedExpressionSyntax or CastExpressionSyntax && parent.Parent != null) {
+                    parent = parent.Parent;
+                }
                 // An alias (var alias = value;) may be stored in turn, so it counts as stored too.
                 bool escapes = parent is AssignmentExpressionSyntax assignment && assignment.Right.DescendantNodesAndSelf().Contains(use)
                     || parent is ArgumentSyntax || parent is EqualsValueClauseSyntax || parent is InitializerExpressionSyntax;
@@ -139,7 +142,8 @@ namespace PowerForge.Generators.Fluent {
             if (method.DeclaringSyntaxReferences.Length == 0) {
                 return FreshMethods.Contains(method.Name, StringComparer.Ordinal) ? "its getter returns the result of " + method.Name + "(), a new object on every read" : null;
             }
-            if (depth > 0) {
+            // A derived type can override what an overridable method returns, so its body here proves nothing.
+            if (depth > 0 || method.IsVirtual || method.IsAbstract || method.IsOverride && !method.IsSealed || method.ContainingType.TypeKind == TypeKind.Interface) {
                 return null;
             }
             foreach (SyntaxReference reference in method.DeclaringSyntaxReferences) {

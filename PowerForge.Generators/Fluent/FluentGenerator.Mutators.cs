@@ -82,6 +82,11 @@ namespace PowerForge.Generators.Fluent {
                     if (parameter.HasExplicitDefaultValue && DefaultLiteral(parameter) == null) {
                         return "the default value of '" + parameter.Name + "' cannot be repeated in generated code";
                     }
+                    // An omitted [Optional] COM interface parameter binds a wrapper object the generated method can't repeat.
+                    if (BareOptional(parameter) && parameter.GetAttributes().Any(a => a.AttributeClass?.ToDisplayString() == "System.Runtime.InteropServices.MarshalAsAttribute"
+                        && a.ConstructorArguments.Length == 1 && Convert.ToInt32(a.ConstructorArguments[0].Value, CultureInfo.InvariantCulture) is 25 or 26 or 28)) {
+                        return "'" + parameter.Name + "' is an [Optional] COM interface parameter, whose omitted value can't be repeated in generated code";
+                    }
                 }
                 return null;
             }
@@ -103,10 +108,14 @@ namespace PowerForge.Generators.Fluent {
                 }
             }
 
+            // [Optional] without a default value: an omitted argument is Type.Missing for object and default otherwise, which only
+            // the same attribute on the generated parameter reproduces.
+            private static bool BareOptional(IParameterSymbol parameter) => parameter.IsOptional && !parameter.HasExplicitDefaultValue && !parameter.IsParams;
+
             // A parameter's default as C#: null, default, an enum member or a literal of the parameter's type.
             internal static string? DefaultLiteral(IParameterSymbol parameter) {
                 if (!parameter.HasExplicitDefaultValue) {
-                    return parameter.IsOptional ? "default" : null;
+                    return null;
                 }
                 object? value = parameter.ExplicitDefaultValue;
                 ITypeSymbol type = parameter.Type;
@@ -132,17 +141,18 @@ namespace PowerForge.Generators.Fluent {
                 // The mutators of the type being generated, or, while a [FluentInline] property is expanded, of its type.
                 private void AppendMutators(INamedTypeSymbol type) {
                     foreach ((IMethodSymbol method, string name) in _emitter.Mutators(type)) {
-                        if (_via == null && CoveredByBase(method)) { continue; }
+                        if (_via == null && CoveredByBase(method, name)) { continue; }
                         AppendMutator(method, name);
                     }
                 }
 
-                // The method, or a base declaration it overrides, is a mutator of a generated base that can be derived from: the
-                // base's generic method covers this type too, and its call still dispatches to the override.
-                private bool CoveredByBase(IMethodSymbol method) {
+                // The method, or a base declaration it overrides, is a mutator of a generated base that can be derived from, under
+                // the same name: the base's generic method covers this type too, and its call still dispatches to the override. An
+                // override that asks for another name gets its own method.
+                private bool CoveredByBase(IMethodSymbol method, string name) {
                     for (IMethodSymbol? declared = method; declared != null; declared = declared.OverriddenMethod) {
-                        if (CoveredByBase(declared.ContainingType)
-                            && _emitter.Mutators(declared.ContainingType).Any(m => SymbolEqualityComparer.Default.Equals(m.Method.OriginalDefinition, declared.OriginalDefinition))) {
+                        if (CoveredByBase(declared.ContainingType) && _emitter.Mutators(declared.ContainingType)
+                            .Any(m => m.Name == name && SymbolEqualityComparer.Default.Equals(m.Method.OriginalDefinition, declared.OriginalDefinition))) {
                             return true;
                         }
                     }
@@ -159,9 +169,10 @@ namespace PowerForge.Generators.Fluent {
                     Location? location = _via?.Locations.FirstOrDefault() ?? method.Locations.FirstOrDefault();
                     string member = _via == null ? method.Name : _via.Name + "." + method.Name;
                     if (!Claim(location, member, name, method.Parameters.Select(p => p.Type).ToArray())) { return; }
-                    _mutated.Add(Signature(name, method.Parameters.Select(p => p.Type)));
-                    // A single bool without a default reads as a switch: Resolved() sets it. Not when an instance method already
-                    // answers Resolved(), since C# binds that call before looking at extensions.
+                    _mutated.Add(SignatureKey(name, method.Parameters.Select(p => p.Type)));
+                    // A single bool without a default reads as a switch: Resolved() sets it. Not when an existing method already
+                    // answers Resolved(): an instance method takes that call first, and a second extension would make it ambiguous,
+                    // so the first parameter is then required too.
                     bool argless = !Taken(name);
                     bool switchLike = argless && method.Parameters.Length == 1 && IsBool(method.Parameters[0].Type) && !method.Parameters[0].IsOptional;
                     bool shortForm = argless && method.Parameters.Length > 0 && (switchLike || method.Parameters.All(p => p.IsOptional || p.IsParams));
@@ -175,8 +186,10 @@ namespace PowerForge.Generators.Fluent {
                     doc.Append("        /// <summary>").Append(summary).Append("</summary>\n")
                         .Append("        /// <param name=\"").Append(_receiver.TrimStart('@')).Append("\">The instance.</param>\n");
                     foreach (IParameterSymbol parameter in method.Parameters) {
-                        string? fallback = switchLike ? "true" : Emitter.DefaultLiteral(parameter);
-                        parameters.Add((parameter.IsParams ? "params " : string.Empty) + ParameterType(parameter, fallback) + " " + Escape(parameter.Name)
+                        bool required = !argless && parameter.Ordinal == 0;
+                        string? fallback = required ? null : switchLike ? "true" : Emitter.DefaultLiteral(parameter);
+                        string optional = !required && BareOptional(parameter) ? "[global::System.Runtime.InteropServices.Optional] " : string.Empty;
+                        parameters.Add(optional + (parameter.IsParams ? "params " : string.Empty) + ParameterType(parameter, fallback) + " " + Escape(parameter.Name)
                             + (fallback == null || parameter.IsParams ? string.Empty : " = " + fallback));
                         string text = DocText(method, "param", parameter.Name) ?? "The value.";
                         doc.Append("        /// <param name=\"").Append(parameter.Name).Append("\">").Append(text).Append(switchLike ? " True when omitted." : string.Empty).Append("</param>\n");
@@ -188,7 +201,8 @@ namespace PowerForge.Generators.Fluent {
                     if (!SymbolEqualityComparer.Default.Equals(method.ContainingType.OriginalDefinition, receiverType.OriginalDefinition)) {
                         target = "((" + method.ContainingType.WithNullableAnnotation(NullableAnnotation.NotAnnotated).ToDisplayString(TypeFormat) + ")" + target + ")";
                     }
-                    string arguments = string.Join(", ", method.Parameters.Select(p => Escape(p.Name)));
+                    // A dynamic argument would bind at run time, possibly to another overload; as object it binds to this method.
+                    string arguments = string.Join(", ", method.Parameters.Select(p => (p.Type.TypeKind == TypeKind.Dynamic ? "(object)" : string.Empty) + Escape(p.Name)));
                     AppendMethod(doc.ToString(), name, string.Concat(parameters.Select(p => ", " + p)),
                         "            " + target + "." + Escape(method.Name) + "(" + arguments + ");\n");
                 }
@@ -205,10 +219,7 @@ namespace PowerForge.Generators.Fluent {
                 }
 
                 // Whether a [FluentMutator] already generated name(type), so the property's own setter method steps aside.
-                private bool Mutated(string name, ITypeSymbol type) => _mutated.Contains(Signature(name, new[] { type }));
-
-                private static string Signature(string name, IEnumerable<ITypeSymbol> parameters) =>
-                    name + "(" + string.Join(", ", parameters.Select(parameter => parameter.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat))) + ")";
+                private bool Mutated(string name, ITypeSymbol type) => _mutated.Contains(SignatureKey(name, new[] { type }));
             }
         }
     }

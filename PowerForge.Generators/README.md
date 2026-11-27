@@ -33,12 +33,16 @@ property access all edit one object.
   parameters and defaults, named after the method without its `Set` prefix (or `[FluentMutator("Name")]`). Use it where a
   value is written through a method rather than a public setter (`SetResolved(bool)` behind a read-only `Resolved`) or
   takes several values at once (`SetZones(left, center, right)`). A single `bool` or `bool?` parameter without a default
-  gets `= true`, so `Resolved()` reads like a switch, unless an instance method already answers `Resolved()`. A type
-  whose only fluent members are mutators still counts as a settings type, so it can be inlined and configured. A property's setter method with the same signature gives way to the
-  mutator. Mutators of a base type come through to derived types like its properties do, and
-  `[FluentInline]` brings the inlined type's mutators to the owner too. A static,
-  generic, private or by-reference method, a pointer parameter, a parameter type that isn't public (the generated method
-  is), or a default value that can't be repeated in code, is PFF013.
+  gets `= true`, so `Resolved()` reads like a switch, unless an instance method or another extension already answers
+  `Resolved()`; then the first argument stays required. An `[Optional]` parameter without a default keeps `[Optional]`,
+  so an omitted `object` is still `Type.Missing`. A type whose only fluent members are mutators still counts as a
+  settings type, so it can be inlined and configured. A property's setter method with the same signature gives way to
+  the mutator, including one an inlined property brings, whatever order they're declared in. Mutators of a base type
+  come through to derived types like its properties do; an override with its own `[FluentMutator("Name")]` also gets
+  that name. `[FluentInline]` brings the inlined type's mutators to the owner when this assembly can call them; the
+  internal mutators of a referenced library aren't visible to it. A static, generic, private or by-reference method,
+  a pointer parameter, a parameter type that isn't public (the generated method is), an `[Optional]` COM interface
+  parameter, or a default value that can't be repeated in code, is PFF013.
 - `[Fluent]` on a struct generates by-value extensions for its `[FluentMutator]` methods (and `[FluentForward]`s), each
   returning the same handle: `cell.Bold().Border("red")` for a cell handle that writes through to its sheet, with no
   wrapper object. A struct's properties get no methods, since setting one on the receiver would change a
@@ -53,7 +57,7 @@ property access all edit one object.
   (`ReadOnlyCollection<T>`, immutable and frozen collections), gets no in-place `X(o => ...)`, add-item or `[FluentInline]`
   methods: the changes would land on a throwaway object. Every return of the getter must build a new object. Each is reported as PFF015 (info). Getters that return a field, an
   auto-property or a cached value (`_x ??= new X()`, `_x ?? new X()`, a local stored in a field or dictionary before it
-  is returned, a cache-or-create helper) are configured as before, and so are a conditional that builds a new object on
+  is returned, a cache-or-create helper, a virtual helper a derived type can override) are configured as before, and so are a conditional that builds a new object on
   only one branch and anything the generator can't read (a referenced library, an interface). When the new object does write through, such as a wrapper over the owner's
   state, `[Fluent]` on the property asks for the methods anyway. A settable property keeps `X(o => ...)`, since it assigns
   the configured object back.
