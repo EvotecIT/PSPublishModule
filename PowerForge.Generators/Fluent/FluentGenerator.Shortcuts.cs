@@ -125,6 +125,11 @@ namespace PowerForge.Generators.Fluent {
                         Report(FluentDiagnostics.InvalidInline, property, _type.Name, property.Name);
                         return;
                     }
+                    // Every inlined method would edit an object the getter builds and then drops.
+                    if (!Forced(property) && FreshGetterReason(property, Compilation) is string skipped) {
+                        ReportFresh(property, "inlined methods", skipped);
+                        return;
+                    }
                     // A [FluentForward] name the owner can call replaces the property of that name on the inlined type too.
                     List<(string Name, IMethodSymbol Target, string Summary, string ValueSummary)> forwards = _emitter.InlineForwards(option);
                     HashSet<string> forwarded = new HashSet<string>(forwards.Select(forward => forward.Name), StringComparer.Ordinal);

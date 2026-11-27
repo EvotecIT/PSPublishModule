@@ -181,8 +181,10 @@ namespace PowerForge.Generators.Fluent {
 
             // A public class, from any assembly, with something to set or add. An inlined property may use one declared in a
             // referenced library: a block deriving from another library's base still inlines that base's options.
+            // A [FluentMutator] counts as something to set.
             private bool IsSettingsType(INamedTypeSymbol type) =>
-                (IsCandidate(type) || !_settings.Prefixed && IsNestedFluent(type)) && Properties(type).Any(p => IsSettable(p) || CollectionItem(p.Type) != null);
+                (IsCandidate(type) || !_settings.Prefixed && IsNestedFluent(type))
+                && (Properties(type).Any(p => IsSettable(p) || CollectionItem(p.Type) != null) || !_settings.Prefixed && Mutators(type).Count > 0);
 
             // Whether an extension method declared for receiver applies to type. An open TSelf receiver applies when the
             // type satisfies its constraints.

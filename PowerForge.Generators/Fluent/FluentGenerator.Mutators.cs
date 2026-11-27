@@ -72,8 +72,35 @@ namespace PowerForge.Generators.Fluent {
                 if (!SyntaxFacts.IsValidIdentifier(name)) {
                     return "'" + name + "' is not a valid C# method name";
                 }
-                IParameterSymbol? unsupported = method.Parameters.FirstOrDefault(p => p.HasExplicitDefaultValue && DefaultLiteral(p) == null);
-                return unsupported == null ? null : "the default value of '" + unsupported.Name + "' cannot be repeated in generated code";
+                foreach (IParameterSymbol parameter in method.Parameters) {
+                    if (parameter.Type is IPointerTypeSymbol or IFunctionPointerTypeSymbol) {
+                        return "'" + parameter.Name + "' is a pointer, which needs an unsafe context the generated method doesn't have";
+                    }
+                    if (!IsPublicType(parameter.Type)) {
+                        return "'" + parameter.Name + "' is a '" + parameter.Type.ToDisplayString() + "', which the public fluent method can't expose; make that type public";
+                    }
+                    if (parameter.HasExplicitDefaultValue && DefaultLiteral(parameter) == null) {
+                        return "the default value of '" + parameter.Name + "' cannot be repeated in generated code";
+                    }
+                }
+                return null;
+            }
+
+            // Whether a type can appear in a public signature: public all the way out, with public type arguments.
+            private static bool IsPublicType(ITypeSymbol type) {
+                switch (type) {
+                    case ITypeParameterSymbol:
+                        return true;
+                    case IArrayTypeSymbol array:
+                        return IsPublicType(array.ElementType);
+                    case INamedTypeSymbol named:
+                        for (INamedTypeSymbol? current = named; current != null; current = current.ContainingType) {
+                            if (current.DeclaredAccessibility != Accessibility.Public) { return false; }
+                        }
+                        return named.TypeArguments.All(IsPublicType);
+                    default:
+                        return true;
+                }
             }
 
             // A parameter's default as C#: null, default, an enum member or a literal of the parameter's type.
@@ -105,9 +132,21 @@ namespace PowerForge.Generators.Fluent {
                 // The mutators of the type being generated, or, while a [FluentInline] property is expanded, of its type.
                 private void AppendMutators(INamedTypeSymbol type) {
                     foreach ((IMethodSymbol method, string name) in _emitter.Mutators(type)) {
-                        if (_via == null && CoveredByBase(method.ContainingType)) { continue; }
+                        if (_via == null && CoveredByBase(method)) { continue; }
                         AppendMutator(method, name);
                     }
+                }
+
+                // The method, or a base declaration it overrides, is a mutator of a generated base that can be derived from: the
+                // base's generic method covers this type too, and its call still dispatches to the override.
+                private bool CoveredByBase(IMethodSymbol method) {
+                    for (IMethodSymbol? declared = method; declared != null; declared = declared.OverriddenMethod) {
+                        if (CoveredByBase(declared.ContainingType)
+                            && _emitter.Mutators(declared.ContainingType).Any(m => SymbolEqualityComparer.Default.Equals(m.Method.OriginalDefinition, declared.OriginalDefinition))) {
+                            return true;
+                        }
+                    }
+                    return false;
                 }
 
                 // A method declared by a generated base that can be derived from is covered by the base's generic methods.
@@ -121,9 +160,11 @@ namespace PowerForge.Generators.Fluent {
                     string member = _via == null ? method.Name : _via.Name + "." + method.Name;
                     if (!Claim(location, member, name, method.Parameters.Select(p => p.Type).ToArray())) { return; }
                     _mutated.Add(Signature(name, method.Parameters.Select(p => p.Type)));
-                    // A single bool without a default reads as a switch: Resolved() sets it.
-                    bool switchLike = method.Parameters.Length == 1 && IsBool(method.Parameters[0].Type) && !method.Parameters[0].IsOptional;
-                    bool shortForm = method.Parameters.Length > 0 && (switchLike || method.Parameters.All(p => p.IsOptional || p.IsParams));
+                    // A single bool without a default reads as a switch: Resolved() sets it. Not when an instance method already
+                    // answers Resolved(), since C# binds that call before looking at extensions.
+                    bool argless = !Taken(name);
+                    bool switchLike = argless && method.Parameters.Length == 1 && IsBool(method.Parameters[0].Type) && !method.Parameters[0].IsOptional;
+                    bool shortForm = argless && method.Parameters.Length > 0 && (switchLike || method.Parameters.All(p => p.IsOptional || p.IsParams));
                     if (shortForm && !_generated.Add(name + "()")) {
                         _emitter._output.ReportDiagnostic(Diagnostic.Create(FluentDiagnostics.Duplicate, location ?? Location.None, name, _type.Name, member));
                         return;
@@ -142,6 +183,11 @@ namespace PowerForge.Generators.Fluent {
                     }
                     doc.Append("        /// <returns>The same instance.</returns>\n");
                     string target = _via == null ? _receiver : _receiver + "." + Escape(_via.Name);
+                    // Through the declaring type, so a method of the same name a derived type declares with new can't take the call.
+                    ITypeSymbol receiverType = _via == null ? _type : _via.Type;
+                    if (!SymbolEqualityComparer.Default.Equals(method.ContainingType.OriginalDefinition, receiverType.OriginalDefinition)) {
+                        target = "((" + method.ContainingType.WithNullableAnnotation(NullableAnnotation.NotAnnotated).ToDisplayString(TypeFormat) + ")" + target + ")";
+                    }
                     string arguments = string.Join(", ", method.Parameters.Select(p => Escape(p.Name)));
                     AppendMethod(doc.ToString(), name, string.Concat(parameters.Select(p => ", " + p)),
                         "            " + target + "." + Escape(method.Name) + "(" + arguments + ");\n");

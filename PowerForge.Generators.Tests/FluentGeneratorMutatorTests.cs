@@ -228,6 +228,7 @@ public sealed class FluentGeneratorMutatorTests {
     public void GettersThatBuildANewObjectGetNoInPlaceOrAddMethods() {
         const string library = """
             using System.Collections.Generic;
+            using System.Collections.Immutable;
             using System.Collections.ObjectModel;
             using PowerForge.Fluent;
 
@@ -267,6 +268,20 @@ public sealed class FluentGeneratorMutatorTests {
                     public List<string> Parts => _parts;
 
                     private List<string> Collect() { var result = new List<string>(_parts); return result; }
+
+                    // Kept collections: one return is the kept list, a reassigned local, an aliased local that is stored, a
+                    // method named Copy whose body returns the field, and an immutable builder, which takes added items.
+                    private List<string>? _aliased;
+                    public List<string> Either { get { if (Detached) { return new List<string>(); } return _parts; } }
+                    public List<string> Reused { get { var list = new List<string>(); list = _parts; return list; } }
+                    public List<string> Aliased { get { var list = new List<string>(); var alias = list; _aliased = alias; return list; } }
+                    public List<string> Copied => Copy();
+                    public ImmutableList<string>.Builder Pending { get; } = ImmutableList.CreateBuilder<string>();
+                    private List<string> Copy() => _parts;
+
+                    // Inlining a getter that builds a new object would edit a throwaway object.
+                    [FluentInline]
+                    public Options Inlined => new Options();
                 }
 
                 public sealed class Options {
@@ -281,9 +296,9 @@ public sealed class FluentGeneratorMutatorTests {
                 public static class Usage {
                     public static object[] Run() {
                         Document document = new Document().Cached(o => o.Size(1)).Kept(o => o.Size(2)).Settable(o => o.Size(3)).Wrapped(o => o.Size(4)).Part("p")
-                            .Lazy(o => o.Size(5)).Section(o => o.Size(6));
+                            .Lazy(o => o.Size(5)).Section(o => o.Size(6)).Either("e").Reused("r").Copied("c").Aliased("a").Pending("q");
                         Document shared = new Document().Shared(o => o.Size(7));
-                        return new object[] { document.Cached.Size, document.Kept.Size, document.Committed!.Size, document.Parts.Count, document.Lazy.Size, document.Section.Size, shared.Kept.Size };
+                        return new object[] { document.Cached.Size, document.Kept.Size, document.Committed!.Size, document.Parts.Count, document.Lazy.Size, document.Section.Size, shared.Kept.Size, document.Pending.Count };
                     }
                 }
             }
@@ -291,14 +306,15 @@ public sealed class FluentGeneratorMutatorTests {
 
         (Compilation compilation, ImmutableArray<Diagnostic> diagnostics) = Run(library);
         Assert.All(diagnostics, d => Assert.Equal(("PFF015", DiagnosticSeverity.Info), (d.Id, d.Severity)));
-        Assert.Equal(new[] { "Built", "Cloned", "Collected", "Created", "ReadOnly" },
+        Assert.Equal(new[] { "Built", "Cloned", "Collected", "Created", "Inlined", "ReadOnly" },
             diagnostics.Select(d => d.GetMessage().Split('\'')[1].Split('.')[1]).OrderBy(n => n, StringComparer.Ordinal));
         Assembly assembly = TestCompiler.Load(compilation);
 
         // Wrapped hands out a new wrapper that writes through to the kept options; [Fluent] asked for its method.
-        Assert.Equal(new object[] { 1, 4, 3, 1, 5, 6, 7 }, (object[])assembly.GetType("Sample.Usage")!.GetMethod("Run")!.Invoke(null, null)!);
+        // Part, Either, Reused and Copied all add to the kept list.
+        Assert.Equal(new object[] { 1, 4, 3, 4, 5, 6, 7, 1 }, (object[])assembly.GetType("Sample.Usage")!.GetMethod("Run")!.Invoke(null, null)!);
         string[] names = assembly.GetType("Sample.DocumentFluent")!.GetMethods(BindingFlags.Public | BindingFlags.Static).Select(m => m.Name).Distinct().ToArray();
-        Assert.DoesNotContain(names, name => name is "Cloned" or "Created" or "Built" or "Collected" or "ReadOnly");
+        Assert.DoesNotContain(names, name => name is "Cloned" or "Created" or "Built" or "Collected" or "ReadOnly" or "Size");
     }
 
     [Fact]
@@ -322,7 +338,13 @@ public sealed class FluentGeneratorMutatorTests {
                     [FluentMutator("Size")]
                     internal void SetSize(int value) { }
                     public void Size(int value) { }
+                    [FluentMutator]
+                    internal unsafe void SetBuffer(byte* buffer) { }
+                    [FluentMutator]
+                    internal void SetLevel(Level level) { }
                 }
+
+                internal enum Level { Low, High }
 
                 public class Generic<T> {
                     [Fluent]
@@ -346,10 +368,86 @@ public sealed class FluentGeneratorMutatorTests {
 
         (_, ImmutableArray<Diagnostic> diagnostics) = Run(library);
 
-        // Static, generic, by-ref, private and badly named mutators; Size collides with the instance method; two nested types
-        // whose containers rule out extension methods.
-        Assert.Equal(new[] { "PFF002", "PFF013", "PFF013", "PFF013", "PFF013", "PFF013", "PFF014", "PFF014" }, diagnostics.Select(d => d.Id).OrderBy(id => id, StringComparer.Ordinal));
+        // Static, generic, by-ref, private, badly named, pointer and internal-typed mutators; Size collides with the instance
+        // method; two nested types whose containers rule out extension methods.
+        Assert.Equal(new[] { "PFF002", "PFF013", "PFF013", "PFF013", "PFF013", "PFF013", "PFF013", "PFF013", "PFF014", "PFF014" }, diagnostics.Select(d => d.Id).OrderBy(id => id, StringComparer.Ordinal));
         Assert.All(diagnostics, d => Assert.Equal(DiagnosticSeverity.Error, d.Severity));
+    }
+
+    [Fact]
+    public void MutatorsStayReachableThroughOverridesHidingAndInstanceMethods() {
+        const string library = """
+            using PowerForge.Fluent;
+
+            namespace Sample {
+                [Fluent]
+                public class Control {
+                    public string Log = "";
+                    internal bool IsResolved;
+
+                    [FluentMutator]
+                    internal virtual void SetMode(int mode) { Log += "base" + mode + ";"; }
+
+                    // Answers Resolved() itself, so the mutator keeps a required argument.
+                    public bool Resolved() => IsResolved;
+
+                    [FluentMutator]
+                    internal void SetResolved(bool value) { IsResolved = value; }
+                }
+
+                // An open derived type overriding the mutator reuses the base's generic method, which dispatches to the override.
+                public class Button : Control {
+                    internal override void SetMode(int mode) { Log += "button" + mode + ";"; }
+                }
+
+                public abstract class Plain {
+                    public string Title = "";
+
+                    [FluentMutator]
+                    internal void SetTitle(string title) { Title = "base:" + title; }
+                }
+
+                // Hides the mutator with an unmarked method; the generated method still calls the marked one.
+                [Fluent]
+                public sealed class Card : Plain {
+                    public new void SetTitle(string title) { Title = "hidden:" + title; }
+                }
+
+                // A type whose only fluent member is a mutator is still a settings type: inlined and configured.
+                public sealed class Frame {
+                    internal string Border = "";
+
+                    [FluentMutator]
+                    internal void SetBorder(string color, int width = 1) { Border = color + "/" + width; }
+                }
+
+                [Fluent]
+                public sealed class Panel {
+                    [FluentInline]
+                    public Frame Frame { get; } = new Frame();
+                    public Frame Outline { get; } = new Frame();
+                }
+
+                public static class Usage {
+                    public static object[] Run() {
+                        Button button = new Button().Mode(2).Resolved(true);
+                        Card card = new Card().Title("x");
+                        Panel panel = new Panel().Border("red").Outline(f => f.Border("blue", 2));
+                        return new object[] { button.Log, button.Resolved(), card.Title, panel.Frame.Border, panel.Outline.Border };
+                    }
+                }
+            }
+            """;
+
+        (Compilation compilation, ImmutableArray<Diagnostic> diagnostics) = Run(library);
+        Assert.Empty(diagnostics);
+
+        Assembly assembly = TestCompiler.Load(compilation);
+
+        Assert.Equal(new object[] { "button2;", true, "base:x", "red/1", "blue/2" }, (object[])assembly.GetType("Sample.Usage")!.GetMethod("Run")!.Invoke(null, null)!);
+        // control.Resolved() binds to the instance method, so a default would leave a switch form that never runs.
+        MethodInfo resolved = assembly.GetType("Sample.ControlFluent")!.GetMethods().Single(m => m.Name == "Resolved");
+        Assert.False(resolved.GetParameters()[1].HasDefaultValue);
     }
 
     [Fact]
