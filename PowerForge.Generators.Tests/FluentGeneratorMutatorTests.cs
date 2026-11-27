@@ -1,0 +1,417 @@
+using System.Collections.Immutable;
+using System.Reflection;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using PowerForge.Generators.Fluent;
+using Xunit;
+
+namespace PowerForge.Generators.Tests;
+
+/// <summary>
+/// Write paths that are not public setters ([FluentMutator], struct handles), bool? switches, nested and abstract types, and
+/// properties whose getter hands out a new object: compiled with the generator, then run.
+/// </summary>
+public sealed class FluentGeneratorMutatorTests {
+    [Theory]
+    [InlineData(LanguageVersion.Latest)]
+    [InlineData(LanguageVersion.CSharp7_3)]
+    public void MutatorsWriteThroughMethodsWithTheirParametersAndDefaults(LanguageVersion version) {
+        const string library = """
+            using PowerForge.Fluent;
+
+            namespace Sample {
+                public enum Align { Left, Center, Right }
+
+                [Fluent]
+                public class Comment {
+                    public string Log = "";
+                    public bool Resolved { get; private set; }
+                    public string Title { get; set; } = "";
+                    public string Zones { get; private set; } = "";
+                    public Margins Margins { get; } = new Margins();
+
+                    [FluentMutator]
+                    internal void SetResolved(bool resolved) { Resolved = resolved; }
+
+                    /// <summary>Sets the title through the canonical path.</summary>
+                    /// <param name="title">The new title.</param>
+                    [FluentMutator]
+                    internal Comment SetTitle(string title) { Log += "title;"; Title = title; return this; }
+
+                    [FluentMutator("Zones")]
+                    internal void ApplyZones(string left, string center = "c", Align align = Align.Right, decimal? scale = null, int count = default) {
+                        Zones = left + "|" + center + "|" + align + "|" + (scale?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "none") + "|" + count;
+                    }
+                }
+
+                public sealed class Reply : Comment {
+                    public string Author { get; set; } = "";
+                }
+
+                [Fluent]
+                public sealed class Page {
+                    [FluentInline]
+                    public Margins Margins { get; } = new Margins();
+                }
+
+                public sealed class Margins {
+                    public double Top { get; set; }
+                    public string Value { get; private set; } = "";
+
+                    [FluentMutator("Set")]
+                    internal void SetAll(double top, double left) { Value = top + "," + left; }
+                }
+
+                public static class Usage {
+                    public static object[] Run() {
+                        Reply reply = new Reply().Author("Ann").Resolved().Title("Draft").Zones("l").Margins(m => m.Set(1, 2));
+                        Reply other = new Reply().Resolved().Resolved(false).Zones("a", "b", Align.Left, 2.5m, 3);
+                        Page page = new Page().Set(3, 4).Top(5);
+                        return new object[] { reply.Author, reply.Resolved, reply.Title, reply.Log, reply.Zones, reply.Margins.Value,
+                            other.Resolved, other.Zones, page.Margins.Value, page.Margins.Top };
+                    }
+                }
+            }
+            """;
+
+        (Compilation compilation, ImmutableArray<Diagnostic> diagnostics) = Run(library, version);
+        Assert.Empty(diagnostics);
+
+        // The mutator replaces the Title setter method, so the title goes through it ("title;" is logged).
+        Assert.Equal(new object[] { "Ann", true, "Draft", "title;", "l|c|Right|none|0", "1,2", false, "a|b|Left|2.5|3", "3,4", 5.0 }, Execute(compilation));
+    }
+
+    [Fact]
+    public void StructHandlesGetByValueMutatorsThatReturnTheSameHandle() {
+        const string library = """
+            using System.Collections.Generic;
+            using PowerForge.Fluent;
+
+            namespace Sample {
+                public sealed class Sheet {
+                    public Dictionary<int, string> Styles { get; } = new Dictionary<int, string>();
+                }
+
+                [Fluent]
+                public readonly struct Cell {
+                    private readonly Sheet _sheet;
+                    public Cell(Sheet sheet, int index) { _sheet = sheet; Index = index; }
+                    public int Index { get; }
+                    public string Style => _sheet.Styles.TryGetValue(Index, out string? style) ? style : "";
+
+                    [FluentMutator]
+                    internal void SetBold(bool bold) { _sheet.Styles[Index] = Style + (bold ? "bold;" : "plain;"); }
+
+                    [FluentMutator]
+                    internal Cell SetBorder(string color, int width = 1) { _sheet.Styles[Index] = Style + "border:" + color + "/" + width + ";"; return this; }
+                }
+
+                public static class Usage {
+                    public static object[] Run() {
+                        Sheet sheet = new Sheet();
+                        Cell cell = new Cell(sheet, 7);
+                        Cell same = cell.Bold().Border("red").Bold(false).Border("blue", 2);
+                        return new object[] { same.Index, sheet.Styles[7] };
+                    }
+                }
+            }
+            """;
+
+        (Compilation compilation, ImmutableArray<Diagnostic> diagnostics) = Run(library);
+        Assert.Empty(diagnostics);
+        Assembly assembly = TestCompiler.Load(compilation);
+
+        Assert.Equal(new object[] { 7, "bold;border:red/1;plain;border:blue/2;" }, (object[])assembly.GetType("Sample.Usage")!.GetMethod("Run")!.Invoke(null, null)!);
+        // By value in, the same struct out: no wrapper type, no ref receiver, and no setter methods for the handle's properties.
+        MethodInfo[] methods = assembly.GetType("Sample.CellFluent")!.GetMethods(BindingFlags.Public | BindingFlags.Static);
+        Assert.Equal(new[] { "Bold", "Border" }, methods.Select(m => m.Name).Distinct().OrderBy(n => n, StringComparer.Ordinal));
+        Assert.All(methods, m => Assert.True(m.ReturnType == assembly.GetType("Sample.Cell") && m.GetParameters()[0].ParameterType == m.ReturnType));
+    }
+
+    [Fact]
+    public void NullableBoolPropertiesFollowTheBoolRule() {
+        const string library = """
+            using PowerForge.Fluent;
+
+            namespace Sample {
+                [Fluent]
+                public sealed class Viewer {
+                    public bool? IsCenterWindow { get; set; }
+                    public bool? FitWindow { get; set; } = false;
+                }
+
+                public static class Usage {
+                    public static object[] Run() {
+                        Viewer viewer = new Viewer().CenterWindow().FitWindow(null);
+                        Viewer cleared = new Viewer().CenterWindow(false);
+                        return new object[] { viewer.IsCenterWindow!, viewer.FitWindow.HasValue, cleared.IsCenterWindow! };
+                    }
+                }
+            }
+            """;
+
+        (Compilation compilation, ImmutableArray<Diagnostic> diagnostics) = Run(library);
+        Assert.Empty(diagnostics);
+
+        Assert.Equal(new object[] { true, false, false }, Execute(compilation));
+    }
+
+    [Fact]
+    public void MarkedNestedTypesAndAbstractFluentPropertiesAreConfigured() {
+        const string library = """
+            using PowerForge.Fluent;
+
+            namespace Sample {
+                public static class Extraction {
+                    [Fluent]
+                    public sealed class ExtractOptions {
+                        public bool IncludeNotes { get; set; }
+                        public Range Pages { get; set; } = new Range();
+                    }
+                }
+
+                public class TocBlock {
+                    [Fluent]
+                    public sealed class Entry {
+                        public string? Text { get; set; }
+                        public int Level { get; set; }
+                    }
+
+                    // Not marked: stays without methods, as before.
+                    public sealed class Hidden {
+                        public string? Text { get; set; }
+                    }
+                }
+
+                public sealed class Range {
+                    public int From { get; set; }
+                }
+
+                [Fluent]
+                public abstract class Shape {
+                    public string? Name { get; set; }
+                }
+
+                public sealed class Box : Shape {
+                }
+
+                public sealed class Connector : Shape {
+                    public Shape? StartShape { get; set; }
+                    public Shape EndShape { get; } = new Box();
+                }
+
+                public static class Usage {
+                    public static object[] Run() {
+                        Extraction.ExtractOptions options = new Extraction.ExtractOptions().IncludeNotes().Pages(p => p.From(2));
+                        TocBlock.Entry entry = new TocBlock.Entry().Text("Intro").Level(1);
+                        Connector connector = new Connector().Name("c").StartShape(new Box()).StartShape(s => s.Name("start")).EndShape(s => s.Name("end"));
+                        string missing;
+                        try { new Connector().StartShape(s => s.Name("x")); missing = "created"; } catch (System.InvalidOperationException) { missing = "not set"; }
+                        return new object[] { options.IncludeNotes, options.Pages.From, entry.Text!, entry.Level, connector.StartShape!.Name!, connector.EndShape.Name!, missing };
+                    }
+                }
+            }
+            """;
+
+        (Compilation compilation, ImmutableArray<Diagnostic> diagnostics) = Run(library);
+        Assert.Empty(diagnostics);
+        Assembly assembly = TestCompiler.Load(compilation);
+
+        // An abstract type is configured in place and never created.
+        Assert.Equal(new object[] { true, 2, "Intro", 1, "start", "end", "not set" }, (object[])assembly.GetType("Sample.Usage")!.GetMethod("Run")!.Invoke(null, null)!);
+        Assert.NotNull(assembly.GetType("Sample.ExtractionExtractOptionsFluent"));
+        Assert.NotNull(assembly.GetType("Sample.TocBlockEntryFluent"));
+        Assert.Null(assembly.GetType("Sample.TocBlockHiddenFluent"));
+    }
+
+    [Fact]
+    public void GettersThatBuildANewObjectGetNoInPlaceOrAddMethods() {
+        const string library = """
+            using System.Collections.Generic;
+            using System.Collections.ObjectModel;
+            using PowerForge.Fluent;
+
+            namespace Sample {
+                [Fluent]
+                public sealed class Document {
+                    private readonly Options _options = new Options();
+                    private Options? _cached;
+                    private readonly List<string> _parts = new List<string>();
+
+                    public Options Cloned => _options.Clone();
+                    public Options Created { get { return new Options(); } }
+                    public Options Cached => _cached ??= new Options();
+                    public Options Kept => _options;
+                    public Options Settable { get => _options.Clone(); set => Committed = value; }
+                    [Fluent]
+                    public Options Wrapped => new Options(_options);
+                    public Options? Committed { get; private set; }
+
+                    // Kept objects: a local stored before it is returned, a cache-or-create helper, a branch that is sometimes new.
+                    private Options? _lazy;
+                    private readonly Dictionary<string, Options> _sections = new Dictionary<string, Options>();
+                    public bool Detached { get; set; }
+                    public Options Lazy { get { var options = _lazy ?? new Options(); _lazy = options; return options; } }
+                    public Options Section => Get("main");
+                    public Options Shared => Detached ? new Options() : _options;
+                    private Options Get(string key) {
+                        if (_sections.TryGetValue(key, out Options? found)) { return found; }
+                        var created = new Options();
+                        _sections[key] = created;
+                        return created;
+                    }
+
+                    public List<string> Built { get { var list = new List<string>(); list.AddRange(_parts); return list; } }
+                    public List<string> Collected => _parts.Count == 0 ? new List<string>() : Collect();
+                    public ReadOnlyCollection<string> ReadOnly => _parts.AsReadOnly();
+                    public List<string> Parts => _parts;
+
+                    private List<string> Collect() { var result = new List<string>(_parts); return result; }
+                }
+
+                public sealed class Options {
+                    private readonly Options? _source;
+                    public Options() { }
+                    public Options(Options source) { _source = source; }
+                    public int Size { get => _source?.Size ?? _size; set { if (_source != null) { _source.Size = value; } else { _size = value; } } }
+                    private int _size;
+                    public Options Clone() => new Options { Size = Size };
+                }
+
+                public static class Usage {
+                    public static object[] Run() {
+                        Document document = new Document().Cached(o => o.Size(1)).Kept(o => o.Size(2)).Settable(o => o.Size(3)).Wrapped(o => o.Size(4)).Part("p")
+                            .Lazy(o => o.Size(5)).Section(o => o.Size(6));
+                        Document shared = new Document().Shared(o => o.Size(7));
+                        return new object[] { document.Cached.Size, document.Kept.Size, document.Committed!.Size, document.Parts.Count, document.Lazy.Size, document.Section.Size, shared.Kept.Size };
+                    }
+                }
+            }
+            """;
+
+        (Compilation compilation, ImmutableArray<Diagnostic> diagnostics) = Run(library);
+        Assert.All(diagnostics, d => Assert.Equal(("PFF015", DiagnosticSeverity.Info), (d.Id, d.Severity)));
+        Assert.Equal(new[] { "Built", "Cloned", "Collected", "Created", "ReadOnly" },
+            diagnostics.Select(d => d.GetMessage().Split('\'')[1].Split('.')[1]).OrderBy(n => n, StringComparer.Ordinal));
+        Assembly assembly = TestCompiler.Load(compilation);
+
+        // Wrapped hands out a new wrapper that writes through to the kept options; [Fluent] asked for its method.
+        Assert.Equal(new object[] { 1, 4, 3, 1, 5, 6, 7 }, (object[])assembly.GetType("Sample.Usage")!.GetMethod("Run")!.Invoke(null, null)!);
+        string[] names = assembly.GetType("Sample.DocumentFluent")!.GetMethods(BindingFlags.Public | BindingFlags.Static).Select(m => m.Name).Distinct().ToArray();
+        Assert.DoesNotContain(names, name => name is "Cloned" or "Created" or "Built" or "Collected" or "ReadOnly");
+    }
+
+    [Fact]
+    public void UnusableMutatorsAndNestedTypesAreBuildErrors() {
+        const string library = """
+            using PowerForge.Fluent;
+
+            namespace Sample {
+                [Fluent]
+                public sealed class Model {
+                    [FluentMutator]
+                    internal static void SetStatic(Model model) { }
+                    [FluentMutator]
+                    internal void SetGeneric<T>(T value) { }
+                    [FluentMutator]
+                    internal void SetByRef(ref int value) { }
+                    [FluentMutator]
+                    private void SetHidden(int value) { }
+                    [FluentMutator("not valid")]
+                    internal void SetNamed(int value) { }
+                    [FluentMutator("Size")]
+                    internal void SetSize(int value) { }
+                    public void Size(int value) { }
+                }
+
+                public class Generic<T> {
+                    [Fluent]
+                    public sealed class Inner { public int Size { get; set; } }
+                }
+
+                internal class Private {
+                    [Fluent]
+                    public sealed class Inner { public int Size { get; set; } }
+
+                    // A marker for top-level types needs no methods of its own, so it is no error.
+                    [Fluent]
+                    public interface IMarker { }
+                }
+
+                public sealed class Marked : Private.IMarker {
+                    public int Size { get; set; }
+                }
+            }
+            """;
+
+        (_, ImmutableArray<Diagnostic> diagnostics) = Run(library);
+
+        // Static, generic, by-ref, private and badly named mutators; Size collides with the instance method; two nested types
+        // whose containers rule out extension methods.
+        Assert.Equal(new[] { "PFF002", "PFF013", "PFF013", "PFF013", "PFF013", "PFF013", "PFF014", "PFF014" }, diagnostics.Select(d => d.Id).OrderBy(id => id, StringComparer.Ordinal));
+        Assert.All(diagnostics, d => Assert.Equal(DiagnosticSeverity.Error, d.Severity));
+    }
+
+    [Fact]
+    public void NullDefaultsCompileWithoutWarningsWhenTheProjectDisablesNullable() {
+        const string library = """
+            using System.Runtime.InteropServices;
+            using PowerForge.Fluent;
+
+            namespace Sample {
+                [Fluent]
+                public sealed class Note {
+                    public string Text { get; private set; } = "";
+
+                    [FluentMutator]
+                    internal void SetText([Optional] object tag, string text = null) { Text = (text ?? "none") + (tag == null ? "" : "+tag"); }
+                }
+
+                public static class Usage {
+                    public static object[] Run() => new object[] { new Note().Text().Text, new Note().Text(1, "a").Text };
+                }
+            }
+            """;
+
+        (Compilation generated, ImmutableArray<Diagnostic> diagnostics) = Run(library);
+        Assert.Empty(diagnostics);
+        Compilation compilation = generated.WithOptions(((CSharpCompilationOptions)generated.Options).WithNullableContextOptions(NullableContextOptions.Disable));
+
+        // Projects building with TreatWarningsAsErrors must not get CS8625 from `string text = null` in the generated file.
+        Assert.Empty(compilation.GetDiagnostics().Where(d => d.Severity >= DiagnosticSeverity.Warning));
+        Assert.Equal(new object[] { "none", "a+tag" }, Execute(compilation));
+    }
+
+    [Fact]
+    public void PrefixedNamingStillIgnoresNestedTypes() {
+        const string library = """
+            using PowerForge.Fluent;
+
+            namespace Sample {
+                public class Outer {
+                    [Fluent]
+                    public class Inner { public int Size { get; set; } }
+                }
+
+                [Fluent]
+                public class Top { public int Size { get; set; } }
+
+                public static class Usage {
+                    public static object[] Run() => new object[] { new Top().Size(3).Size };
+                }
+            }
+            """;
+
+        (Compilation compilation, ImmutableArray<Diagnostic> diagnostics) =
+            TestCompiler.Run(library, LanguageVersion.Latest, new Dictionary<string, string> { ["PowerForgeFluentNaming"] = "Prefixed" }, new FluentGenerator());
+        Assert.Empty(diagnostics);
+
+        // Both types would put a generic Size method into one SampleFluent class.
+        Assert.Equal(new object[] { 3 }, Execute(compilation));
+    }
+
+    private static (Compilation Compilation, ImmutableArray<Diagnostic> Diagnostics) Run(string source, LanguageVersion version = LanguageVersion.Latest) =>
+        TestCompiler.Run(source, version, null, new FluentGenerator());
+
+    private static object[] Execute(Compilation compilation) => (object[])TestCompiler.Load(compilation).GetType("Sample.Usage")!.GetMethod("Run")!.Invoke(null, null)!;
+}

@@ -73,7 +73,7 @@ namespace PowerForge.Generators.Fluent {
 
             // The fluent classes a library generates for these types: one per type, or one per namespace in Prefixed naming.
             private List<INamedTypeSymbol> FluentClasses(IEnumerable<INamedTypeSymbol> types) => types
-                .SelectMany(t => new[] { t.Name, t.ContainingNamespace.IsGlobalNamespace ? "Global" : t.ContainingNamespace.Name }
+                .SelectMany(t => new[] { FluentStem(t), t.ContainingNamespace.IsGlobalNamespace ? "Global" : t.ContainingNamespace.Name }
                     .Select(stem => t.ContainingNamespace.IsGlobalNamespace ? stem + "Fluent" : t.ContainingNamespace.ToDisplayString() + "." + stem + "Fluent"))
                 .Distinct(StringComparer.Ordinal).Select(name => _compilation.GetTypeByMetadataName(name)).Where(type => type != null).Select(type => type!).ToList();
 
@@ -121,7 +121,7 @@ namespace PowerForge.Generators.Fluent {
                 private void AppendInline(IPropertySymbol property) {
                     if (Prefixed) { return; }
                     if (!IsReadable(property) || property.Type is not INamedTypeSymbol option || property.Type.NullableAnnotation == NullableAnnotation.Annotated
-                        || CollectionItem(property.Type) != null || !IsSettingsType(option)) {
+                        || CollectionItem(property.Type) != null || !_emitter.IsSettingsType(option)) {
                         Report(FluentDiagnostics.InvalidInline, property, _type.Name, property.Name);
                         return;
                     }
@@ -133,6 +133,7 @@ namespace PowerForge.Generators.Fluent {
                         foreach ((string name, IMethodSymbol target, string summary, string valueSummary) in forwards) {
                             AppendForward(name, target, summary, valueSummary);
                         }
+                        AppendMutators(option);
                         foreach (IPropertySymbol member in Properties(option)) {
                             if (!forwarded.Contains(member.Name)) {
                                 AppendConvention(member);

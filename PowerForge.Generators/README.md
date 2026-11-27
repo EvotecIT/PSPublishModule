@@ -18,16 +18,43 @@ property access all edit one object.
 | Property | Generated |
 | --- | --- |
 | `T Title { get; set; }` | `Title(T value)` |
-| `bool Visible` / `bool IsVisible` | `Visible(bool value = true)` |
+| `bool Visible` / `bool IsVisible` (also `bool?`) | `Visible(bool value = true)` (`Visible(bool? value = true)`) |
 | `Legend Legend` (a settings type) | `Legend(Action<Legend> configure)`, creating it when null |
 | `ICollection<Series> Series` | `Series(item)`, `Series(Action<Series> configure)`, `Series(IEnumerable<Series> items)` |
 | `Func<...> LabelFormatter` with `[Fluent("FormatLabels")]` | `FormatLabels(Func<...> value)` |
 | `ChartBarMode Mode` with `[FluentPreset("Stacked", ChartBarMode.Stacked)]` | `Stacked()` |
+| `[FluentMutator] internal void SetZones(string left, string center = "")` | `Zones(string left, string center = "")`, calling `SetZones` |
 
 - `[Fluent("Name")]` renames a property's method, `[Child("Name")]` renames a collection's single-item methods and
   `[NoFluent]` leaves a property or type out.
 - `[FluentForward("Content", typeof(ContentBuilder), "Replace")]` on a base type or interface generates `Content(...)`
   for each static `Replace(owner, value)` overload, for values that must go through a helper.
+- `[FluentMutator]` on a public or internal instance method generates a fluent method that calls it, with the same
+  parameters and defaults, named after the method without its `Set` prefix (or `[FluentMutator("Name")]`). Use it where a
+  value is written through a method rather than a public setter (`SetResolved(bool)` behind a read-only `Resolved`) or
+  takes several values at once (`SetZones(left, center, right)`). A single `bool` or `bool?` parameter without a default
+  gets `= true`, so `Resolved()` reads like a switch. A property's setter method with the same signature gives way to the
+  mutator. Mutators of a base type come through to derived types like its properties do, and
+  `[FluentInline]` brings the inlined type's mutators to the owner too. A static,
+  generic, private or by-reference method, or a default value that can't be repeated in code, is PFF013.
+- `[Fluent]` on a struct generates by-value extensions for its `[FluentMutator]` methods (and `[FluentForward]`s), each
+  returning the same handle: `cell.Bold().Border("red")` for a cell handle that writes through to its sheet, with no
+  wrapper object. A struct's properties get no methods, since setting one on the receiver would change a
+  copy.
+- A public nested class marked `[Fluent]` itself gets methods in a top-level `<Outer><Inner>Fluent` class
+  (`Menu.Item` gets `MenuItemFluent`), and properties of its type get `X(o => ...)`. Unmarked nested types
+  still get nothing. A marked nested type inside a generic or non-public type can't have extension methods (PFF014).
+- A property whose type is an abstract `[Fluent]` class of the same assembly gets `X(o => ...)`, which configures the
+  current value in place and throws when it isn't set, since an abstract type can't be created.
+- A read-only property whose getter returns a new object on every read (`=> _options.Clone()`, `=> new Options()`, a
+  collection built in the getter or by a method it calls, `ToList()`), and a collection of a read-only type
+  (`ReadOnlyCollection<T>`, immutable and frozen collections), gets no in-place `X(o => ...)` or add-item methods: the
+  changes would land on a throwaway object. Each is reported as PFF015 (info). Getters that return a field, an
+  auto-property or a cached value (`_x ??= new X()`, `_x ?? new X()`, a local stored in a field or dictionary before it
+  is returned, a cache-or-create helper) are configured as before, and so are a conditional that builds a new object on
+  only one branch and anything the generator can't read (a referenced library, an interface). When the new object does write through, such as a wrapper over the owner's
+  state, `[Fluent]` on the property asks for the methods anyway. A settable property keeps `X(o => ...)`, since it assigns
+  the configured object back.
 - `[FluentInline]` on a settings-type property gives the owner every method of that settings type, applied to the
   property and returning the owner: with `[FluentInline] ChartOptions Options { get; }`, `chart.Legend(l => ...)` and
   `chart.Theme(...)` set `chart.Options.Legend` and `chart.Options.Theme`. `[FluentForward]` methods of the settings type
@@ -64,7 +91,7 @@ property access all edit one object.
 - Methods for a type that can be derived from are generic over `TSelf`, so a chain keeps the derived type. They live in
   a `<Type>Fluent` partial class, where handwritten helpers can sit beside them; a class of that name you declare
   yourself must be `static partial`.
-- Nested types and generic types that can be derived from get no methods; sealed generic types do, with their
+- Unmarked nested types and generic types that can be derived from get no methods; sealed generic types do, with their
   constraints.
 - Generated code also compiles as C# 7.3 (the default for netstandard2.0 and .NET Framework projects); nullable
   annotations and `??=` are only emitted for C# 8 and later.
@@ -73,7 +100,7 @@ MSBuild settings:
 
 | Property | Meaning |
 | --- | --- |
-| `PowerForgeFluentNaming=Prefixed` | ConsoleMonster's earlier names (`AddX`, `AddXs`, one `Configure`, `X()` for a bool) in one `<Namespace>Fluent` class; an existing method silently wins. `[FluentInline]` and `[FluentPreset]` apply only to the convention. For ConsoleMonster until it adopts the convention. |
+| `PowerForgeFluentNaming=Prefixed` | ConsoleMonster's earlier names (`AddX`, `AddXs`, one `Configure`, `X()` for a bool) in one `<Namespace>Fluent` class; an existing method silently wins. `[FluentInline]`, `[FluentPreset]`, `[FluentMutator]` and the PFF015 checks apply only to the convention. For ConsoleMonster until it adopts the convention. |
 | `PowerForgeFluentFactory=Namespace.Type` | Static factory classes (separate several with `;` or `,`) whose parameterless methods are used in the generated documentation examples. |
 
 ## Cmdlet parameters

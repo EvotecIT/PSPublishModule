@@ -63,5 +63,21 @@ namespace PowerForge.Generators.Fluent {
             "PFF012", "[FluentInline] needs a settings-type property",
             "'{0}.{1}' is marked [FluentInline] but is not a readable, non-nullable property whose type is a fluent settings type of this assembly",
             Category, DiagnosticSeverity.Error, isEnabledByDefault: true);
+    
+
+        internal static readonly DiagnosticDescriptor InvalidMutator = new DiagnosticDescriptor(
+            "PFF013", "[FluentMutator] method has the wrong shape",
+            "[FluentMutator] on '{0}.{1}' cannot be generated: {2}; change the method or remove the attribute",
+            Category, DiagnosticSeverity.Error, isEnabledByDefault: true);
+
+        internal static readonly DiagnosticDescriptor UnsupportedType = new DiagnosticDescriptor(
+            "PFF014", "Fluent type cannot get methods",
+            "'{0}' is marked [Fluent] but {1}, so no extension methods can be generated for it; move it to a namespace, make its containing types public and non-generic, or remove the attribute",
+            Category, DiagnosticSeverity.Error, isEnabledByDefault: true);
+
+        internal static readonly DiagnosticDescriptor FreshGetter = new DiagnosticDescriptor(
+            "PFF015", "Property is not edited in place",
+            "'{0}.{1}' gets no {2} because {3}; mark the property [Fluent] if changes to that object do reach '{0}'",
+            Category, DiagnosticSeverity.Info, isEnabledByDefault: true);
     }
 }
