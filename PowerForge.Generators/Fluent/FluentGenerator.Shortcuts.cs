@@ -159,8 +159,14 @@ namespace PowerForge.Generators.Fluent {
                 // covers: its methods come from the base, and this type's setter must not win over them.
                 private void ReserveInlineMutators(IEnumerable<IPropertySymbol> properties) {
                     foreach (IPropertySymbol property in properties) {
-                        if (Attribute(property, FluentAttributes.Inline) == null || InlineType(property) is not INamedTypeSymbol option
-                            || !Forced(property) && FreshGetterReason(property, Compilation) != null) {
+                        // A covered property's methods are the ones its generated base declaration emits, so that declaration
+                        // decides whether it is inlined, not an override's own attributes.
+                        IPropertySymbol declaring = property;
+                        if (CoveredByBase(property)) {
+                            while (declaring.OverriddenProperty != null) { declaring = declaring.OverriddenProperty; }
+                        }
+                        if (Attribute(declaring, FluentAttributes.Inline) == null || InlineType(declaring) is not INamedTypeSymbol option
+                            || !Forced(declaring) && FreshGetterReason(declaring, Compilation) != null) {
                             continue;
                         }
                         foreach ((IMethodSymbol method, string name) in _emitter.Mutators(option)) {

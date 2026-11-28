@@ -209,6 +209,8 @@ namespace PowerForge.Generators.Fluent {
                         "            " + target + "." + Escape(method.Name) + "(" + arguments + ");\n");
                     if (splitParams && method.Parameters[0].Type is IArrayTypeSymbol array && Claim(location, member, name, array.ElementType, array)) {
                         string element = array.ElementType.ToDisplayString(TypeFormat);
+                        // The array type as Roslyn writes it: element + "[]" would turn int[][,] into int[,][].
+                        string arrayType = array.ToDisplayString(TypeFormat);
                         // new int[n][] for jagged items: the length goes before the element type's own ranks.
                         string ranks = string.Empty;
                         ITypeSymbol innermost = array.ElementType;
@@ -216,7 +218,7 @@ namespace PowerForge.Generators.Fluent {
                             ranks += "[" + new string(',', nested.Rank - 1) + "]";
                             innermost = nested.ElementType;
                         }
-                        string items = "            " + element + "[] value = new " + innermost.ToDisplayString(TypeFormat) + "[(items == null ? 0 : items.Length) + 1]" + ranks + ";\n"
+                        string items = "            " + arrayType + " value = new " + innermost.ToDisplayString(TypeFormat) + "[(items == null ? 0 : items.Length) + 1]" + ranks + ";\n"
                             + "            value[0] = item;\n"
                             + "            if (items != null) { global::System.Array.Copy(items, 0, value, 1, items.Length); }\n";
                         string itemsDoc = "        /// <summary>" + summary + "</summary>\n"
@@ -224,7 +226,7 @@ namespace PowerForge.Generators.Fluent {
                             + "        /// <param name=\"item\">The first item.</param>\n"
                             + "        /// <param name=\"items\">The other items.</param>\n"
                             + "        /// <returns>The same instance.</returns>\n";
-                        AppendMethod(itemsDoc, name, ", " + element + " item, params " + element + "[] items",
+                        AppendMethod(itemsDoc, name, ", " + element + " item, params " + arrayType + " items",
                             items + "            " + target + "." + Escape(method.Name) + "(value);\n");
                     }
                 }
