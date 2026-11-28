@@ -44,6 +44,9 @@ property access all edit one object.
   internal mutators of a referenced library aren't visible to it. A static, generic, private or by-reference method,
   a pointer parameter, a parameter type that isn't public (the generated method is), an `[Optional]` COM interface
   parameter, or a default value that can't be repeated in code, is PFF013.
+- A project using the convention also gets `[assembly: AssemblyMetadata("PowerForge.Generators.FluentNaming", "Convention")]`,
+  so a project deriving from its types can tell that a `<Type>Fluent` method matching a mutator's signature calls that
+  mutator. Prefixed output gets no such attribute.
 - `[Fluent]` on a struct generates by-value extensions for its `[FluentMutator]` methods (and `[FluentForward]`s), each
   returning the same handle: `cell.Bold().Border("red")` for a cell handle that writes through to its sheet, with no
   wrapper object. A struct's properties get no methods, since setting one on the receiver would change a

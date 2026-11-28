@@ -656,6 +656,17 @@ public sealed class FluentGeneratorMutatorTests {
                     public static Series Values(this Series target, string tag = "") => target;
                 }
 
+                // A handwritten Visible(string mode = "auto") keeps Visible(), so the bool? setter takes a required argument.
+                [Fluent]
+                public sealed class Lens {
+                    public bool? Visible { get; set; }
+                    public string Mode = "";
+                }
+
+                public static class LensExtensions {
+                    public static Lens Visible(this Lens target, string mode = "auto") { target.Mode = mode; return target; }
+                }
+
                 // Items that are rectangular arrays keep their type: int[][,], not int[,][].
                 [Fluent]
                 public sealed class Plane {
@@ -716,7 +727,7 @@ public sealed class FluentGeneratorMutatorTests {
                             new Plane().Cells().Cells(new int[1, 1], new int[2, 2]).Log, new Letter().Title("z").Title, new Knob().Level(3).Value,
                             new Caption().Format(s => s + "!").Formatting!("a"), new Gauge().Mode().Mode(level: 3).Log, Probes.Configure(),
                             new Meter().Levels().Levels(3, 4).Levels(new System.Collections.Generic.List<int> { 5 }).Log,
-                            new Series().Values(1, 2).Log };
+                            new Series().Values(1, 2).Log, new Lens().Visible().Visible(true).Mode };
                     }
                 }
             }
@@ -725,7 +736,7 @@ public sealed class FluentGeneratorMutatorTests {
         (Compilation compilation, ImmutableArray<Diagnostic> diagnostics) = Run(library);
         Assert.Empty(diagnostics);
 
-        Assert.Equal(new object[] { "circle1;circle2;", 1, true, "dynamic;", "layout:x", "", "ints;a;b,c;d;", 3, 10, "layout:y", "ext;2;", true, "ext;2;", "z", 6, "[a!]", "exact;x3;", "Configure", "ext;2;1;", "marked;" }, Execute(compilation));
+        Assert.Equal(new object[] { "circle1;circle2;", 1, true, "dynamic;", "layout:x", "", "ints;a;b,c;d;", 3, 10, "layout:y", "ext;2;", true, "ext;2;", "z", 6, "[a!]", "exact;x3;", "Configure", "ext;2;1;", "marked;", "auto" }, Execute(compilation));
     }
 
     [Fact]
@@ -889,6 +900,8 @@ public sealed class FluentGeneratorMutatorTests {
                 [Fluent]
                 public class Reports {
                     public string Stored = "";
+                    // Title(string) is the mutator's method; the library marks its output as convention, so no name guessing.
+                    public string Title { get; set; } = "";
 
                     [FluentMutator]
                     public void SetTitle(string title) { Stored = title; }
