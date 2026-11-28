@@ -642,6 +642,20 @@ public sealed class FluentGeneratorMutatorTests {
                     public static Meter Levels(this Meter target, string tag = "") { target.Log += "ext;"; return target; }
                 }
 
+                // The at-least-one-item overload passes a typed collection, so the unmarked int[] overload can't take the call.
+                [Fluent]
+                public sealed class Series {
+                    public string Log = "";
+
+                    [FluentMutator]
+                    internal void SetValues(params System.Collections.Generic.IEnumerable<int> values) { Log += "marked;"; }
+                    internal void SetValues(int[] values) { Log += "array;"; }
+                }
+
+                public static class SeriesExtensions {
+                    public static Series Values(this Series target, string tag = "") => target;
+                }
+
                 // Items that are rectangular arrays keep their type: int[][,], not int[,][].
                 [Fluent]
                 public sealed class Plane {
@@ -701,7 +715,8 @@ public sealed class FluentGeneratorMutatorTests {
                             new Memo().Title("y").Layout.Title, new Grid().Rows().Rows(new[] { 1 }, new[] { 2 }).Log, new Lamp().Lit().On,
                             new Plane().Cells().Cells(new int[1, 1], new int[2, 2]).Log, new Letter().Title("z").Title, new Knob().Level(3).Value,
                             new Caption().Format(s => s + "!").Formatting!("a"), new Gauge().Mode().Mode(level: 3).Log, Probes.Configure(),
-                            new Meter().Levels().Levels(3, 4).Levels(new System.Collections.Generic.List<int> { 5 }).Log };
+                            new Meter().Levels().Levels(3, 4).Levels(new System.Collections.Generic.List<int> { 5 }).Log,
+                            new Series().Values(1, 2).Log };
                     }
                 }
             }
@@ -710,7 +725,7 @@ public sealed class FluentGeneratorMutatorTests {
         (Compilation compilation, ImmutableArray<Diagnostic> diagnostics) = Run(library);
         Assert.Empty(diagnostics);
 
-        Assert.Equal(new object[] { "circle1;circle2;", 1, true, "dynamic;", "layout:x", "", "ints;a;b,c;d;", 3, 10, "layout:y", "ext;2;", true, "ext;2;", "z", 6, "[a!]", "exact;x3;", "Configure", "ext;2;1;" }, Execute(compilation));
+        Assert.Equal(new object[] { "circle1;circle2;", 1, true, "dynamic;", "layout:x", "", "ints;a;b,c;d;", 3, 10, "layout:y", "ext;2;", true, "ext;2;", "z", 6, "[a!]", "exact;x3;", "Configure", "ext;2;1;", "marked;" }, Execute(compilation));
     }
 
     [Fact]
@@ -865,6 +880,57 @@ public sealed class FluentGeneratorMutatorTests {
     }
 
     [Fact]
+    public void AReferencedBaseNamedLikeItsNamespaceStillCoversItsMutators() {
+        const string baseLibrary = """
+            using PowerForge.Fluent;
+
+            namespace Sample.Reports {
+                // Reports.ReportsFluent is both the convention class and the Prefixed namespace class name.
+                [Fluent]
+                public class Reports {
+                    public string Stored = "";
+
+                    [FluentMutator]
+                    public void SetTitle(string title) { Stored = title; }
+                }
+            }
+            """;
+        (Compilation baseCompilation, ImmutableArray<Diagnostic> baseDiagnostics) = Run(baseLibrary);
+        Assert.Empty(baseDiagnostics);
+        using MemoryStream image = new MemoryStream();
+        Assert.True(baseCompilation.Emit(image).Success);
+
+        const string library = """
+            using PowerForge.Fluent;
+            using Sample.Reports;
+
+            namespace Sample {
+                [Fluent]
+                public class ReportPreview : Sample.Reports.Reports {
+                    public int Zoom { get; set; }
+                }
+
+                public static class Usage {
+                    public static object[] Run() => new object[] { new ReportPreview().Title("x").Zoom(2).Stored };
+                }
+            }
+            """;
+        (Compilation compilation, ImmutableArray<Diagnostic> diagnostics) = TestCompiler.Run(library, LanguageVersion.Latest, null,
+            new[] { MetadataReference.CreateFromImage(image.ToArray()) }, new FluentGenerator());
+        // The base's generic Title covers the derived type, so generating it again would be PFF002.
+        Assert.Empty(diagnostics);
+
+        Assembly referenced = Assembly.Load(image.ToArray());
+        ResolveEventHandler resolve = (_, args) => args.Name == referenced.FullName ? referenced : null;
+        AppDomain.CurrentDomain.AssemblyResolve += resolve;
+        try {
+            Assert.Equal(new object[] { "x" }, Execute(compilation));
+        } finally {
+            AppDomain.CurrentDomain.AssemblyResolve -= resolve;
+        }
+    }
+
+    [Fact]
     public void SuppressedNullDefaultsKeepTheirNonNullableType() {
         const string library = """
             using PowerForge.Fluent;
@@ -879,6 +945,11 @@ public sealed class FluentGeneratorMutatorTests {
 
                     [FluentMutator]
                     internal void SetData(dynamic? data) { }
+
+            #nullable disable
+                    [FluentMutator]
+                    internal void SetBlob(dynamic blob = null) { }
+            #nullable restore
                 }
 
                 public static class Usage {

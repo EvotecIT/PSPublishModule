@@ -234,7 +234,7 @@ namespace PowerForge.Generators.Fluent {
                     }
                     // A dynamic argument would bind at run time, possibly to another overload; as object it binds to this method.
                     string arguments = string.Join(", ", method.Parameters.Select(p => (p.Type.TypeKind != TypeKind.Dynamic ? string.Empty
-                        : _emitter.Nullable && p.Type.NullableAnnotation == NullableAnnotation.Annotated ? "(object?)" : "(object)") + Escape(p.Name)));
+                        : _emitter.Nullable && p.Type.NullableAnnotation != NullableAnnotation.NotAnnotated ? "(object?)" : "(object)") + Escape(p.Name)));
                     AppendMethod(doc.ToString(), name, string.Concat(parameters.Select(p => ", " + p)),
                         "            " + target + "." + Escape(method.Name) + "(" + arguments + ");\n");
                     if (splitParams && method.Parameters[0].Type is IArrayTypeSymbol array && Claim(location, member, name, array.ElementType, array)) {
@@ -269,7 +269,9 @@ namespace PowerForge.Generators.Fluent {
                             + "        /// <param name=\"items\">The other items.</param>\n"
                             + "        /// <returns>The same instance.</returns>\n";
                         AppendMethod(itemsDoc, name, ", " + element + " item, params " + element + "[] items",
-                            "            " + target + "." + Escape(method.Name) + "([item, .. (items ?? global::System.Array.Empty<" + element + ">())]);\n");
+                            // Typed first, so overload resolution picks the marked method, not another overload the expression converts to.
+                            "            " + method.Parameters[0].Type.ToDisplayString(TypeFormat) + " value = [item, .. (items ?? global::System.Array.Empty<" + element + ">())];\n"
+                            + "            " + target + "." + Escape(method.Name) + "(value);\n");
                     }
                 }
 
