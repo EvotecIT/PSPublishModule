@@ -151,13 +151,14 @@ namespace PowerForge.Generators.Fluent {
             }
         }
 
-        // [Fluent("Name")] on the property, otherwise its name, without the Is prefix of a bool or bool?.
-        internal static string MethodName(IPropertySymbol property) {
+        // [Fluent("Name")] on the property, otherwise its name, without the Is prefix of a bool, and of a bool? where nullableBool
+        // is set (convention fluent methods; Prefixed naming and cmdlet parameters keep the bool-only rule).
+        internal static string MethodName(IPropertySymbol property, bool nullableBool = true) {
             string? declared = NamedArgument(Attribute(property, FluentAttributes.Fluent));
             if (declared != null) {
                 return declared;
             }
-            return IsBool(property.Type) && property.Name.Length > 2 && property.Name.StartsWith("Is", StringComparison.Ordinal) && char.IsUpper(property.Name[2])
+            return (nullableBool ? IsBool(property.Type) : property.Type.SpecialType == SpecialType.System_Boolean) && property.Name.Length > 2 && property.Name.StartsWith("Is", StringComparison.Ordinal) && char.IsUpper(property.Name[2])
                 ? property.Name.Substring(2) : property.Name;
         }
 

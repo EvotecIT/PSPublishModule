@@ -18,7 +18,7 @@ property access all edit one object.
 | Property | Generated |
 | --- | --- |
 | `T Title { get; set; }` | `Title(T value)` |
-| `bool Visible` / `bool IsVisible` (also `bool?`) | `Visible(bool value = true)` (`Visible(bool? value = true)`) |
+| `bool Visible` / `bool IsVisible` (also `bool?`) | `Visible(bool value = true)` (`Visible(bool? value = true)`; Prefixed naming and cmdlet parameters keep `IsVisible` for a `bool?`) |
 | `Legend Legend` (a settings type) | `Legend(Action<Legend> configure)`, creating it when null |
 | `ICollection<Series> Series` | `Series(item)`, `Series(Action<Series> configure)`, `Series(IEnumerable<Series> items)` |
 | `Func<...> LabelFormatter` with `[Fluent("FormatLabels")]` | `FormatLabels(Func<...> value)` |

@@ -121,7 +121,7 @@ namespace PowerForge.Fluent {
     /// than a property setter. A property with the same name gets no generated methods of its own.
     /// </summary>
     [global::Microsoft.CodeAnalysis.Embedded]
-    [global::System.AttributeUsage(global::System.AttributeTargets.Class | global::System.AttributeTargets.Interface, AllowMultiple = true, Inherited = false)]
+    [global::System.AttributeUsage(global::System.AttributeTargets.Class | global::System.AttributeTargets.Struct | global::System.AttributeTargets.Interface, AllowMultiple = true, Inherited = false)]
     internal sealed class FluentForwardAttribute : global::System.Attribute {
         public FluentForwardAttribute(string name, global::System.Type type, string method) {
             Name = name;

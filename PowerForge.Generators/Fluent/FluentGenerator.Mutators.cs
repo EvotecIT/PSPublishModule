@@ -141,7 +141,11 @@ namespace PowerForge.Generators.Fluent {
                 // The mutators of the type being generated, or, while a [FluentInline] property is expanded, of its type.
                 private void AppendMutators(INamedTypeSymbol type) {
                     foreach ((IMethodSymbol method, string name) in _emitter.Mutators(type)) {
-                        if (_via == null && CoveredByBase(method, name)) { continue; }
+                        if (_via == null && CoveredByBase(method, name)) {
+                            // The base's method is the write path here too, so this type's own setter must not take it.
+                            _mutated.Add(SignatureKey(name, method.Parameters.Select(p => p.Type)));
+                            continue;
+                        }
                         AppendMutator(method, name);
                     }
                 }
@@ -173,7 +177,7 @@ namespace PowerForge.Generators.Fluent {
                     // A single bool without a default reads as a switch: Resolved() sets it. Not when an existing method already
                     // answers Resolved(): an instance method takes that call first, and a second extension would make it ambiguous,
                     // so the first parameter is then required too.
-                    bool argless = !Taken(name);
+                    bool argless = !AnswersArgless(name);
                     bool switchLike = argless && method.Parameters.Length == 1 && IsBool(method.Parameters[0].Type) && !method.Parameters[0].IsOptional;
                     bool shortForm = argless && method.Parameters.Length > 0 && (switchLike || method.Parameters.All(p => p.IsOptional || p.IsParams));
                     if (shortForm && !_generated.Add(name + "()")) {
@@ -190,6 +194,10 @@ namespace PowerForge.Generators.Fluent {
                     foreach (IParameterSymbol parameter in method.Parameters) {
                         bool required = !argless && parameter.Ordinal == 0;
                         string? fallback = required ? null : switchLike ? "true" : Emitter.DefaultLiteral(parameter);
+                        // string label = null! keeps its non-nullable type, so the call to the method doesn't warn.
+                        if (fallback is "null" or "default" && _emitter.Nullable && parameter.Type.IsReferenceType && parameter.Type.NullableAnnotation == NullableAnnotation.NotAnnotated) {
+                            fallback = "null!";
+                        }
                         string optional = !required && BareOptional(parameter) ? "[global::System.Runtime.InteropServices.Optional] " : string.Empty;
                         parameters.Add(optional + (parameter.IsParams && !splitParams ? "params " : string.Empty) + ParameterType(parameter, fallback) + " " + Escape(parameter.Name)
                             + (fallback == null || parameter.IsParams ? string.Empty : " = " + fallback));

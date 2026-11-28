@@ -93,6 +93,7 @@ public sealed class FluentGeneratorMutatorTests {
                 }
 
                 [Fluent]
+                [FluentForward("Fill", typeof(CellStyles), "Fill")]
                 public readonly struct Cell {
                     private readonly Sheet _sheet;
                     public Cell(Sheet sheet, int index) { _sheet = sheet; Index = index; }
@@ -104,13 +105,19 @@ public sealed class FluentGeneratorMutatorTests {
 
                     [FluentMutator]
                     internal Cell SetBorder(string color, int width = 1) { _sheet.Styles[Index] = Style + "border:" + color + "/" + width + ";"; return this; }
+
+                    internal void Append(string style) { _sheet.Styles[Index] = Style + style; }
+                }
+
+                internal static class CellStyles {
+                    internal static void Fill(Cell cell, string color) => cell.Append("fill:" + color + ";");
                 }
 
                 public static class Usage {
                     public static object[] Run() {
                         Sheet sheet = new Sheet();
                         Cell cell = new Cell(sheet, 7);
-                        Cell same = cell.Bold().Border("red").Bold(false).Border("blue", 2);
+                        Cell same = cell.Bold().Border("red").Bold(false).Border("blue", 2).Fill("green");
                         return new object[] { same.Index, sheet.Styles[7] };
                     }
                 }
@@ -121,10 +128,10 @@ public sealed class FluentGeneratorMutatorTests {
         Assert.Empty(diagnostics);
         Assembly assembly = TestCompiler.Load(compilation);
 
-        Assert.Equal(new object[] { 7, "bold;border:red/1;plain;border:blue/2;" }, (object[])assembly.GetType("Sample.Usage")!.GetMethod("Run")!.Invoke(null, null)!);
+        Assert.Equal(new object[] { 7, "bold;border:red/1;plain;border:blue/2;fill:green;" }, (object[])assembly.GetType("Sample.Usage")!.GetMethod("Run")!.Invoke(null, null)!);
         // By value in, the same struct out: no wrapper type, no ref receiver, and no setter methods for the handle's properties.
         MethodInfo[] methods = assembly.GetType("Sample.CellFluent")!.GetMethods(BindingFlags.Public | BindingFlags.Static);
-        Assert.Equal(new[] { "Bold", "Border" }, methods.Select(m => m.Name).Distinct().OrderBy(n => n, StringComparer.Ordinal));
+        Assert.Equal(new[] { "Bold", "Border", "Fill" }, methods.Select(m => m.Name).Distinct().OrderBy(n => n, StringComparer.Ordinal));
         Assert.All(methods, m => Assert.True(m.ReturnType == assembly.GetType("Sample.Cell") && m.GetParameters()[0].ParameterType == m.ReturnType));
     }
 
@@ -563,6 +570,20 @@ public sealed class FluentGeneratorMutatorTests {
                     public static Grid Rows(this Grid target, params string[] values) { target.Log += "ext;"; return target; }
                 }
 
+                // The base's mutator stays the write path for a sealed derived type with a Level property of its own.
+                [Fluent]
+                public class Dial {
+                    public int Value;
+
+                    [FluentMutator]
+                    internal void SetLevel(int level) { Value = level * 2; }
+                }
+
+                [Fluent]
+                public sealed class Knob : Dial {
+                    public int Level { get; set; }
+                }
+
                 // Items that are rectangular arrays keep their type: int[][,], not int[,][].
                 [Fluent]
                 public sealed class Plane {
@@ -620,7 +641,7 @@ public sealed class FluentGeneratorMutatorTests {
                         return new object[] { circle.Log, light.Level, light.On, new Cell().Data("x").Log, report.Layout.Title, report.Title,
                             tagger.Log, new Box().Size(TSelf: 3).Width, new Spot().At((1, 2)).At.X,
                             new Memo().Title("y").Layout.Title, new Grid().Rows().Rows(new[] { 1 }, new[] { 2 }).Log, new Lamp().Lit().On,
-                            new Plane().Cells().Cells(new int[1, 1], new int[2, 2]).Log, new Letter().Title("z").Title };
+                            new Plane().Cells().Cells(new int[1, 1], new int[2, 2]).Log, new Letter().Title("z").Title, new Knob().Level(3).Value };
                     }
                 }
             }
@@ -629,7 +650,7 @@ public sealed class FluentGeneratorMutatorTests {
         (Compilation compilation, ImmutableArray<Diagnostic> diagnostics) = Run(library);
         Assert.Empty(diagnostics);
 
-        Assert.Equal(new object[] { "circle1;circle2;", 1, true, "dynamic;", "layout:x", "", "ints;a;b,c;d;", 3, 10, "layout:y", "ext;2;", true, "ext;2;", "z" }, Execute(compilation));
+        Assert.Equal(new object[] { "circle1;circle2;", 1, true, "dynamic;", "layout:x", "", "ints;a;b,c;d;", 3, 10, "layout:y", "ext;2;", true, "ext;2;", "z", 6 }, Execute(compilation));
     }
 
     [Fact]
@@ -699,6 +720,34 @@ public sealed class FluentGeneratorMutatorTests {
     }
 
     [Fact]
+    public void SuppressedNullDefaultsKeepTheirNonNullableType() {
+        const string library = """
+            using PowerForge.Fluent;
+
+            namespace Sample {
+                [Fluent]
+                public sealed class Tag {
+                    public string Label { get; private set; } = "";
+
+                    [FluentMutator]
+                    internal void SetLabel(string label = null!) { Label = label ?? "none"; }
+                }
+
+                public static class Usage {
+                    public static object[] Run() => new object[] { new Tag().Label().Label, new Tag().Label("a").Label };
+                }
+            }
+            """;
+
+        (Compilation compilation, ImmutableArray<Diagnostic> diagnostics) = Run(library);
+        Assert.Empty(diagnostics);
+
+        // The generated call must not pass a string? to the non-nullable parameter (CS8604) under warnings as errors.
+        Assert.Empty(compilation.GetDiagnostics().Where(d => d.Severity >= DiagnosticSeverity.Warning));
+        Assert.Equal(new object[] { "none", "a" }, Execute(compilation));
+    }
+
+    [Fact]
     public void NullDefaultsCompileWithoutWarningsWhenTheProjectDisablesNullable() {
         const string library = """
             using System.Runtime.InteropServices;
@@ -743,8 +792,20 @@ public sealed class FluentGeneratorMutatorTests {
                 [Fluent]
                 public class Top { public int Size { get; set; } }
 
+                // Prefixed naming keeps its exact Visible() beside a handwritten optional extension, and IsShown for a bool?.
+                [Fluent]
+                public sealed class Widget {
+                    public bool IsVisible { get; set; }
+                    public bool? IsShown { get; set; }
+                    public string Style = "";
+                }
+
+                public static class WidgetExtensions {
+                    public static Widget Visible(this Widget target, string style = "plain") { target.Style = style; return target; }
+                }
+
                 public static class Usage {
-                    public static object[] Run() => new object[] { new Top().Size(3).Size };
+                    public static object[] Run() => new object[] { new Top().Size(3).Size, new Widget().Visible().IsVisible, new Widget().IsShown(true).IsShown! };
                 }
             }
             """;
@@ -754,7 +815,7 @@ public sealed class FluentGeneratorMutatorTests {
         Assert.Empty(diagnostics);
 
         // Both types would put a generic Size method into one SampleFluent class.
-        Assert.Equal(new object[] { 3 }, Execute(compilation));
+        Assert.Equal(new object[] { 3, true, true }, Execute(compilation));
     }
 
     private static (Compilation Compilation, ImmutableArray<Diagnostic> Diagnostics) Run(string source, LanguageVersion version = LanguageVersion.Latest) =>

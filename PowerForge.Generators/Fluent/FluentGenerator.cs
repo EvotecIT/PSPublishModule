@@ -449,7 +449,7 @@ namespace PowerForge.Generators.Fluent {
                     string propertyType = property.Type.ToDisplayString(TypeFormat);
                     string cref = Cref(property);
                     string summary = Summary(property);
-                    string with = MethodName(property);
+                    string with = MethodName(property, nullableBool: false);
                     ITypeSymbol? item = IsReadable(property) ? CollectionItem(property.Type) : null;
                     if (IsSettable(property) && !Taken(with, property.Type) && _generated.Add(with + "(" + propertyType + ")")) {
                         AppendMethod(Doc("Sets " + cref + summary, "The value.", "value") + Example(property), with, ", " + propertyType + " value", Assign(property, "value"));
@@ -639,7 +639,7 @@ namespace PowerForge.Generators.Fluent {
 
                 // Compares complete value-parameter signatures. A handwritten extension for another receiver leaves the name free.
                 // An instance method callable without arguments (only optional or params parameters) takes name() too: C#
-                // binds the call to it before looking at extensions. So does such an extension, which would make name() ambiguous. A generic instance method whose type arguments its
+                // binds the call to it before looking at extensions. A generic instance method whose type arguments its
                 // parameters cannot infer (Reset<T>()) never takes a call written without type arguments.
                 private bool Taken(string name, params ITypeSymbol[] parameters) => _existing.Where(m => m.Name == name).Concat(_emitter.Extensions[name]).Any(m => {
                     // Internal members of a referenced library can't capture a call made from this one.
@@ -648,13 +648,19 @@ namespace PowerForge.Generators.Fluent {
                     if (!m.IsExtensionMethod && m.TypeParameters.Any(type => !m.Parameters.Any(parameter => Mentions(parameter.Type, type)))) { return false; }
                     int offset = m.IsExtensionMethod ? 1 : 0;
                     if (m.IsExtensionMethod && m.Parameters.Length > 0 && !Receives(m.Parameters[0].Type, _type)) { return false; }
-                    // A generic extension only answers name() when the receiver alone infers its type arguments.
-                    if (parameters.Length == 0 && m.Name == name
-                        && (m.IsExtensionMethod && m.TypeParameters.All(type => m.Parameters.Length > 0 && Mentions(m.Parameters[0].Type, type)) || !m.IsExtensionMethod && !m.IsStatic && !m.IsGenericMethod)
-                        && m.Parameters.Skip(offset).All(parameter => parameter.IsOptional || parameter.IsParams)) { return true; }
+                    if (parameters.Length == 0 && !m.IsExtensionMethod && !m.IsStatic && !m.IsGenericMethod && m.Name == name
+                        && m.Parameters.All(parameter => parameter.IsOptional || parameter.IsParams)) { return true; }
                     return m.Name == name && m.Parameters.Length == parameters.Length + offset
                         && parameters.Select((parameter, index) => SymbolEqualityComparer.Default.Equals(parameter, m.Parameters[index + offset].Type)).All(equal => equal);
                 });
+
+                // Whether name() already binds somewhere: Taken, or an extension for this type whose value parameters are all
+                // optional or params. A generated method that also answers name() through defaults would make that call
+                // ambiguous; an exact name() overload would not, since it wins over one filling in defaults. A generic
+                // extension only answers name() when the receiver alone infers its type arguments.
+                private bool AnswersArgless(string name) => Taken(name) || _emitter.Extensions[name].Any(m => m.Parameters.Length > 0
+                    && Receives(m.Parameters[0].Type, _type) && m.TypeParameters.All(type => Mentions(m.Parameters[0].Type, type))
+                    && m.Parameters.Skip(1).All(parameter => parameter.IsOptional || parameter.IsParams));
 
                 private static bool Mentions(ITypeSymbol type, ITypeParameterSymbol parameter) => type switch {
                     ITypeParameterSymbol candidate => SymbolEqualityComparer.Default.Equals(candidate, parameter),
@@ -728,7 +734,7 @@ namespace PowerForge.Generators.Fluent {
                     if (property.Type.TypeKind == TypeKind.Delegate) {
                         call = Prefixed ? ".Configure(configured => configured." + property.Name + " = value)" : "." + NamedArgument(Attribute(property, FluentAttributes.Fluent)) + "(value)";
                     } else {
-                        call = "." + MethodName(property) + "(value)";
+                        call = "." + MethodName(property, nullableBool: !Prefixed) + "(value)";
                     }
                     if (!initializer.EndsWith(";", StringComparison.Ordinal)) { initializer += ";"; }
                     const string leftHeading = "// C# initializer or property";
