@@ -497,7 +497,7 @@ namespace PowerForge.Generators.Fluent {
                             Report(FluentDiagnostics.DelegateWithoutVerb, property, _type.Name, property.Name);
                             return;
                         }
-                        if (ValidName(property, verb) && Claim(property, verb, property.Type)) {
+                        if (ValidName(property, verb) && !Mutated(verb, property.Type) && Claim(property, verb, property.Type)) {
                             AppendMethod(Doc("Sets " + cref + summary, "The callback.", "value") + Example(property), verb, ", " + propertyType + " value", Assign(property, "value"));
                         }
                         return;
@@ -658,7 +658,11 @@ namespace PowerForge.Generators.Fluent {
                 // optional or params. A generated method that also answers name() through defaults would make that call
                 // ambiguous; an exact name() overload would not, since it wins over one filling in defaults. A generic
                 // extension only answers name() when the receiver alone infers its type arguments.
-                private bool AnswersArgless(string name) => Taken(name) || _emitter.Extensions[name].Any(m => m.Parameters.Length > 0
+                private bool AnswersArgless(string name) => Taken(name) || AnswersThroughDefaults(name);
+
+                // An extension for this type that answers name() only through optional or params parameters: a generated method
+                // answering it the same way makes the call ambiguous.
+                private bool AnswersThroughDefaults(string name) => _emitter.Extensions[name].Any(m => m.Parameters.Length > 1
                     && Receives(m.Parameters[0].Type, _type) && m.TypeParameters.All(type => Mentions(m.Parameters[0].Type, type))
                     && m.Parameters.Skip(1).All(parameter => parameter.IsOptional || parameter.IsParams));
 

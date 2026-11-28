@@ -63,7 +63,7 @@ namespace PowerForge.Generators.Fluent {
             "PFF012", "[FluentInline] needs a settings-type property",
             "'{0}.{1}' is marked [FluentInline] but is not a readable, non-nullable property whose type is a fluent settings type of this assembly",
             Category, DiagnosticSeverity.Error, isEnabledByDefault: true);
-    
+
 
         internal static readonly DiagnosticDescriptor InvalidMutator = new DiagnosticDescriptor(
             "PFF013", "[FluentMutator] method has the wrong shape",

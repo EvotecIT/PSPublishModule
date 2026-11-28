@@ -155,8 +155,12 @@ namespace PowerForge.Generators.Fluent {
                 // override that asks for another name gets its own method.
                 private bool CoveredByBase(IMethodSymbol method, string name) {
                     for (IMethodSymbol? declared = method; declared != null; declared = declared.OverriddenMethod) {
-                        if (CoveredByBase(declared.ContainingType) && _emitter.Mutators(declared.ContainingType)
-                            .Any(m => m.Name == name && SymbolEqualityComparer.Default.Equals(m.Method.OriginalDefinition, declared.OriginalDefinition))) {
+                        // A referenced base must have generated that very method: one built with Prefixed naming has none.
+                        INamedTypeSymbol owner = declared.ContainingType;
+                        bool local = SymbolEqualityComparer.Default.Equals(owner.ContainingAssembly, Compilation.Assembly);
+                        if (CoveredByBase(owner) && _emitter.Mutators(owner)
+                            .Any(m => m.Name == name && SymbolEqualityComparer.Default.Equals(m.Method.OriginalDefinition, declared.OriginalDefinition))
+                            && (local || _emitter.GeneratedSignatures(owner.OriginalDefinition)?.Contains(SignatureKey(name, declared.Parameters.Select(p => p.Type))) == true)) {
                             return true;
                         }
                     }
@@ -172,12 +176,21 @@ namespace PowerForge.Generators.Fluent {
                 private void AppendMutator(IMethodSymbol method, string name) {
                     Location? location = _via?.Locations.FirstOrDefault() ?? method.Locations.FirstOrDefault();
                     string member = _via == null ? method.Name : _via.Name + "." + method.Name;
+                    // A sealed generic type's methods declare its type parameters, which a value parameter can't share a name with.
+                    if (_type.IsSealed && method.Parameters.FirstOrDefault(p => _type.TypeParameters.Any(t => t.Name == p.Name)) is IParameterSymbol clash) {
+                        if (_emitter._reportedMutators.Add(method.OriginalDefinition)) {
+                            _emitter._output.ReportDiagnostic(Diagnostic.Create(FluentDiagnostics.InvalidMutator, location ?? Location.None, method.ContainingType.Name, method.Name,
+                                "'" + clash.Name + "' is also a type parameter of '" + _type.Name + "', which the generated method declares; rename the parameter"));
+                        }
+                        return;
+                    }
                     if (!Claim(location, member, name, method.Parameters.Select(p => p.Type).ToArray())) { return; }
                     _mutated.Add(SignatureKey(name, method.Parameters.Select(p => p.Type)));
                     // A single bool without a default reads as a switch: Resolved() sets it. Not when an existing method already
-                    // answers Resolved(): an instance method takes that call first, and a second extension would make it ambiguous,
-                    // so the first parameter is then required too.
+                    // answers Resolved(): an instance method or an exact Resolved() takes that call first. An extension answering it
+                    // through defaults would make it ambiguous, so the first parameter is then required too.
                     bool argless = !AnswersArgless(name);
+                    bool ambiguous = AnswersThroughDefaults(name);
                     bool switchLike = argless && method.Parameters.Length == 1 && IsBool(method.Parameters[0].Type) && !method.Parameters[0].IsOptional;
                     bool shortForm = argless && method.Parameters.Length > 0 && (switchLike || method.Parameters.All(p => p.IsOptional || p.IsParams));
                     if (shortForm && !_generated.Add(name + "()")) {
@@ -190,15 +203,16 @@ namespace PowerForge.Generators.Fluent {
                     doc.Append("        /// <summary>").Append(summary).Append("</summary>\n")
                         .Append("        /// <param name=\"").Append(_receiver.TrimStart('@')).Append("\">The instance.</param>\n");
                     // A params array that must not answer name() is an array here, plus an overload taking at least one item below.
-                    bool splitParams = !argless && method.Parameters.Length == 1 && method.Parameters[0].IsParams;
+                    bool splitParams = ambiguous && method.Parameters.Length == 1 && method.Parameters[0].IsParams;
                     foreach (IParameterSymbol parameter in method.Parameters) {
-                        bool required = !argless && parameter.Ordinal == 0;
+                        bool required = ambiguous && parameter.Ordinal == 0;
                         string? fallback = required ? null : switchLike ? "true" : Emitter.DefaultLiteral(parameter);
                         // string label = null! keeps its non-nullable type, so the call to the method doesn't warn.
                         if (fallback is "null" or "default" && _emitter.Nullable && parameter.Type.IsReferenceType && parameter.Type.NullableAnnotation == NullableAnnotation.NotAnnotated) {
                             fallback = "null!";
                         }
-                        string optional = !required && BareOptional(parameter) ? "[global::System.Runtime.InteropServices.Optional] " : string.Empty;
+                        string optional = (!required && BareOptional(parameter) ? "[global::System.Runtime.InteropServices.Optional] " : string.Empty)
+                            + (required ? string.Empty : CallerInfo(parameter));
                         parameters.Add(optional + (parameter.IsParams && !splitParams ? "params " : string.Empty) + ParameterType(parameter, fallback) + " " + Escape(parameter.Name)
                             + (fallback == null || parameter.IsParams ? string.Empty : " = " + fallback));
                         string text = DocText(method, "param", parameter.Name) ?? "The value.";
@@ -238,6 +252,14 @@ namespace PowerForge.Generators.Fluent {
                             items + "            " + target + "." + Escape(method.Name) + "(value);\n");
                     }
                 }
+
+                // [CallerMemberName] and the other caller-info attributes, so the compiler fills them in for the wrapper's caller as it
+                // would for a direct call.
+                private static string CallerInfo(IParameterSymbol parameter) => string.Concat(parameter.GetAttributes()
+                    .Where(a => a.AttributeClass is { ContainingNamespace: { } ns } type && ns.ToDisplayString() == "System.Runtime.CompilerServices"
+                        && type.Name is "CallerMemberNameAttribute" or "CallerFilePathAttribute" or "CallerLineNumberAttribute" or "CallerArgumentExpressionAttribute")
+                    .Select(a => "[" + a.AttributeClass!.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
+                        + (a.ConstructorArguments.Length == 1 && a.ConstructorArguments[0].Value is string target ? "(" + Builder.LiteralOf(target) + ")" : string.Empty) + "] "));
 
                 // A reference type defaulting to null is annotated nullable where the generated file enables nullable context, so
                 // a project with nullable warnings off (or a method declared with a plain `string s = null`) still compiles cleanly.
