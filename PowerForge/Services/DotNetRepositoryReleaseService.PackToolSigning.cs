@@ -588,6 +588,7 @@ public sealed partial class DotNetRepositoryReleaseService
         }
         foreach (var property in globalProperties)
             args.Add($"-p:{property.Key}={EscapeMsBuildPropertyValue(property.Value)}");
+        args.Add(PackagingPropertyArgument);
 
 #if NET472
         psi.Arguments = BuildWindowsArgumentString(args);
