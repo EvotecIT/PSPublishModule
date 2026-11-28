@@ -900,6 +900,27 @@ public sealed class FluentGeneratorMutatorTests {
         using MemoryStream image = new MemoryStream();
         Assert.True(baseCompilation.Emit(image).Success);
 
+        // The same coincidence under Prefixed naming: AddTitle there is the Titles collection helper, not the mutator.
+        const string prefixedLibrary = """
+            using System.Collections.Generic;
+            using PowerForge.Fluent;
+
+            namespace Sample.Notes {
+                [Fluent]
+                public class Notes {
+                    public List<string> Titles { get; } = new List<string>();
+
+                    [FluentMutator("AddTitle")]
+                    public void InsertTitle(string title) { Titles.Add(title.Trim()); }
+                }
+            }
+            """;
+        (Compilation prefixedCompilation, ImmutableArray<Diagnostic> prefixedDiagnostics) =
+            TestCompiler.Run(prefixedLibrary, LanguageVersion.Latest, new Dictionary<string, string> { ["PowerForgeFluentNaming"] = "Prefixed" }, new FluentGenerator());
+        Assert.Empty(prefixedDiagnostics);
+        using MemoryStream prefixedImage = new MemoryStream();
+        Assert.True(prefixedCompilation.WithAssemblyName("Notes").Emit(prefixedImage).Success);
+
         const string library = """
             using PowerForge.Fluent;
             using Sample.Reports;
@@ -910,21 +931,27 @@ public sealed class FluentGeneratorMutatorTests {
                     public int Zoom { get; set; }
                 }
 
+                // The derived type generates its own AddTitle, which calls the mutator.
+                [Fluent]
+                public sealed class NotePreview : Sample.Notes.Notes {
+                }
+
                 public static class Usage {
-                    public static object[] Run() => new object[] { new ReportPreview().Title("x").Zoom(2).Stored };
+                    public static object[] Run() => new object[] { new ReportPreview().Title("x").Zoom(2).Stored, new NotePreview().AddTitle(" a ").Titles[0] };
                 }
             }
             """;
         (Compilation compilation, ImmutableArray<Diagnostic> diagnostics) = TestCompiler.Run(library, LanguageVersion.Latest, null,
-            new[] { MetadataReference.CreateFromImage(image.ToArray()) }, new FluentGenerator());
+            new[] { MetadataReference.CreateFromImage(image.ToArray()), MetadataReference.CreateFromImage(prefixedImage.ToArray()) }, new FluentGenerator());
         // The base's generic Title covers the derived type, so generating it again would be PFF002.
         Assert.Empty(diagnostics);
 
         Assembly referenced = Assembly.Load(image.ToArray());
-        ResolveEventHandler resolve = (_, args) => args.Name == referenced.FullName ? referenced : null;
+        Assembly notes = Assembly.Load(prefixedImage.ToArray());
+        ResolveEventHandler resolve = (_, args) => args.Name == referenced.FullName ? referenced : args.Name == notes.FullName ? notes : null;
         AppDomain.CurrentDomain.AssemblyResolve += resolve;
         try {
-            Assert.Equal(new object[] { "x" }, Execute(compilation));
+            Assert.Equal(new object[] { "x", "a" }, Execute(compilation));
         } finally {
             AppDomain.CurrentDomain.AssemblyResolve -= resolve;
         }

@@ -112,14 +112,15 @@ namespace PowerForge.Generators.Fluent {
             // Whether a referenced library's convention fluent class for the type (<Type>Fluent, not Prefixed naming's
             // <Namespace>Fluent) has a public extension with this value-parameter key. In that class a property method gives way
             // to a mutator of the same signature, so the method is the mutator's. When the type and its namespace share a name the
-            // two classes coincide: a method there could be a Prefixed property method only when a settable property of that name
-            // and type exists, and then it counts as not generated, so a wrong guess is a PFF002 error rather than a silent write.
+            // two classes coincide: a method whose name Prefixed naming gives one of the type's properties (X, AddX, AddXs, or
+            // Configure) then counts as not generated, so a wrong guess is a PFF002 error rather than a silent write.
             internal bool ConventionGenerated(INamedTypeSymbol type, string key) {
                 type = type.OriginalDefinition;
                 string stem = FluentStem(type);
+                string name = key.Substring(0, key.IndexOf('('));
                 if (stem == (type.ContainingNamespace.IsGlobalNamespace ? "Global" : type.ContainingNamespace.Name)
-                    && BaseTypes(type).SelectMany(t => t.GetMembers()).OfType<IPropertySymbol>()
-                        .Any(p => p.SetMethod?.DeclaredAccessibility == Accessibility.Public && SignatureKey(MethodName(p, nullableBool: false), new[] { p.Type }) == key)) {
+                    && (name == "Configure" || BaseTypes(type).SelectMany(t => t.GetMembers()).OfType<IPropertySymbol>()
+                        .Any(p => name == MethodName(p, nullableBool: false) || name == "Add" + Singular(p) || name == "Add" + p.Name))) {
                     return false;
                 }
                 INamedTypeSymbol? fluent = _compilation.GetTypeByMetadataName(type.ContainingNamespace.IsGlobalNamespace ? stem + "Fluent" : type.ContainingNamespace.ToDisplayString() + "." + stem + "Fluent");
