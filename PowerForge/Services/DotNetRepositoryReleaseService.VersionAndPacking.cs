@@ -419,7 +419,7 @@ private static string? ResolvePackagePath(DotNetRepositoryReleaseSpec spec, DotN
         ProcessStartInfoEncoding.TryApplyUtf8(psi);
 
 #if NET472
-        var args = new List<string> { "pack", csproj, "--configuration", configuration };
+        var args = new List<string> { "pack", csproj, "--configuration", configuration, PackagingPropertyArgument };
         if (usePreparedToolPublishOutput)
             args.Add("-p:" + PreparedToolPublishTargetsProperty);
         if (noBuild)
@@ -444,6 +444,7 @@ private static string? ResolvePackagePath(DotNetRepositoryReleaseSpec spec, DotN
         psi.ArgumentList.Add(csproj);
         psi.ArgumentList.Add("--configuration");
         psi.ArgumentList.Add(configuration);
+        psi.ArgumentList.Add(PackagingPropertyArgument);
         if (usePreparedToolPublishOutput)
             psi.ArgumentList.Add("-p:" + PreparedToolPublishTargetsProperty);
         if (noBuild)
@@ -502,7 +503,7 @@ private static string? ResolvePackagePath(DotNetRepositoryReleaseSpec spec, DotN
         ProcessStartInfoEncoding.TryApplyUtf8(psi);
 
 #if NET472
-        var args = new List<string> { "build", csproj, "--configuration", configuration };
+        var args = new List<string> { "build", csproj, "--configuration", configuration, PackagingPropertyArgument };
         if (forceNonIncremental)
             args.Add("--no-incremental");
         psi.Arguments = BuildWindowsArgumentString(args);
@@ -511,6 +512,7 @@ private static string? ResolvePackagePath(DotNetRepositoryReleaseSpec spec, DotN
         psi.ArgumentList.Add(csproj);
         psi.ArgumentList.Add("--configuration");
         psi.ArgumentList.Add(configuration);
+        psi.ArgumentList.Add(PackagingPropertyArgument);
         if (forceNonIncremental)
             psi.ArgumentList.Add("--no-incremental");
 #endif

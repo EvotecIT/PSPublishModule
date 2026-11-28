@@ -353,7 +353,7 @@ public sealed partial class DotNetRepositoryReleaseService
         var projectPath = Path.GetFullPath(project.CsprojPath);
         var arguments = new List<string>
         {
-            "msbuild", projectPath, "-nologo", "-verbosity:quiet",
+            "msbuild", projectPath, "-nologo", "-verbosity:quiet", PackagingPropertyArgument,
             "-getProperty:TargetFrameworks", "-getProperty:TargetFramework",
             "-getProperty:PackageId", "-getProperty:AssemblyName", "-getProperty:NuspecFile",
             "-getProperty:CentralPackageTransitivePinningEnabled", "-getProperty:SuppressDependenciesWhenPacking",

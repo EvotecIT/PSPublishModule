@@ -46,6 +46,7 @@ public sealed partial class DotNetRepositoryReleaseService
             $"/t:{targetName}",
             "/m",
             "/nr:false",
+            PackagingPropertyArgument,
             logger.IsVerbose ? "/v:n" : "/v:m"
         });
 #else
@@ -54,6 +55,7 @@ public sealed partial class DotNetRepositoryReleaseService
         psi.ArgumentList.Add($"/t:{targetName}");
         psi.ArgumentList.Add("/m");
         psi.ArgumentList.Add("/nr:false");
+        psi.ArgumentList.Add(PackagingPropertyArgument);
         psi.ArgumentList.Add(logger.IsVerbose ? "/v:n" : "/v:m");
 #endif
 
@@ -160,7 +162,8 @@ public sealed partial class DotNetRepositoryReleaseService
             csproj,
             "-nologo",
             $"-getProperty:{propertyName}",
-            $"-p:Configuration={configuration}"
+            $"-p:Configuration={configuration}",
+            PackagingPropertyArgument
         };
         if (!string.IsNullOrWhiteSpace(targetFramework))
             args.Add($"-p:TargetFramework={targetFramework!.Trim()}");

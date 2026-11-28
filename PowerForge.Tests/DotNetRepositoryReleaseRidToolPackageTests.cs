@@ -39,7 +39,9 @@ public sealed class DotNetRepositoryReleaseRidToolPackageTests
             File.WriteAllText(Path.Combine(dependencyDirectory.FullName, "Dependency.cs"), "namespace Sample.Dependency; public static class Dependency { public static string Value => \"sample\"; }");
 
             // The SDK packs a pointer package plus one package per listed runtime. UseAppHost=false keeps the
-            // runtime packages framework-dependent without downloading another platform's app host.
+            // runtime packages framework-dependent without downloading another platform's app host. The runtimes are
+            // listed only for release evaluations, as a tool does to keep ordinary restores light, so every restore,
+            // build, pack and evaluation in the release must carry the packaging property.
             var projectDirectory = Directory.CreateDirectory(Path.Combine(root.FullName, "Sample.Tool"));
             File.WriteAllText(Path.Combine(projectDirectory.FullName, "Sample.Tool.csproj"), """
                 <Project Sdk="Microsoft.NET.Sdk">
@@ -51,6 +53,8 @@ public sealed class DotNetRepositoryReleaseRidToolPackageTests
                     <PackAsTool>true</PackAsTool>
                     <ToolCommandName>sample-tool</ToolCommandName>
                     <UseAppHost>false</UseAppHost>
+                  </PropertyGroup>
+                  <PropertyGroup Condition="'$(PowerForgePackaging)' == 'true'">
                     <ToolPackageRuntimeIdentifiers>linux-x64;any</ToolPackageRuntimeIdentifiers>
                     <RuntimeIdentifiers>$(ToolPackageRuntimeIdentifiers)</RuntimeIdentifiers>
                   </PropertyGroup>
