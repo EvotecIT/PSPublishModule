@@ -352,6 +352,8 @@ public sealed class FluentGeneratorMutatorTests {
                     internal unsafe void SetBuffer(byte* buffer) { }
                     [FluentMutator]
                     internal void SetLevel(Level level) { }
+                    [FluentMutator("ModelFluent")]
+                    internal void SetAlias(int value) { }
                 }
 
                 // The generated methods of a sealed generic type declare T, so a value parameter can't be called T.
@@ -385,9 +387,9 @@ public sealed class FluentGeneratorMutatorTests {
 
         (_, ImmutableArray<Diagnostic> diagnostics) = Run(library);
 
-        // Optional COM interface, static, generic, by-ref, private, badly named, pointer, internal-typed and type-parameter-named
-        // mutators; Size collides with the instance method; two nested types whose containers rule out extension methods.
-        Assert.Equal(new[] { "PFF002", "PFF013", "PFF013", "PFF013", "PFF013", "PFF013", "PFF013", "PFF013", "PFF013", "PFF013", "PFF014", "PFF014" }, diagnostics.Select(d => d.Id).OrderBy(id => id, StringComparer.Ordinal));
+        // Optional COM interface, static, generic, by-ref, private, badly named, pointer, internal-typed, type-parameter-named and
+        // class-named mutators; Size collides with the instance method; two nested types whose containers rule out extension methods.
+        Assert.Equal(new[] { "PFF002", "PFF013", "PFF013", "PFF013", "PFF013", "PFF013", "PFF013", "PFF013", "PFF013", "PFF013", "PFF013", "PFF014", "PFF014" }, diagnostics.Select(d => d.Id).OrderBy(id => id, StringComparer.Ordinal));
         Assert.All(diagnostics, d => Assert.Equal(DiagnosticSeverity.Error, d.Severity));
     }
 
@@ -627,6 +629,19 @@ public sealed class FluentGeneratorMutatorTests {
                     public static string Configure() => new Probe().Origin().Origin;
                 }
 
+                // A params collection gets the same overloads as a params array when Levels() is taken through a default.
+                [Fluent]
+                public sealed class Meter {
+                    public string Log = "";
+
+                    [FluentMutator]
+                    internal void SetLevels(params System.Collections.Generic.List<int> levels) { Log += levels.Count + ";"; }
+                }
+
+                public static class MeterExtensions {
+                    public static Meter Levels(this Meter target, string tag = "") { target.Log += "ext;"; return target; }
+                }
+
                 // Items that are rectangular arrays keep their type: int[][,], not int[,][].
                 [Fluent]
                 public sealed class Plane {
@@ -685,7 +700,8 @@ public sealed class FluentGeneratorMutatorTests {
                             tagger.Log, new Box().Size(TSelf: 3).Width, new Spot().At((1, 2)).At.X,
                             new Memo().Title("y").Layout.Title, new Grid().Rows().Rows(new[] { 1 }, new[] { 2 }).Log, new Lamp().Lit().On,
                             new Plane().Cells().Cells(new int[1, 1], new int[2, 2]).Log, new Letter().Title("z").Title, new Knob().Level(3).Value,
-                            new Caption().Format(s => s + "!").Formatting!("a"), new Gauge().Mode().Mode(level: 3).Log, Probes.Configure() };
+                            new Caption().Format(s => s + "!").Formatting!("a"), new Gauge().Mode().Mode(level: 3).Log, Probes.Configure(),
+                            new Meter().Levels().Levels(3, 4).Levels(new System.Collections.Generic.List<int> { 5 }).Log };
                     }
                 }
             }
@@ -694,7 +710,7 @@ public sealed class FluentGeneratorMutatorTests {
         (Compilation compilation, ImmutableArray<Diagnostic> diagnostics) = Run(library);
         Assert.Empty(diagnostics);
 
-        Assert.Equal(new object[] { "circle1;circle2;", 1, true, "dynamic;", "layout:x", "", "ints;a;b,c;d;", 3, 10, "layout:y", "ext;2;", true, "ext;2;", "z", 6, "[a!]", "exact;x3;", "Configure" }, Execute(compilation));
+        Assert.Equal(new object[] { "circle1;circle2;", 1, true, "dynamic;", "layout:x", "", "ints;a;b,c;d;", 3, 10, "layout:y", "ext;2;", true, "ext;2;", "z", 6, "[a!]", "exact;x3;", "Configure", "ext;2;1;" }, Execute(compilation));
     }
 
     [Fact]
@@ -728,6 +744,17 @@ public sealed class FluentGeneratorMutatorTests {
                     private List<string> _marks = new List<string>();
                     public List<string> Marks { get { var list = new List<string>(); _marks = Keep switch { true => list, false => _marks }; return list; } }
                     public int MarkCount => _marks.Count;
+
+                    // A user-defined conversion hands out the cached settings, so Options(o => ...) stays.
+                    public Settings Options => (Settings)new Token();
+                }
+
+                public sealed class Token { }
+
+                public sealed class Settings {
+                    public static readonly Settings Cached = new Settings();
+                    public int Value { get; set; }
+                    public static explicit operator Settings(Token token) => Cached;
                 }
 
                 public sealed class Pinboard : Board {
@@ -750,8 +777,8 @@ public sealed class FluentGeneratorMutatorTests {
 
                 public static class Usage {
                     public static object[] Run() {
-                        Pinboard board = new Pinboard().Item("a").Tag("b").Note("n").Mark("m");
-                        return new object[] { board.Count, board.Tags.Count, new Library().Book("x").Books.Count, board.NoteCount, board.MarkCount };
+                        Pinboard board = new Pinboard().Item("a").Tag("b").Note("n").Mark("m").Options(o => o.Value = 7);
+                        return new object[] { board.Count, board.Tags.Count, new Library().Book("x").Books.Count, board.NoteCount, board.MarkCount, Settings.Cached.Value };
                     }
                 }
             }
@@ -760,7 +787,7 @@ public sealed class FluentGeneratorMutatorTests {
         (Compilation compilation, ImmutableArray<Diagnostic> diagnostics) = Run(library);
         Assert.Empty(diagnostics);
 
-        Assert.Equal(new object[] { 1, 1, 1, 1, 1 }, Execute(compilation));
+        Assert.Equal(new object[] { 1, 1, 1, 1, 1, 7 }, Execute(compilation));
     }
 
     [Fact]
@@ -769,14 +796,30 @@ public sealed class FluentGeneratorMutatorTests {
             using PowerForge.Fluent;
 
             namespace Sample.Blocks {
-                // Prefixed naming generates Height(int) but no mutator methods.
+                // Prefixed naming generates Height(int) and Level(int) for the properties, but no mutator methods.
                 [Fluent]
                 public class Shape {
                     public int Height { get; set; }
+                    public int Level { get; set; }
                     public int Stored;
 
                     [FluentMutator]
                     public void SetLevel(int level) { Stored = level; }
+                }
+
+                public sealed class Frame {
+                    public int Size { get; set; }
+                    public int Stored;
+
+                    [FluentMutator]
+                    public void SetDepth(int depth) { Stored = depth; }
+                }
+
+                // Prefixed naming generates no inline methods either.
+                [Fluent]
+                public class Board {
+                    [FluentInline]
+                    public Frame Frame { get; } = new Frame();
                 }
             }
             """;
@@ -793,11 +836,16 @@ public sealed class FluentGeneratorMutatorTests {
             namespace Sample {
                 [Fluent]
                 public sealed class Tile : Shape {
-                    public int Level { get; set; }
+                }
+
+                // Board's inlined SetDepth produced no Depth(int), so Wall keeps its own Depth setter.
+                [Fluent]
+                public sealed class Wall : Board {
+                    public int Depth { get; set; }
                 }
 
                 public static class Usage {
-                    public static object[] Run() { Tile tile = new Tile().Level(3); return new object[] { tile.Stored, tile.Level }; }
+                    public static object[] Run() { Tile tile = new Tile().Level(3); return new object[] { tile.Stored, tile.Level, new Wall().Depth(4).Depth }; }
                 }
             }
             """;
@@ -810,7 +858,7 @@ public sealed class FluentGeneratorMutatorTests {
         AppDomain.CurrentDomain.AssemblyResolve += resolve;
         try {
             // The base generated no Level method, so Tile gets one, and it calls the inherited mutator.
-            Assert.Equal(new object[] { 3, 0 }, Execute(compilation));
+            Assert.Equal(new object[] { 3, 0, 4 }, Execute(compilation));
         } finally {
             AppDomain.CurrentDomain.AssemblyResolve -= resolve;
         }
@@ -828,6 +876,9 @@ public sealed class FluentGeneratorMutatorTests {
 
                     [FluentMutator]
                     internal void SetLabel(string label = null!) { Label = label ?? "none"; }
+
+                    [FluentMutator]
+                    internal void SetData(dynamic? data) { }
                 }
 
                 public static class Usage {
@@ -839,7 +890,7 @@ public sealed class FluentGeneratorMutatorTests {
         (Compilation compilation, ImmutableArray<Diagnostic> diagnostics) = Run(library);
         Assert.Empty(diagnostics);
 
-        // The generated call must not pass a string? to the non-nullable parameter (CS8604) under warnings as errors.
+        // The generated calls must not pass a string? to the non-nullable parameter (CS8604) or cast a dynamic? to object (CS8600).
         Assert.Empty(compilation.GetDiagnostics().Where(d => d.Severity >= DiagnosticSeverity.Warning));
         Assert.Equal(new object[] { "none", "a" }, Execute(compilation));
     }

@@ -109,6 +109,20 @@ namespace PowerForge.Generators.Fluent {
                 return result;
             }
 
+            // Whether a referenced library's convention fluent class for the type (<Type>Fluent, not Prefixed naming's
+            // <Namespace>Fluent) has a public extension with this value-parameter key. In that class a property method gives way
+            // to a mutator of the same signature, so the method is the mutator's.
+            internal bool ConventionGenerated(INamedTypeSymbol type, string key) {
+                type = type.OriginalDefinition;
+                string stem = FluentStem(type);
+                if (stem == (type.ContainingNamespace.IsGlobalNamespace ? "Global" : type.ContainingNamespace.Name)) {
+                    return false;
+                }
+                INamedTypeSymbol? fluent = _compilation.GetTypeByMetadataName(type.ContainingNamespace.IsGlobalNamespace ? stem + "Fluent" : type.ContainingNamespace.ToDisplayString() + "." + stem + "Fluent");
+                return fluent != null && fluent.GetMembers().OfType<IMethodSymbol>().Any(m => m.IsExtensionMethod && m.DeclaredAccessibility == Accessibility.Public
+                    && m.Parameters.Length > 0 && Receives(m.Parameters[0].Type, type) && SignatureKey(m.Name, m.Parameters.Skip(1).Select(p => p.Type)) == key);
+            }
+
             // The public preset extension (name(this T)) a referenced library generated for its settings type, or null.
             internal IMethodSymbol? ReferencedPreset(INamedTypeSymbol option, string name) =>
                 SymbolEqualityComparer.Default.Equals(option.ContainingAssembly, _compilation.Assembly) ? null
@@ -162,15 +176,21 @@ namespace PowerForge.Generators.Fluent {
                         // A covered property's methods are the ones its generated base declaration emits, so that declaration
                         // decides whether it is inlined, not an override's own attributes.
                         IPropertySymbol declaring = property;
-                        if (CoveredByBase(property)) {
+                        bool covered = CoveredByBase(property);
+                        if (covered) {
                             while (declaring.OverriddenProperty != null) { declaring = declaring.OverriddenProperty; }
                         }
                         if (Attribute(declaring, FluentAttributes.Inline) == null || InlineType(declaring) is not INamedTypeSymbol option
                             || !Forced(declaring) && FreshGetterReason(declaring, Compilation) != null) {
                             continue;
                         }
+                        // A referenced base reserves only what it generated: one built with Prefixed naming has no inline methods.
+                        bool local = SymbolEqualityComparer.Default.Equals(declaring.ContainingType.ContainingAssembly, Compilation.Assembly);
                         foreach ((IMethodSymbol method, string name) in _emitter.Mutators(option)) {
-                            _mutated.Add(SignatureKey(name, method.Parameters.Select(p => p.Type)));
+                            string key = SignatureKey(name, method.Parameters.Select(p => p.Type));
+                            if (!covered || local || _emitter.ConventionGenerated(declaring.ContainingType, key)) {
+                                _mutated.Add(key);
+                            }
                         }
                     }
                 }

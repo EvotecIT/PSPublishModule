@@ -71,11 +71,15 @@ namespace PowerForge.Generators.Fluent {
         }
 
         private static string? Fresh(ExpressionSyntax expression, SemanticModel model, int depth) {
+            // A user-defined conversion, implicit or cast, can hand out a kept object whatever it converts.
+            if (model.GetConversion(expression).IsUserDefined) {
+                return null;
+            }
             switch (expression) {
                 case ParenthesizedExpressionSyntax parenthesized:
                     return Fresh(parenthesized.Expression, model, depth);
                 case CastExpressionSyntax cast:
-                    return Fresh(cast.Expression, model, depth);
+                    return model.GetSymbolInfo(cast).Symbol is IMethodSymbol { MethodKind: MethodKind.Conversion } ? null : Fresh(cast.Expression, model, depth);
                 case PostfixUnaryExpressionSyntax suppressed when suppressed.IsKind(SyntaxKind.SuppressNullableWarningExpression):
                     return Fresh(suppressed.Operand, model, depth);
                 case BinaryExpressionSyntax binary when binary.IsKind(SyntaxKind.AsExpression):

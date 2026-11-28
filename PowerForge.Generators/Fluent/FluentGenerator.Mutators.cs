@@ -160,7 +160,7 @@ namespace PowerForge.Generators.Fluent {
                         bool local = SymbolEqualityComparer.Default.Equals(owner.ContainingAssembly, Compilation.Assembly);
                         if (CoveredByBase(owner) && _emitter.Mutators(owner)
                             .Any(m => m.Name == name && SymbolEqualityComparer.Default.Equals(m.Method.OriginalDefinition, declared.OriginalDefinition))
-                            && (local || _emitter.GeneratedSignatures(owner.OriginalDefinition)?.Contains(SignatureKey(name, declared.Parameters.Select(p => p.Type))) == true)) {
+                            && (local || _emitter.ConventionGenerated(owner, SignatureKey(name, declared.Parameters.Select(p => p.Type))))) {
                             return true;
                         }
                     }
@@ -181,6 +181,13 @@ namespace PowerForge.Generators.Fluent {
                         if (_emitter._reportedMutators.Add(method.OriginalDefinition)) {
                             _emitter._output.ReportDiagnostic(Diagnostic.Create(FluentDiagnostics.InvalidMutator, location ?? Location.None, method.ContainingType.Name, method.Name,
                                 "'" + clash.Name + "' is also a type parameter of '" + _type.Name + "', which the generated method declares; rename the parameter"));
+                        }
+                        return;
+                    }
+                    if (name == _fluentClass) {
+                        if (_emitter._reportedMutators.Add(method.OriginalDefinition)) {
+                            _emitter._output.ReportDiagnostic(Diagnostic.Create(FluentDiagnostics.InvalidMutator, location ?? Location.None, method.ContainingType.Name, method.Name,
+                                "'" + name + "' is the name of the generated class, which a method in it can't have; choose another name"));
                         }
                         return;
                     }
@@ -226,7 +233,8 @@ namespace PowerForge.Generators.Fluent {
                         target = "((" + method.ContainingType.WithNullableAnnotation(NullableAnnotation.NotAnnotated).ToDisplayString(TypeFormat) + ")" + target + ")";
                     }
                     // A dynamic argument would bind at run time, possibly to another overload; as object it binds to this method.
-                    string arguments = string.Join(", ", method.Parameters.Select(p => (p.Type.TypeKind == TypeKind.Dynamic ? "(object)" : string.Empty) + Escape(p.Name)));
+                    string arguments = string.Join(", ", method.Parameters.Select(p => (p.Type.TypeKind != TypeKind.Dynamic ? string.Empty
+                        : _emitter.Nullable && p.Type.NullableAnnotation == NullableAnnotation.Annotated ? "(object?)" : "(object)") + Escape(p.Name)));
                     AppendMethod(doc.ToString(), name, string.Concat(parameters.Select(p => ", " + p)),
                         "            " + target + "." + Escape(method.Name) + "(" + arguments + ");\n");
                     if (splitParams && method.Parameters[0].Type is IArrayTypeSymbol array && Claim(location, member, name, array.ElementType, array)) {
@@ -250,7 +258,29 @@ namespace PowerForge.Generators.Fluent {
                             + "        /// <returns>The same instance.</returns>\n";
                         AppendMethod(itemsDoc, name, ", " + element + " item, params " + arrayType + " items",
                             items + "            " + target + "." + Escape(method.Name) + "(value);\n");
+                    } else if (splitParams && CollectionElement(method.Parameters[0].Type) is ITypeSymbol item
+                        && Claim(location, member, name, item, Compilation.CreateArrayTypeSymbol(item))) {
+                        // A params collection (List<T>, IEnumerable<T>, a span) gets the same at-least-one-item overload, built with
+                        // a collection expression, which any params collection type accepts.
+                        string element = item.ToDisplayString(TypeFormat);
+                        string itemsDoc = "        /// <summary>" + summary + "</summary>\n"
+                            + "        /// <param name=\"" + _receiver.TrimStart('@') + "\">The instance.</param>\n"
+                            + "        /// <param name=\"item\">The first item.</param>\n"
+                            + "        /// <param name=\"items\">The other items.</param>\n"
+                            + "        /// <returns>The same instance.</returns>\n";
+                        AppendMethod(itemsDoc, name, ", " + element + " item, params " + element + "[] items",
+                            "            " + target + "." + Escape(method.Name) + "([item, .. (items ?? global::System.Array.Empty<" + element + ">())]);\n");
                     }
+                }
+
+                // The item type of a params collection: the type argument of a span, or of the IEnumerable<T> it implements.
+                private static ITypeSymbol? CollectionElement(ITypeSymbol type) {
+                    if (type is INamedTypeSymbol { TypeArguments.Length: 1 } span && span.ContainingNamespace?.ToDisplayString() == "System"
+                        && span.Name is "Span" or "ReadOnlySpan") {
+                        return span.TypeArguments[0];
+                    }
+                    return new[] { type }.Concat(type.AllInterfaces).OfType<INamedTypeSymbol>()
+                        .FirstOrDefault(t => t.OriginalDefinition.SpecialType == SpecialType.System_Collections_Generic_IEnumerable_T)?.TypeArguments[0];
                 }
 
                 // [CallerMemberName] and the other caller-info attributes, so the compiler fills them in for the wrapper's caller as it
