@@ -674,11 +674,20 @@ namespace PowerForge.Generators.Fluent {
                 // extension only answers name() when the receiver alone infers its type arguments.
                 private bool AnswersArgless(string name) => Taken(name) || AnswersThroughDefaults(name);
 
-                // An extension for this type that answers name() only through optional or params parameters: a generated method
-                // answering it the same way makes the call ambiguous.
-                private bool AnswersThroughDefaults(string name) => _emitter.Extensions[name].Any(m => m.Parameters.Length > 1
-                    && Receives(m.Parameters[0].Type, _type) && m.TypeParameters.All(type => Mentions(m.Parameters[0].Type, type))
+                // An extension that answers name() only through optional or params parameters, for exactly this type and in its
+                // namespace, where callers of the generated methods see it too: a generated method answering name() the same way
+                // makes that call ambiguous. One for a base type, or in another namespace, loses to the generated method or isn't
+                // in scope, so it changes nothing. So does any of them for a type that can be derived from: its generated methods are
+                // generic over TSelf, and a non-generic extension for the same receiver wins that tie without ambiguity.
+                private bool AnswersThroughDefaults(string name) => _type.IsSealed && _emitter.Extensions[name].Any(m => m.Parameters.Length > 1
+                    && ExactlyReceives(m.Parameters[0].Type) && m.TypeParameters.All(type => Mentions(m.Parameters[0].Type, type))
+                    && SymbolEqualityComparer.Default.Equals(m.ContainingNamespace, _type.ContainingNamespace)
                     && m.Parameters.Skip(1).All(parameter => parameter.IsOptional || parameter.IsParams));
+
+                // A receiver that is this type, or a type parameter constrained to it.
+                private bool ExactlyReceives(ITypeSymbol receiver) => receiver is ITypeParameterSymbol parameter
+                    ? parameter.ConstraintTypes.Any(constraint => SymbolEqualityComparer.Default.Equals(constraint.OriginalDefinition, _type.OriginalDefinition))
+                    : SymbolEqualityComparer.Default.Equals(receiver.OriginalDefinition, _type.OriginalDefinition);
 
                 private static bool Mentions(ITypeSymbol type, ITypeParameterSymbol parameter) => type switch {
                     ITypeParameterSymbol candidate => SymbolEqualityComparer.Default.Equals(candidate, parameter),

@@ -153,14 +153,18 @@ namespace PowerForge.Generators.Fluent {
                 // The method, or a base declaration it overrides, is a mutator of a generated base that can be derived from, under
                 // the same name: the base's generic method covers this type too, and its call still dispatches to the override. An
                 // override that asks for another name gets its own method.
+                // Any generated base counts, not only the declaring type: an unmarked abstract Model declaring SetDepth is covered for
+                // Button by the Depth method its marked base Control generated.
                 private bool CoveredByBase(IMethodSymbol method, string name) {
+                    HashSet<IMethodSymbol> chain = new HashSet<IMethodSymbol>(SymbolEqualityComparer.Default);
                     for (IMethodSymbol? declared = method; declared != null; declared = declared.OverriddenMethod) {
+                        chain.Add(declared.OriginalDefinition);
+                    }
+                    foreach (INamedTypeSymbol owner in BaseTypes(_type).Skip(1)) {
                         // A referenced base must have generated that very method: one built with Prefixed naming has none.
-                        INamedTypeSymbol owner = declared.ContainingType;
                         bool local = SymbolEqualityComparer.Default.Equals(owner.ContainingAssembly, Compilation.Assembly);
-                        if (CoveredByBase(owner) && _emitter.Mutators(owner)
-                            .Any(m => m.Name == name && SymbolEqualityComparer.Default.Equals(m.Method.OriginalDefinition, declared.OriginalDefinition))
-                            && (local || _emitter.ConventionGenerated(owner, SignatureKey(name, declared.Parameters.Select(p => p.Type))))) {
+                        if (CoveredByBase(owner) && _emitter.Mutators(owner).Any(m => m.Name == name && chain.Contains(m.Method.OriginalDefinition)
+                            && (local || _emitter.ConventionGenerated(owner, SignatureKey(name, m.Method.Parameters.Select(p => p.Type)))))) {
                             return true;
                         }
                     }
