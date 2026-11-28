@@ -10,7 +10,7 @@ namespace PowerForge.Generators.Fluent {
     /// The model rules every PowerForge generator shares: which types and properties count, how they are named, and what
     /// their documentation says, so fluent methods and cmdlet parameters always describe the same surface.
     /// </summary>
-    internal static class FluentModel {
+    internal static partial class FluentModel {
         internal static IEnumerable<INamedTypeSymbol> AllTypes(INamespaceSymbol ns) {
             foreach (INamespaceOrTypeSymbol member in ns.GetMembers()) {
                 if (member is INamespaceSymbol child) {
@@ -26,6 +26,41 @@ namespace PowerForge.Generators.Fluent {
         internal static bool IsCandidate(INamedTypeSymbol type) =>
             type.TypeKind == TypeKind.Class && !type.IsAbstract && !type.IsStatic && (!type.IsGenericType || type.IsSealed)
             && type.DeclaredAccessibility == Accessibility.Public && type.ContainingType == null && !HasNoFluent(type);
+
+        /// <summary>A public concrete nested class marked [Fluent] itself, whose containing types are public and not generic.</summary>
+        internal static bool IsNestedFluent(INamedTypeSymbol type) =>
+            type.ContainingType != null && type.TypeKind == TypeKind.Class && !type.IsAbstract && !type.IsStatic && (!type.IsGenericType || type.IsSealed)
+            && type.DeclaredAccessibility == Accessibility.Public && HasFluent(type) && !HasNoFluent(type) && NestingProblem(type) == null;
+
+        /// <summary>Why a nested type cannot get extension methods (they live in a top-level class), or null when it can.</summary>
+        internal static string? NestingProblem(INamedTypeSymbol type) {
+            for (INamedTypeSymbol? container = type.ContainingType; container != null; container = container.ContainingType) {
+                if (container.IsGenericType) {
+                    return "is nested in the generic type '" + container.Name + "'";
+                }
+                if (container.DeclaredAccessibility != Accessibility.Public) {
+                    return "is nested in '" + container.Name + "', which is not public";
+                }
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// The name stem of a type's generated <c>&lt;Stem&gt;Fluent</c> class: the type's name, prefixed by its containing types'
+        /// names for a nested type (<c>TocBlock.Entry</c> becomes <c>TocBlockEntry</c>).
+        /// </summary>
+        internal static string FluentStem(INamedTypeSymbol type) {
+            string stem = type.Name;
+            for (INamedTypeSymbol? container = type.ContainingType; container != null; container = container.ContainingType) {
+                stem = container.Name + stem;
+            }
+            return stem;
+        }
+
+        /// <summary>bool or bool?.</summary>
+        internal static bool IsBool(ITypeSymbol type) =>
+            type.SpecialType == SpecialType.System_Boolean
+            || type is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T } nullable && nullable.TypeArguments[0].SpecialType == SpecialType.System_Boolean;
 
         /// <summary>Public instance properties, declared or inherited, without indexers, obsolete or [NoFluent] members.</summary>
         internal static IEnumerable<IPropertySymbol> Properties(INamedTypeSymbol type) {
@@ -86,34 +121,44 @@ namespace PowerForge.Generators.Fluent {
         }
 
         // ": " and the property's own summary (crefs are already resolved to IDs; parameter references become code), or "."
-        internal static string Summary(IPropertySymbol property) {
-            string? xml = property.GetDocumentationCommentXml();
+        internal static string Summary(ISymbol property) {
+            string? inner = DocText(property, "summary", null);
+            return inner == null ? "." : ": " + inner;
+        }
+
+        /// <summary>
+        /// The text of a documentation element (<c>summary</c>, or <c>param</c> with its name) as one line, crefs resolved and
+        /// parameter references turned into code; null when the symbol has none.
+        /// </summary>
+        internal static string? DocText(ISymbol symbol, string element, string? name) {
+            string? xml = symbol.GetDocumentationCommentXml();
             if (string.IsNullOrWhiteSpace(xml)) {
-                return ".";
+                return null;
             }
             try {
-                XElement? summary = XDocument.Parse(xml).Descendants("summary").FirstOrDefault();
-                if (summary == null) {
-                    return ".";
+                XElement? found = XDocument.Parse(xml).Descendants(element).FirstOrDefault(e => name == null || (string?)e.Attribute("name") == name);
+                if (found == null) {
+                    return null;
                 }
-                foreach (XElement reference in summary.Descendants().Where(e => e.Name.LocalName == "paramref" || e.Name.LocalName == "typeparamref").ToList()) {
+                foreach (XElement reference in found.Descendants().Where(e => e.Name.LocalName == "paramref" || e.Name.LocalName == "typeparamref").ToList()) {
                     reference.ReplaceWith(new XElement("c", (string?)reference.Attribute("name") ?? string.Empty));
                 }
-                string inner = string.Concat(summary.Nodes().Select(n => n.ToString(SaveOptions.DisableFormatting)));
+                string inner = string.Concat(found.Nodes().Select(n => n.ToString(SaveOptions.DisableFormatting)));
                 inner = string.Join(" ", inner.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).Select(l => l.Trim())).Trim();
-                return inner.Length == 0 ? "." : ": " + inner;
+                return inner.Length == 0 ? null : inner;
             } catch (System.Xml.XmlException) {
-                return ".";
+                return null;
             }
         }
 
-        // [Fluent("Name")] on the property, otherwise its name, without the Is prefix of a bool.
-        internal static string MethodName(IPropertySymbol property) {
+        // [Fluent("Name")] on the property, otherwise its name, without the Is prefix of a bool, and of a bool? where nullableBool
+        // is set (convention fluent methods; Prefixed naming and cmdlet parameters keep the bool-only rule).
+        internal static string MethodName(IPropertySymbol property, bool nullableBool = true) {
             string? declared = NamedArgument(Attribute(property, FluentAttributes.Fluent));
             if (declared != null) {
                 return declared;
             }
-            return property.Type.SpecialType == SpecialType.System_Boolean && property.Name.Length > 2 && property.Name.StartsWith("Is", StringComparison.Ordinal) && char.IsUpper(property.Name[2])
+            return (nullableBool ? IsBool(property.Type) : property.Type.SpecialType == SpecialType.System_Boolean) && property.Name.Length > 2 && property.Name.StartsWith("Is", StringComparison.Ordinal) && char.IsUpper(property.Name[2])
                 ? property.Name.Substring(2) : property.Name;
         }
 
@@ -147,6 +192,33 @@ namespace PowerForge.Generators.Fluent {
                 return name.Substring(0, name.Length - 2);
             }
             return name.Substring(0, name.Length - 1);
+        }
+
+        /// <summary>
+        /// The key a generated method's value parameters are compared by, equal for identity-convertible types: C# signatures
+        /// ignore nullable annotations and tuple element names, and <c>dynamic</c> is <c>object</c> to overload resolution.
+        /// </summary>
+        internal static string SignatureKey(string name, IEnumerable<ITypeSymbol> parameters) =>
+            name + "(" + string.Join(", ", parameters.Select(TypeKey)) + ")";
+
+        private static readonly SymbolDisplayFormat QualifiedName = new SymbolDisplayFormat(
+            globalNamespaceStyle: SymbolDisplayGlobalNamespaceStyle.Included,
+            typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypesAndNamespaces,
+            genericsOptions: SymbolDisplayGenericsOptions.None,
+            miscellaneousOptions: SymbolDisplayMiscellaneousOptions.UseSpecialTypes | SymbolDisplayMiscellaneousOptions.EscapeKeywordIdentifiers);
+
+        private static string TypeKey(ITypeSymbol type) {
+            switch (type) {
+                case IArrayTypeSymbol array:
+                    return TypeKey(array.ElementType) + "[" + new string(',', array.Rank - 1) + "]";
+                case INamedTypeSymbol { IsTupleType: true } tuple:
+                    return "(" + string.Join(", ", tuple.TupleElements.Select(element => TypeKey(element.Type))) + ")";
+                case INamedTypeSymbol named:
+                    string qualified = named.ContainingType != null ? TypeKey(named.ContainingType) + "." + Escape(named.Name) : named.ToDisplayString(QualifiedName);
+                    return named.TypeArguments.Length == 0 ? qualified : qualified + "<" + string.Join(", ", named.TypeArguments.Select(TypeKey)) + ">";
+                default:
+                    return type.TypeKind == TypeKind.Dynamic ? "object" : type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            }
         }
     }
 }

@@ -8,12 +8,16 @@ namespace Microsoft.CodeAnalysis {
 namespace PowerForge.Fluent {
     /// <summary>
     /// On a class, base class or interface: generates fluent methods for that type and every public concrete type in this
-    /// assembly that derives from it, plus the public settings types reachable from their properties.
+    /// assembly that derives from it, plus the public settings types reachable from their properties. A public nested
+    /// class gets methods when it carries the attribute itself.
+    /// On a struct: generates by-value extensions for its <see cref="FluentMutatorAttribute"/> methods, returning the same
+    /// handle.
     /// On a property: names its fluent method. A delegate-valued property must name one, because a method named after
-    /// the property would never be called.
+    /// the property would never be called. On a property whose getter builds a new object, it also asks for the in-place
+    /// and add-item methods the generator otherwise leaves out.
     /// </summary>
     [global::Microsoft.CodeAnalysis.Embedded]
-    [global::System.AttributeUsage(global::System.AttributeTargets.Class | global::System.AttributeTargets.Interface | global::System.AttributeTargets.Property, Inherited = false)]
+    [global::System.AttributeUsage(global::System.AttributeTargets.Class | global::System.AttributeTargets.Struct | global::System.AttributeTargets.Interface | global::System.AttributeTargets.Property, Inherited = false)]
     internal sealed class FluentAttribute : global::System.Attribute {
         public FluentAttribute() {
         }
@@ -74,6 +78,26 @@ namespace PowerForge.Fluent {
         public string Summary { get; set; }
     }
 
+    /// <summary>
+    /// On a public or internal instance method of a fluent type: generates the fluent method <c>name</c> (by default the
+    /// method's name without its <c>Set</c> prefix) with the same parameters and defaults, which calls this method and
+    /// returns the same instance. A single <c>bool</c> or <c>bool?</c> parameter without a default gets <c>= true</c>.
+    /// Use it when a value is written through a method rather than a public setter, or takes several values at once.
+    /// A property method with the same signature gives way to it.
+    /// </summary>
+    [global::Microsoft.CodeAnalysis.Embedded]
+    [global::System.AttributeUsage(global::System.AttributeTargets.Method, Inherited = false)]
+    internal sealed class FluentMutatorAttribute : global::System.Attribute {
+        public FluentMutatorAttribute() {
+        }
+
+        public FluentMutatorAttribute(string name) {
+            Name = name;
+        }
+
+        public string Name { get; }
+    }
+
     /// <summary>Leaves a property, or a whole type, out of the generated methods.</summary>
     [global::Microsoft.CodeAnalysis.Embedded]
     [global::System.AttributeUsage(global::System.AttributeTargets.Class | global::System.AttributeTargets.Property, Inherited = false)]
@@ -97,7 +121,7 @@ namespace PowerForge.Fluent {
     /// than a property setter. A property with the same name gets no generated methods of its own.
     /// </summary>
     [global::Microsoft.CodeAnalysis.Embedded]
-    [global::System.AttributeUsage(global::System.AttributeTargets.Class | global::System.AttributeTargets.Interface, AllowMultiple = true, Inherited = false)]
+    [global::System.AttributeUsage(global::System.AttributeTargets.Class | global::System.AttributeTargets.Struct | global::System.AttributeTargets.Interface, AllowMultiple = true, Inherited = false)]
     internal sealed class FluentForwardAttribute : global::System.Attribute {
         public FluentForwardAttribute(string name, global::System.Type type, string method) {
             Name = name;

@@ -25,6 +25,7 @@ public sealed class FluentCmdletGeneratorTests {
                 /// <summary>The chart title.</summary>
                 public string? Title { get; set; }
                 public bool IsVisible { get; set; }
+                public bool? IsPinned { get; set; }
                 public int Width { get; set; }
                 public Legend Legend { get; set; } = new();
                 public List<string> Tags { get; } = new();
@@ -68,7 +69,7 @@ public sealed class FluentCmdletGeneratorTests {
         using PowerShell powerShell = PowerShell.Create();
         powerShell.AddCommand("Import-Module").AddParameter("Assembly", module).Invoke();
         powerShell.Commands.Clear();
-        powerShell.AddScript("New-SampleChart 'orders' -Title 'Orders' -Visible -Legend @{ Position = 'Bottom'; Font = @{ Size = '12' } } -Tags a, b -Tone Warning -Width 300");
+        powerShell.AddScript("New-SampleChart 'orders' -Title 'Orders' -Visible -IsPinned -Legend @{ Position = 'Bottom'; Font = @{ Size = '12' } } -Tags a, b -Tone Warning -Width 300");
 
         dynamic chart = powerShell.Invoke().Single().BaseObject;
 
@@ -76,6 +77,8 @@ public sealed class FluentCmdletGeneratorTests {
         Assert.Equal("orders", (string)chart.Id);
         Assert.Equal("Orders", (string)chart.Title);
         Assert.True((bool)chart.IsVisible);
+        // A bool? keeps its property name as the parameter name; only fluent methods drop the Is.
+        Assert.True((bool?)chart.IsPinned);
         Assert.Equal(300, (int)chart.Width);
         Assert.Equal("Bottom", (string)chart.Legend.Position);
         Assert.Equal(12, (int)chart.Legend.Font.Size);

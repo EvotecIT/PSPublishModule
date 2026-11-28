@@ -73,7 +73,7 @@ namespace PowerForge.Generators.Fluent {
 
             // The fluent classes a library generates for these types: one per type, or one per namespace in Prefixed naming.
             private List<INamedTypeSymbol> FluentClasses(IEnumerable<INamedTypeSymbol> types) => types
-                .SelectMany(t => new[] { t.Name, t.ContainingNamespace.IsGlobalNamespace ? "Global" : t.ContainingNamespace.Name }
+                .SelectMany(t => new[] { FluentStem(t), t.ContainingNamespace.IsGlobalNamespace ? "Global" : t.ContainingNamespace.Name }
                     .Select(stem => t.ContainingNamespace.IsGlobalNamespace ? stem + "Fluent" : t.ContainingNamespace.ToDisplayString() + "." + stem + "Fluent"))
                 .Distinct(StringComparer.Ordinal).Select(name => _compilation.GetTypeByMetadataName(name)).Where(type => type != null).Select(type => type!).ToList();
 
@@ -100,13 +100,36 @@ namespace PowerForge.Generators.Fluent {
                 foreach (IMethodSymbol method in methods) {
                     List<IParameterSymbol> values = method.Parameters.Skip(1).ToList();
                     result ??= new HashSet<string>(StringComparer.Ordinal);
-                    result.Add(method.Name + "(" + string.Join(", ", values.Select(parameter => parameter.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat))) + ")");
+                    result.Add(SignatureKey(method.Name, values.Select(parameter => parameter.Type)));
                     if (values.Count > 0 && values.All(parameter => parameter.IsOptional)) {
                         result.Add(method.Name + "()");
                     }
                 }
                 _referencedSignatures[type] = result;
                 return result;
+            }
+
+            // Whether a referenced library's convention fluent class for the type (<Type>Fluent, not Prefixed naming's
+            // <Namespace>Fluent) has a public extension with this value-parameter key. In that class a property method gives way
+            // to a mutator of the same signature, so the method is the mutator's. When the type and its namespace share a name the
+            // two classes coincide: unless the library marks its output as convention, a method whose name Prefixed naming gives
+            // one of the type's properties (X, AddX, AddXs, or Configure) then counts as not generated, so a wrong guess is a
+            // PFF002 error rather than a silent write.
+            internal bool ConventionGenerated(INamedTypeSymbol type, string key) {
+                type = type.OriginalDefinition;
+                string stem = FluentStem(type);
+                string name = key.Substring(0, key.IndexOf('('));
+                // A library built by a generator that marks its convention output needs no guessing.
+                bool convention = type.ContainingAssembly.GetAttributes().Any(a => a.AttributeClass?.ToDisplayString() == "System.Reflection.AssemblyMetadataAttribute"
+                    && a.ConstructorArguments.Length == 2 && a.ConstructorArguments[0].Value as string == NamingMetadataKey && a.ConstructorArguments[1].Value as string == "Convention");
+                if (!convention && stem == (type.ContainingNamespace.IsGlobalNamespace ? "Global" : type.ContainingNamespace.Name)
+                    && (name == "Configure" || BaseTypes(type).SelectMany(t => t.GetMembers()).OfType<IPropertySymbol>()
+                        .Any(p => name == MethodName(p, nullableBool: false) || name == "Add" + Singular(p) || name == "Add" + p.Name))) {
+                    return false;
+                }
+                INamedTypeSymbol? fluent = _compilation.GetTypeByMetadataName(type.ContainingNamespace.IsGlobalNamespace ? stem + "Fluent" : type.ContainingNamespace.ToDisplayString() + "." + stem + "Fluent");
+                return fluent != null && fluent.GetMembers().OfType<IMethodSymbol>().Any(m => m.IsExtensionMethod && m.DeclaredAccessibility == Accessibility.Public
+                    && m.Parameters.Length > 0 && Receives(m.Parameters[0].Type, type) && SignatureKey(m.Name, m.Parameters.Skip(1).Select(p => p.Type)) == key);
             }
 
             // The public preset extension (name(this T)) a referenced library generated for its settings type, or null.
@@ -120,9 +143,14 @@ namespace PowerForge.Generators.Fluent {
                 // [FluentInline]: the owner gets every method the property's type gets, applied to the property.
                 private void AppendInline(IPropertySymbol property) {
                     if (Prefixed) { return; }
-                    if (!IsReadable(property) || property.Type is not INamedTypeSymbol option || property.Type.NullableAnnotation == NullableAnnotation.Annotated
-                        || CollectionItem(property.Type) != null || !IsSettingsType(option)) {
+                    INamedTypeSymbol? option = InlineType(property);
+                    if (option == null) {
                         Report(FluentDiagnostics.InvalidInline, property, _type.Name, property.Name);
+                        return;
+                    }
+                    // Every inlined method would edit an object the getter builds and then drops.
+                    if (!Forced(property) && FreshGetterReason(property, Compilation) is string skipped) {
+                        ReportFresh(property, "inlined methods", skipped);
                         return;
                     }
                     // A [FluentForward] name the owner can call replaces the property of that name on the inlined type too.
@@ -133,6 +161,7 @@ namespace PowerForge.Generators.Fluent {
                         foreach ((string name, IMethodSymbol target, string summary, string valueSummary) in forwards) {
                             AppendForward(name, target, summary, valueSummary);
                         }
+                        AppendMutators(option);
                         foreach (IPropertySymbol member in Properties(option)) {
                             if (!forwarded.Contains(member.Name)) {
                                 AppendConvention(member);
@@ -140,6 +169,38 @@ namespace PowerForge.Generators.Fluent {
                         }
                     } finally {
                         _via = null;
+                    }
+                }
+
+                // The settings type a [FluentInline] property expands, or null when it can't be inlined.
+                private INamedTypeSymbol? InlineType(IPropertySymbol property) =>
+                    IsReadable(property) && property.Type is INamedTypeSymbol option && property.Type.NullableAnnotation != NullableAnnotation.Annotated
+                        && CollectionItem(property.Type) == null && _emitter.IsSettingsType(option) ? option : null;
+
+                // The mutators inlined properties bring are the canonical write path whatever the declaration order, so their
+                // signatures are reserved before any property setter can take them. That includes a property a generated base
+                // covers: its methods come from the base, and this type's setter must not win over them.
+                private void ReserveInlineMutators(IEnumerable<IPropertySymbol> properties) {
+                    foreach (IPropertySymbol property in properties) {
+                        // A covered property's methods are the ones its generated base declaration emits, so that declaration
+                        // decides whether it is inlined, not an override's own attributes.
+                        IPropertySymbol declaring = property;
+                        bool covered = CoveredByBase(property);
+                        if (covered) {
+                            while (declaring.OverriddenProperty != null) { declaring = declaring.OverriddenProperty; }
+                        }
+                        if (Attribute(declaring, FluentAttributes.Inline) == null || InlineType(declaring) is not INamedTypeSymbol option
+                            || !Forced(declaring) && FreshGetterReason(declaring, Compilation) != null) {
+                            continue;
+                        }
+                        // A referenced base reserves only what it generated: one built with Prefixed naming has no inline methods.
+                        bool local = SymbolEqualityComparer.Default.Equals(declaring.ContainingType.ContainingAssembly, Compilation.Assembly);
+                        foreach ((IMethodSymbol method, string name) in _emitter.Mutators(option)) {
+                            string key = SignatureKey(name, method.Parameters.Select(p => p.Type));
+                            if (!covered || local || _emitter.ConventionGenerated(declaring.ContainingType, key)) {
+                                _mutated.Add(key);
+                            }
+                        }
                     }
                 }
 

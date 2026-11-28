@@ -78,7 +78,7 @@ namespace PowerForge.Generators.Cmdlets {
                 HashSet<string>? include = Names("Include", properties);
                 HashSet<string>? exclude = Names("Exclude", properties);
                 foreach (IPropertySymbol property in properties) {
-                    bool listed(HashSet<string> names) => names.Contains(property.Name) || names.Contains(MethodName(property));
+                    bool listed(HashSet<string> names) => names.Contains(property.Name) || names.Contains(MethodName(property, nullableBool: false));
                     if (include != null && !listed(include) || exclude != null && listed(exclude)) {
                         continue;
                     }
@@ -115,7 +115,7 @@ namespace PowerForge.Generators.Cmdlets {
                 if (property.Type.TypeKind == TypeKind.Delegate) {
                     return;
                 }
-                string name = MethodName(property);
+                string name = MethodName(property, nullableBool: false);
                 ITypeSymbol? item = IsReadable(property) ? CollectionItem(property.Type) : null;
                 INamedTypeSymbol? settings = item == null && IsReadable(property) && property.Type is INamedTypeSymbol named && IsSettings(named) ? named : null;
                 if (item == null && settings == null && !IsSettable(property)) {
@@ -206,7 +206,7 @@ namespace PowerForge.Generators.Cmdlets {
                 }
                 HashSet<string> names = new HashSet<string>(list.Values.Select(value => value.Value as string).Where(value => value != null).Select(value => value!), StringComparer.OrdinalIgnoreCase);
                 foreach (string name in names.Where(name => !properties.Any(property => string.Equals(property.Name, name, StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(MethodName(property), name, StringComparison.OrdinalIgnoreCase)))) {
+                    || string.Equals(MethodName(property, nullableBool: false), name, StringComparison.OrdinalIgnoreCase)))) {
                     _output.ReportDiagnostic(Diagnostic.Create(FluentDiagnostics.UnknownCmdletProperty, _attribute.ApplicationSyntaxReference?.GetSyntax().GetLocation() ?? Location.None,
                         name, argument, _cmdlet.Name, _model.Name));
                 }
@@ -236,7 +236,7 @@ namespace PowerForge.Generators.Cmdlets {
                 List<string> keys = new List<string>();
                 HashSet<string> labels = new HashSet<string>(StringComparer.Ordinal);
                 foreach (IPropertySymbol property in Properties(settings).Where(p => p.Type.TypeKind != TypeKind.Delegate)) {
-                    string key = MethodName(property);
+                    string key = MethodName(property, nullableBool: false);
                     string member = "target." + Escape(property.Name);
                     ITypeSymbol? item = IsReadable(property) ? CollectionItem(property.Type) : null;
                     INamedTypeSymbol? nested = item == null && IsReadable(property) && property.Type is INamedTypeSymbol named && IsSettings(named) ? named : null;

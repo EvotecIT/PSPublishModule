@@ -17,3 +17,6 @@ PFF009 | PowerForge.Fluent | Error | [FluentCmdlet] names an unknown property
 PFF010 | PowerForge.Fluent | Error | Fluent preset cannot be assigned
 PFF011 | PowerForge.Fluent | Error | Fluent copy method is missing or has the wrong shape
 PFF012 | PowerForge.Fluent | Error | [FluentInline] needs a settings-type property
+PFF013 | PowerForge.Fluent | Error | [FluentMutator] method has the wrong shape
+PFF014 | PowerForge.Fluent | Error | Fluent type cannot get methods
+PFF015 | PowerForge.Fluent | Info | Property is not edited in place
