@@ -161,6 +161,9 @@ namespace PowerForge.Generators.Fluent {
                         chain.Add(declared.OriginalDefinition);
                     }
                     foreach (INamedTypeSymbol owner in BaseTypes(_type).Skip(1)) {
+                        // A sealed type's own non-generic method wins over a base's, so it gets one unless the base's method sits in
+                        // the same namespace, where callers of this type find it too.
+                        if (_type.IsSealed && !SymbolEqualityComparer.Default.Equals(owner.ContainingNamespace, _type.ContainingNamespace)) { continue; }
                         // A referenced base must have generated that very method: one built with Prefixed naming has none.
                         bool local = SymbolEqualityComparer.Default.Equals(owner.ContainingAssembly, Compilation.Assembly);
                         if (CoveredByBase(owner) && _emitter.Mutators(owner).Any(m => m.Name == name && chain.Contains(m.Method.OriginalDefinition)

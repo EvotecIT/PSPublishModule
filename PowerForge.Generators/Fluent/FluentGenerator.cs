@@ -677,9 +677,10 @@ namespace PowerForge.Generators.Fluent {
                 // An extension that answers name() only through optional or params parameters, for exactly this type and in its
                 // namespace, where callers of the generated methods see it too: a generated method answering name() the same way
                 // makes that call ambiguous. One for a base type, or in another namespace, loses to the generated method or isn't
-                // in scope, so it changes nothing. So does any of them for a type that can be derived from: its generated methods are
-                // generic over TSelf, and a non-generic extension for the same receiver wins that tie without ambiguity.
-                private bool AnswersThroughDefaults(string name) => _type.IsSealed && _emitter.Extensions[name].Any(m => m.Parameters.Length > 1
+                // in scope, so it changes nothing. For a type that can be derived from, the generated methods are generic over TSelf:
+                // a non-generic extension for the same receiver wins that tie, but a generic one (this TSelf) ties again.
+                private bool AnswersThroughDefaults(string name) => _emitter.Extensions[name].Any(m => m.Parameters.Length > 1
+                    && (_type.IsSealed || m.Parameters[0].Type is ITypeParameterSymbol)
                     && ExactlyReceives(m.Parameters[0].Type) && m.TypeParameters.All(type => Mentions(m.Parameters[0].Type, type))
                     && SymbolEqualityComparer.Default.Equals(m.ContainingNamespace, _type.ContainingNamespace)
                     && m.Parameters.Skip(1).All(parameter => parameter.IsOptional || parameter.IsParams));

@@ -685,6 +685,20 @@ public sealed class FluentGeneratorMutatorTests {
                     public static Pane Shown(this Pane target, string mode = "") => target;
                 }
 
+                // A generic this TSelf extension ties with the generated generic method, so Glowing() stays with it.
+                [Fluent]
+                public class Bulb {
+                    public bool? Glowing { get; set; }
+                    public string Mode = "";
+                }
+
+                public class Lamp2 : Bulb {
+                }
+
+                public static class BulbExtensions {
+                    public static TSelf Glowing<TSelf>(this TSelf target, string mode = "auto") where TSelf : Bulb { target.Mode = mode; return target; }
+                }
+
                 // A mutator an unmarked abstract base declares is covered for Hero by the Depth method its marked base Actor gets.
                 public abstract class Stage {
                     public int Depth;
@@ -761,12 +775,29 @@ public sealed class FluentGeneratorMutatorTests {
                             new Caption().Format(s => s + "!").Formatting!("a"), new Gauge().Mode().Mode(level: 3).Log, Probes.Configure(),
                             new Meter().Levels().Levels(3, 4).Levels(new System.Collections.Generic.List<int> { 5 }).Log,
                             new Series().Values(1, 2).Log, new Lens().Visible().Visible(true).Mode,
-                            new Light().Enabled().Enabled, Shown(new ChildPane().Shown()), Dive(new Hero().Depth(2)) };
+                            new Light().Enabled().Enabled, Shown(new ChildPane().Shown()), Dive(new Hero().Depth(2)), new Lamp2().Glowing().Glowing(true).Mode, Sample.Widgets.Dives.Run() };
                     }
 
                     private static bool Shown(ChildPane pane) => pane.Shown;
 
                     private static int Dive(Hero hero) => hero.Depth;
+                }
+            }
+
+            // A sealed widget in another namespace than its generated base still gets Depth(3) its callers can see.
+            namespace Sample.Design {
+                [Fluent]
+                public class Prop : Sample.Stage {
+                }
+            }
+
+            namespace Sample.Widgets {
+                [Fluent]
+                public sealed class Crate : Sample.Design.Prop {
+                }
+
+                public static class Dives {
+                    public static int Run() => new Crate().Depth(3).Depth;
                 }
             }
 
@@ -781,7 +812,7 @@ public sealed class FluentGeneratorMutatorTests {
         (Compilation compilation, ImmutableArray<Diagnostic> diagnostics) = Run(library);
         Assert.Empty(diagnostics);
 
-        Assert.Equal(new object[] { "circle1;circle2;", 1, true, "dynamic;", "layout:x", "", "ints;a;b,c;d;", 3, 10, "layout:y", "ext;2;", true, "ext;2;", "z", 6, "[a!]", "exact;x3;", "Configure", "ext;2;1;", "marked;", "auto", true, true, 2 }, Execute(compilation));
+        Assert.Equal(new object[] { "circle1;circle2;", 1, true, "dynamic;", "layout:x", "", "ints;a;b,c;d;", 3, 10, "layout:y", "ext;2;", true, "ext;2;", "z", 6, "[a!]", "exact;x3;", "Configure", "ext;2;1;", "marked;", "auto", true, true, 2, "auto", 3 }, Execute(compilation));
     }
 
     [Fact]
